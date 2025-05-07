@@ -1,0 +1,5 @@
+*.tif
+.python-version
+*.tar.gz
+*.pyc
+*/.ipynb_checkpoints/*
