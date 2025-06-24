@@ -3,3 +3,7 @@
 *.tar.gz
 *.pyc
 */.ipynb_checkpoints/*
+.vscode
+.venv
+uv.lock
+.mypy_cache
