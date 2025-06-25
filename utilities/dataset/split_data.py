@@ -132,4 +132,4 @@ if __name__ == "__main__":
     parser.add_argument("output_folder", type=Path, help="Path to the output folder.")
     parser.add_argument('--output_overwrite', action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
-    main(args.input_folder, args.output_folder, args.padding, args.output_overwrite)
+    main(args.input_folder, args.output_folder, args.output_overwrite)
