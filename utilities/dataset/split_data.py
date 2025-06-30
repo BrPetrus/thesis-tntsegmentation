@@ -4,6 +4,7 @@ import os
 from typing import List, Tuple, Optional, Any
 import tifffile
 from numpy.typing import NDArray
+from torch import Value
 
 def load_images(gt_path: Path, orig_path: Path) -> Tuple[NDArray, NDArray, List[str]]:
     gt_images = []
@@ -46,7 +47,19 @@ def bbox_3d(img: NDArray) -> List[Tuple[int, int]]:
     return [(rmin, rmax), (cmin, cmax), (zmin, zmax)]
 
 
-def process(gt: NDArray, imgs: NDArray, time_dim: int = 0) -> List[Tuple[NDArray, NDArray]]:
+def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, z_min, z_max, r_min, r_max, c_min, c_max) -> NDArray:
+    z_pad_left = z_span // 2
+    z_pad_right = z_span - (z_pad_left * 2)  # Note: both even and odd spans must be handled
+    z_left = 
+    
+    # Greedily try to expand as much as we can
+    patch = img[]
+    
+
+
+
+
+def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0) -> List[Tuple[NDArray, NDArray]]:
     extracted_tunnels = []
 
     # Keep track of largest size
@@ -68,9 +81,9 @@ def process(gt: NDArray, imgs: NDArray, time_dim: int = 0) -> List[Tuple[NDArray
 
         # Find bounding boxes of all tunnels
         for tunnel_id in tunnel_ids:
-            rows, cols, zs = bbox_3d(gt_timeslice == tunnel_id)
-            extracted_tunnel_gt = gt_timeslice[rows[0]:rows[1]+1, cols[0]:cols[1]+1, zs[0]:zs[1]+1]
-            extracted_tunnel_img = img_timeslice[rows[0]:rows[1]+1, cols[0]:cols[1]+1, zs[0]:zs[1]+1]
+            zs, rows, cols = bbox_3d(gt_timeslice == tunnel_id)
+            extracted_tunnel_gt = gt_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
+            extracted_tunnel_img = img_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
             extracted_tunnels.append(
                 (extracted_tunnel_gt, extracted_tunnel_img)
             )
@@ -78,15 +91,21 @@ def process(gt: NDArray, imgs: NDArray, time_dim: int = 0) -> List[Tuple[NDArray
             if tunnel_id == 0:
                 continue  # Skip BG
 
-            if largest_row_range < rows[1]-rows[0]+1:
-                largest_row_range = rows[1]-rows[0]+1
+            if largest_row_range < zs[1]-zs[0]+1:
+                largest_row_range = zs[1]-zs[0]+1
                 largest_row_range_id = tunnel_id, t_idx
-            if largest_col_range < cols[1]-cols[0]+1:
-                largest_col_range = cols[1]-cols[0]+1
+            if largest_col_range < rows[1]-rows[0]+1:
+                largest_col_range = rows[1]-rows[0]+1
                 largest_col_range_id = tunnel_id, t_idx
-            if largest_z_range < zs[1]-zs[0]+1:
-                largest_z_range = zs[1]-zs[0]+1
+            if largest_z_range < cols[1]-cols[0]+1:
+                largest_z_range = cols[1]-cols[0]+1
                 largest_z_range_id = tunnel_id, t_idx
+
+            # Now figure out the correct padding
+            z_span = zs[1]-zs[0]+1
+            row_span = rows[1]-rows[0]+1
+            col_span = cols[1]-cols[0]+1
+            
         
     print(f"Largest row range {largest_row_range} found for tunnel {largest_row_range_id[0]} at time slot {largest_row_range_id[1]}")
     print(f"Largest col range {largest_col_range} found for tunnel {largest_col_range_id[0]} at time slot {largest_col_range_id[1]}")
@@ -94,7 +113,11 @@ def process(gt: NDArray, imgs: NDArray, time_dim: int = 0) -> List[Tuple[NDArray
     return extracted_tunnels
 
 
-def main(input_folder: str, output_folder: str, overwrite_output_flag: bool = False) -> None:
+def main(input_folder: str, output_folder: str, minimum_patch_size: List[int], overwrite_output_flag: bool = False) -> None:
+    if len(minimum_patch_size) != 3:
+        raise ValueError(f"Invalid minimum patch size. Expected 3 dimensions!")
+    print(f"Using minimum patch size: {minimum_patch_size}")
+
     input_folder_path = Path(input_folder)
     output_folder_path = Path(output_folder)
 
@@ -131,5 +154,10 @@ if __name__ == "__main__":
     parser.add_argument("input_folder", type=Path, help="Path to the folder containing images.")
     parser.add_argument("output_folder", type=Path, help="Path to the output folder.")
     parser.add_argument('--output_overwrite', action=argparse.BooleanOptionalAction)
+    parser.add_argument('--min_size', type=int, nargs=3, metavar=('MIN_Z', 'MIN_Y', 'MIN_X'),
+                        default=[7, 32, 32],
+                        help="Minimum size (z, y, x) for each patch. If the bounding box is smaller, it will be padded around the centroid. If not possible, mirror padding is used.")
     args = parser.parse_args()
-    main(args.input_folder, args.output_folder, args.output_overwrite)
+
+
+    main(args.input_folder, args.output_folder, args.min_size, args.output_overwrite)
