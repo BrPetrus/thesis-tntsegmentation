@@ -48,6 +48,15 @@ def bbox_3d(img: NDArray) -> List[Tuple[int, int]]:
 
 
 def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, minimum_patch_size: Tuple[int,int,int]) -> NDArray:
+    def _zero_fill(img: NDArray, z, r, c):
+        z_left_pad = z // 2
+        z_right_pad = z - (z_left_pad)
+        r_left_pad = r // 2
+        r_right_pad = r - (r_left_pad)
+        c_left_pad = c // 2
+        c_right_pad = c - (c_left_pad)
+        return np.pad(img, ((z_left_pad, z_right_pad), (r_left_pad, r_right_pad), (c_left_pad, c_right_pad)))
+
     z_minimum_size = minimum_patch_size[0]
     if z_minimum_size <= z_span:
         return img[z_from:z_span+z_from, r_from:r_from+r_span, c_from:c_from+c_span]
@@ -58,10 +67,15 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
     z_expand_right = min(img.shape[0], z_from+z_span+z_pad_right) - z_from - z_span
     z_expand_left = z_from - max(0, z_from-z_pad_left)
     patch = img[z_from-z_expand_left:z_from+z_span+z_expand_right]
-    return patch
-
-    # Now fill the rest with 0s
     
+
+    # Now fill with zeros
+    return _zero_fill(
+        patch,
+        minimum_patch_size[0] - patch.shape[0],
+        minimum_patch_size[1] - patch.shape[1],
+        minimum_patch_size[2] - patch.shape[2] 
+    )
 
 
 def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0) -> List[Tuple[NDArray, NDArray]]:
