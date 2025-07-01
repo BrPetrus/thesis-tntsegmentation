@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2.1.2",
     "pandas>=2.2.3",
     "pyqt5>=5.15.11",
+    "pytest>=8.4.1",
     "scikit-image>=0.25.2",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.2",

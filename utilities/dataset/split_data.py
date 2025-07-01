@@ -47,16 +47,21 @@ def bbox_3d(img: NDArray) -> List[Tuple[int, int]]:
     return [(rmin, rmax), (cmin, cmax), (zmin, zmax)]
 
 
-def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, z_min, z_max, r_min, r_max, c_min, c_max) -> NDArray:
-    z_pad_left = z_span // 2
-    z_pad_right = z_span - (z_pad_left * 2)  # Note: both even and odd spans must be handled
-    z_left = 
-    
+def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, minimum_patch_size: Tuple[int,int,int]) -> NDArray:
+    z_minimum_size = minimum_patch_size[0]
+    if z_minimum_size <= z_span:
+        return img[z_from:z_span+z_from, r_from:r_from+r_span, c_from:c_from+c_span]
+    z_pad_left = (z_minimum_size - z_span) // 2
+    z_pad_right = z_minimum_size - (z_span + z_pad_left)  # Note: both even and odd spans must be handled
+
     # Greedily try to expand as much as we can
-    patch = img[]
+    z_expand_right = min(img.shape[0], z_from+z_span+z_pad_right) - z_from - z_span
+    z_expand_left = z_from - max(0, z_from-z_pad_left)
+    patch = img[z_from-z_expand_left:z_from+z_span+z_expand_right]
+    return patch
+
+    # Now fill the rest with 0s
     
-
-
 
 
 def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0) -> List[Tuple[NDArray, NDArray]]:
