@@ -68,6 +68,8 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
         z_expand_right = min(img.shape[0], z_from+z_span+z_pad_right) - z_from - z_span
         z_expand_left = z_from - max(0, z_from-z_pad_left)
         patch = patch[z_from-z_expand_left:z_from+z_span+z_expand_right]
+    else:
+        patch = patch[z_from:z_from+z_span, :, :]
 
     r_minimum_size = minimum_patch_size[1]
     if r_minimum_size > r_span:
@@ -78,6 +80,8 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
         r_expand_right = min(patch.shape[1], r_from+r_span+r_pad_right) - r_from - r_span
         r_expand_left = r_from - max(0, r_from-r_pad_left)
         patch = patch[:, r_from-r_expand_left:r_from+r_span+r_expand_right]
+    else:
+        patch = patch[:, r_from:r_from+r_span, :]
 
     c_minimum_size = minimum_patch_size[2]
     if c_minimum_size > c_span:
@@ -88,13 +92,15 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
         c_expand_right = min(patch.shape[2], c_from+c_span+c_pad_right) - c_from - c_span
         c_expand_left = c_from - max(0, c_from-c_pad_left)
         patch = patch[:, :, c_from-c_expand_left:c_from+c_span+c_expand_right]
+    else:
+        patch = patch[:, :, c_from:c_from+c_span]
 
     # Now fill with zeros
     return _zero_fill(
         patch,
-        minimum_patch_size[0] - patch.shape[0],
-        minimum_patch_size[1] - patch.shape[1],
-        minimum_patch_size[2] - patch.shape[2] 
+        max(minimum_patch_size[0] - patch.shape[0], 0),
+        max(minimum_patch_size[1] - patch.shape[1], 0),
+        max(minimum_patch_size[2] - patch.shape[2], 0) 
     )
 
 
@@ -121,11 +127,11 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
         # Find bounding boxes of all tunnels
         for tunnel_id in tunnel_ids:
             zs, rows, cols = bbox_3d(gt_timeslice == tunnel_id)
-            extracted_tunnel_gt = gt_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
-            extracted_tunnel_img = img_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
-            extracted_tunnels.append(
-                (extracted_tunnel_gt, extracted_tunnel_img)
-            )
+            # extracted_tunnel_gt = gt_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
+            # extracted_tunnel_img = img_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
+            # extracted_tunnels.append(
+            #     (extracted_tunnel_gt, extracted_tunnel_img)
+            # )
 
             if tunnel_id == 0:
                 continue  # Skip BG
@@ -144,6 +150,12 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
             z_span = zs[1]-zs[0]+1
             row_span = rows[1]-rows[0]+1
             col_span = cols[1]-cols[0]+1
+            extracted_gt_padded = add_padding(gt_timeslice, zs[0], z_span, rows[0], row_span, cols[0], col_span, minimum_patch_size)
+            extracted_img_padded = add_padding(img_timeslice, zs[0], z_span, rows[0], row_span, cols[0], col_span, minimum_patch_size)
+
+            extracted_tunnels.append(
+                (extracted_gt_padded, extracted_img_padded)
+            )
             
         
     print(f"Largest row range {largest_row_range} found for tunnel {largest_row_range_id[0]} at time slot {largest_row_range_id[1]}")
@@ -178,7 +190,7 @@ def main(input_folder: str, output_folder: str, minimum_patch_size: List[int], o
     print(f"Found {times} as time slots with annotations given")
 
     # Extract the tunnels
-    extracted_tunnels = process(gt, imgs, 0)
+    extracted_tunnels = process(gt, imgs, minimum_patch_size=minimum_patch_size)
 
     # Save them in the output folder
     for i, (tunnel_gt, tunnel_img) in enumerate(extracted_tunnels):
