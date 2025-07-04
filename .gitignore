@@ -7,3 +7,4 @@
 .venv
 uv.lock
 .mypy_cache
+*.log
