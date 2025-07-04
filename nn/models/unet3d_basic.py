@@ -39,6 +39,11 @@ class UpscaleBlock(nn.Module):
     def forward(self, x1, x2):
         x1 = self.up(x1)
 
+        # Fix problem when x1 is not even
+        if x1.shape[2] != x2.shape[2]:
+            x1 = F.pad(x1, (0, 0, 0, 0, 0, 1), 'constant', 0)  # Pad z-dim by 1 at the end
+            # TODO: make this generic
+
         # Concatonation
         x = torch.concat([x1, x2], dim=1)
         return self.conv(x)
@@ -62,11 +67,12 @@ class UNet3d(nn.Module):
         self.out = nn.Conv3d(32, n_classes_out, 1)  # Dim. reduction
     
     def forward(self, x):
-        x = self.in_conv(x)
-        x_d1 = self.down1(x)
-        x_d2 = self.down2(x_d1)
-        x = self.up1(x, x_d2)
-        x = self.up2(x, x_d1)
+        # in: [7, 32, 32]
+        x_in = self.in_conv(x)  # [32, 7, 32, 32]
+        x_d1 = self.down1(x_in)  # [64, 3, 64, 64]
+        x_d2 = self.down2(x_d1)  # [128, 1, 8, 8]
+        x = self.up1(x_d2, x_d1)
+        x = self.up2(x, x_in)
         return self.out(x)
 
 if __name__ == "__main__":
