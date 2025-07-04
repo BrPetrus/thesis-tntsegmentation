@@ -16,7 +16,9 @@ dependencies = [
     "scikit-image>=0.25.2",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.2",
+    "tensorboard>=2.19.0",
     "torch-summary>=1.4.5",
+    "tqdm>=4.66.5",
 ]
 
 [project.optional-dependencies]
