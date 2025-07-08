@@ -102,7 +102,7 @@ class TNTDataset(Dataset):
             transformed = self.transforms(volume=data, mask3d=mask)
             return transformed['volume'], transformed['mask3d']
         else:
-            return self.transforms(data)['volume']
+            return self.transforms(volume=data)['volume']
 
         # processed_data = self.transforms(data)
         # if self.load_masks:

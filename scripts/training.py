@@ -1,3 +1,4 @@
+import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 from tntseg.nn.models.unet3d_basic import UNet3d
 import numpy as np
@@ -13,6 +14,8 @@ from sklearn.model_selection import train_test_split
 from dataclasses import dataclass
 import albumentations as A
 import tifffile
+import mlflow
+from sklearn import metrics as skmetrics
 
 @dataclass
 class Config:
@@ -33,17 +36,20 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
     # Train/Test Split
     train_x, test_x = train_test_split(df, test_size=1/3., random_state=seed)
 
-        # A.RandomCrop3D(size=(4, 32, 32), p=1.0),
     # Define transforms
     transforms_train = A.Compose([
         A.CenterCrop3D(size=(7,32,32)),
+        A.ToTensor3D()
+    ])
+    transform_test = A.Compose([
+        A.CenterCrop3D(size=(7,32,32)),  # TODO: is this okay?
         A.ToTensor3D()
     ])
      
 
     # Create datasets
     train_dataset = TNTDataset(train_x, transforms=transforms_train)
-    test_dataset = TNTDataset(test_x)
+    test_dataset = TNTDataset(test_x, transforms=transform_test)
 
     # Create dataloaders
     train_dataloader = DataLoader(
@@ -66,49 +72,84 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
     criterion = torch.nn.BCEWithLogitsLoss()
 
-    for epoch in range(config.epochs):
-        nn.train()
-        epoch_loss = 0.0
-        for batch_idx, batch in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.epochs}")):
-            inputs, masks = batch
-            inputs, masks = inputs.to(config.device), masks.to(config.device)
+    # MLFlow
+    with mlflow.start_run():
+        mlflow.log_params(config.__dict__)
 
-            optimizer.zero_grad()
-            outputs = nn(inputs)
-            loss = criterion(outputs, masks)
-            loss.backward()
-            optimizer.step()
+        for epoch in range(config.epochs):
+            nn.train()
+            epoch_loss = 0.0
+            for batch_idx, batch in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.epochs}")):
+                inputs, masks = batch
+                inputs, masks = inputs.to(config.device), masks.to(config.device)
 
-            epoch_loss += loss.item()
+                optimizer.zero_grad()
+                outputs = nn(inputs)
+                loss = criterion(outputs, masks)
+                loss.backward()
+                optimizer.step()
 
-            # Save predictions, inputs, and masks for the first batch of each epoch
-            if batch_idx == 0:
-                predictions = torch.sigmoid(outputs).cpu().detach().numpy()
-                inputs_np = inputs.cpu().detach().numpy()
-                masks_np = masks.cpu().detach().numpy()
-                
-                for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
-                    prediction_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
-                    input_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
-                    mask_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
-                    # Save prediction
-                    tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
-                    logger.info(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                epoch_loss += loss.item()
+
+                # Save predictions, inputs, and masks for the first batch of each epoch
+                if batch_idx == 0:
+                    predictions = torch.sigmoid(outputs).cpu().detach().numpy()
+                    inputs_np = inputs.cpu().detach().numpy()
+                    masks_np = masks.cpu().detach().numpy()
                     
-                    # Save input image
-                    tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
-                    logger.info(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
-                    
-                    # Save mask
-                    tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
-                    logger.info(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
+                    for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
+                        prediction_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+                        input_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+                        mask_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+                        # Save prediction
+                        tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
+                        logger.info(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                        
+                        # Save input image
+                        tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+                        logger.info(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
+                        
+                        # Save mask
+                        tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+                        logger.info(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
 
-        logger.info(f"Epoch {epoch+1}/{config.epochs}, Loss: {epoch_loss:.4f}")
 
-        # # Save model checkpoint
-        # checkpoint_path = output_folder / f"model_epoch_{epoch+1}.pth"
-        # torch.save(nn.state_dict(), checkpoint_path)
-        # logger.info(f"Model checkpoint saved at {checkpoint_path}")
+            mlflow.log_metric("train_loss", epoch_loss, step=epoch)
+            logger.info(f"Epoch {epoch+1}/{config.epochs}, Loss: {epoch_loss:.4f}")
+
+        # Test set
+        nn.eval()
+        inputs = []
+        masks = []
+        predictions = []
+        for batch_idx, batch in enumerate(tqdm(test_dataloader, desc="Evaluation on test set")):
+            input, mask = batch
+            input, mask = input.to(config.device), mask.to(config.device)
+            prediction = nn(input)
+            prediction = torch.nn.functional.sigmoid(prediction)
+
+            inputs.append(input.cpu().detach())
+            masks.append(mask.cpu().detach())
+            predictions.append(prediction.cpu().detach())
+        inputs = np.array(inputs).flatten()
+        masks = np.array(masks).flatten()
+        predictions = np.array(predictions).flatten()
+
+        # Find PR curve
+        pr_curve = skmetrics.PrecisionRecallDisplay.from_predictions(
+            y_true=masks,
+            y_pred=predictions,
+        )
+        mlflow.log_figure(pr_curve.figure_, "pr-curve.png")
+
+        # After training, you might log the final model
+        mlflow.pytorch.log_model(nn, "model")
+
+        # Also save the model
+        checkpoint_path = output_folder / f"model_final.pth"
+        torch.save(nn.state_dict(), checkpoint_path)
+        logger.info(f"Model checkpoint saved at {checkpoint_path}")
+
 
 
 if __name__ == "__main__":
@@ -124,6 +165,22 @@ if __name__ == "__main__":
                         help="Path to the out folder where log files are stored.")
     parser.add_argument("--random_state", type=int, default=42,
                         help="Seed value for the train/test split.")
+    parser.add_argument("--mlflow_address", type=str, default="127.0.0.1",
+                        help="IP address of the MLFlow server")
+    parser.add_argument("--mlflow_port", type=str, default="8080",
+                        help="Port of the MLFlow server")
+    parser.add_argument("--epochs", type=int, default=10,
+                        help="Number of epochs for training.")
+    parser.add_argument("--lr", type=float, default=1.0e-3,
+                        help="Learning rate for the optimizer.")
+    parser.add_argument("--device", type=str, default="cpu",
+                        help="Device to use for training (e.g., 'cpu', 'cuda').")
+    parser.add_argument("--num_workers", type=int, default=1,
+                        help="Number of workers for data loading.")
+    parser.add_argument("--shuffle", type=bool, default=False,
+                        help="Whether to shuffle the dataset during training.")
+    parser.add_argument("--batch_size", type=int, default=1,
+                        help="Batch size for training.")
     
 
     # Parse arguments & Setup
@@ -143,14 +200,16 @@ if __name__ == "__main__":
     logger.debug(f"Input folder: {args.input_folder}")
     logger.debug(f"Output folder: {args.output_folder}")
     logger.debug(f"Log folder: {args.log_folder}")
+    logger.info(f"Using MLFlow serve at {args.mlflow_address}:{args.mlflow_port}")
+    mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     config = Config(
-        epochs=10,
-        lr=1.0e-3,
-        device='cpu',
-        num_workers=1,
-        shuffle=False,
-        batch_size=1,
+        epochs=args.epochs,
+        lr=args.lr,
+        device=args.device,
+        num_workers=args.num_workers,
+        shuffle=args.shuffle,
+        batch_size=args.batch_size,
     )
 
     # Run training
