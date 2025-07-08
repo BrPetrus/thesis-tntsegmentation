@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from dataclasses import dataclass
+import albumentations as A
+import tifffile
 
 @dataclass
 class Config:
@@ -31,8 +33,16 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
     # Train/Test Split
     train_x, test_x = train_test_split(df, test_size=1/3., random_state=seed)
 
+        # A.RandomCrop3D(size=(4, 32, 32), p=1.0),
+    # Define transforms
+    transforms_train = A.Compose([
+        A.CenterCrop3D(size=(7,32,32)),
+        A.ToTensor3D()
+    ])
+     
+
     # Create datasets
-    train_dataset = TNTDataset(train_x)
+    train_dataset = TNTDataset(train_x, transforms=transforms_train)
     test_dataset = TNTDataset(test_x)
 
     # Create dataloaders
@@ -71,20 +81,34 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
             epoch_loss += loss.item()
 
-            # Save predictions for the first batch of each epoch
+            # Save predictions, inputs, and masks for the first batch of each epoch
             if batch_idx == 0:
                 predictions = torch.sigmoid(outputs).cpu().detach().numpy()
-                for i, prediction in enumerate(predictions):
-                    prediction_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}.tiff"
-                    plt.imsave(prediction_path, prediction[0], cmap='gray')
+                inputs_np = inputs.cpu().detach().numpy()
+                masks_np = masks.cpu().detach().numpy()
+                
+                for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
+                    prediction_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+                    input_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+                    mask_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+                    # Save prediction
+                    tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
                     logger.info(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                    
+                    # Save input image
+                    tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+                    logger.info(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
+                    
+                    # Save mask
+                    tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+                    logger.info(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
 
         logger.info(f"Epoch {epoch+1}/{config.epochs}, Loss: {epoch_loss:.4f}")
 
-        # Save model checkpoint
-        checkpoint_path = output_folder / f"model_epoch_{epoch+1}.pth"
-        torch.save(nn.state_dict(), checkpoint_path)
-        logger.info(f"Model checkpoint saved at {checkpoint_path}")
+        # # Save model checkpoint
+        # checkpoint_path = output_folder / f"model_epoch_{epoch+1}.pth"
+        # torch.save(nn.state_dict(), checkpoint_path)
+        # logger.info(f"Model checkpoint saved at {checkpoint_path}")
 
 
 if __name__ == "__main__":
@@ -108,25 +132,25 @@ if __name__ == "__main__":
     input_folder = Path(args.input_folder)
     log_folder = Path(args.log_folder)
     mask_folder = Path(args.mask_folder)
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(filename=log_folder / 'training.log', encoding='utf-8', level=logging.DEBUG, format='%(asctime)s %(message)s')
-    logger.debug(f"Input folder: {args.input_folder}")
-    logger.debug(f"Output folder: {args.output_folder}")
-    logger.debug(f"Log folder: {args.log_folder}")
     if not input_folder.exists():
         raise RuntimeError("Specified input folder does not exist!")
     if not mask_folder.exists():
         raise RuntimeError("Specified mask folder does not exist!")
     output_folder.mkdir(parents=True, exist_ok=True)
     log_folder.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(filename=log_folder / 'training.log', encoding='utf-8', level=logging.DEBUG, format='%(asctime)s %(message)s')
+    logger.debug(f"Input folder: {args.input_folder}")
+    logger.debug(f"Output folder: {args.output_folder}")
+    logger.debug(f"Log folder: {args.log_folder}")
 
     config = Config(
         epochs=10,
         lr=1.0e-3,
         device='cpu',
-        num_workers=2,
+        num_workers=1,
         shuffle=False,
-        batch_size=4,
+        batch_size=1,
     )
 
     # Run training

@@ -54,25 +54,22 @@ def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) ->
 
 # TODO: add transformation pipeline option
 class TNTDataset(Dataset):
-    # def __init__(self, img_folder: str, mask_folder: Optional[str] = None, is_training: bool = False):
-    def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True):
+    def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True, transforms: Optional[List] = None):
         self.dataframe = dataframe.copy()
         self.load_masks = load_masks
+        self.transforms = transforms
 
-        # if self.is_training and mask_folder is None:
         if self.load_masks and 'mask_path' not in self.dataframe.columns:
             raise ValueError("load_masks=True requires 'mask_path' column in dataframe")
 
         self.data = []
         self.mask_data = []
 
-        # for img_file in img_folder_path.iterdir():
-            # Load both mask and original img
-            # img_full_path = img_folder_path / img_file
         for idx, row in self.dataframe.iterrows():
             img = tifffile.imread(row['img_path'])  # NOTE: img_file shoud contain just the id + suffix
             if img.dtype != np.uint16:
                 raise RuntimeError(f"Expected unsigned 16bit integer got {img.dtype} for image at path {row['img_path']}")
+            img = img.astype(np.float32)
             self.data.append(img)
 
             if self.load_masks:
@@ -86,10 +83,8 @@ class TNTDataset(Dataset):
                     raise RuntimeError(f"Expected just 0 and 255 in file at {row['mask_path']}, got {np.unique(mask)}")
                 elif mask.dtype == np.uint8:
                     mask //= 255
-                if mask.dtype != np.bool:
-                    raise RuntimeError(f"Expected the mask at {row['mask_path']} to be a boolean data!")
 
-                mask = mask.astype(np.bool)
+                mask = mask.astype(np.float32)
                 self.mask_data.append(mask)
     
     def __len__(self) -> int:
@@ -98,9 +93,23 @@ class TNTDataset(Dataset):
     def __getitem__(self, idx: int) -> NDArray[np.uint16] | Tuple[NDArray[np.uint16], NDArray[np.bool]]:
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")
+        
+        data = self.data[idx]
+        data = (data - data.min()) / (data.max() - data.min())
+
         if self.load_masks:
-            return self.data[idx], self.mask_data[idx]
-        return self.data[idx]
+            mask = self.mask_data[idx]
+            transformed = self.transforms(volume=data, mask3d=mask)
+            return transformed['volume'], transformed['mask3d']
+        else:
+            return self.transforms(data)['volume']
+
+        # processed_data = self.transforms(data)
+        # if self.load_masks:
+        #     mask = self.mask_data[idx]
+        #     processed_mask = self.transforms(mask)
+        #     return processed_data, processed_mask
+        # return processed_data
 
 if __name__ == "__main__":
     import argparse
