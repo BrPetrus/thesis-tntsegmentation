@@ -131,9 +131,11 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             inputs.append(input.cpu().detach())
             masks.append(mask.cpu().detach())
             predictions.append(prediction.cpu().detach())
-        inputs = np.array(inputs).flatten()
-        masks = np.array(masks).flatten()
-        predictions = np.array(predictions).flatten()
+        
+        # NOTE: last batch might have wrong size
+        inputs = np.concat(inputs, axis=0).flatten()
+        masks = np.concat(masks, axis=0).flatten()
+        predictions = np.concat(predictions, axis=0).flatten()
 
         # Find PR curve
         pr_curve = skmetrics.PrecisionRecallDisplay.from_predictions(
@@ -141,6 +143,20 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             y_pred=predictions,
         )
         mlflow.log_figure(pr_curve.figure_, "pr-curve.png")
+
+        # Find Accuracy, Recall, Precision, and F1 Score
+        binary_predictions = (predictions > 0.5).astype(np.bool)
+        binary_masks = (masks == 1.0)
+        accuracy = skmetrics.accuracy_score(binary_masks, binary_predictions)
+        f1score = skmetrics.f1_score(binary_masks, binary_predictions)
+        recall = skmetrics.recall_score(binary_masks, binary_predictions)
+        precision = skmetrics.precision_score(binary_masks, binary_predictions)
+        mlflow.log_metrics({
+            "end_accuracy": accuracy,
+            "end_f1score": f1score,
+            "end_recall": recall,
+            "end_precision": precision,
+        })
 
         # After training, you might log the final model
         mlflow.pytorch.log_model(nn, "model")
@@ -190,7 +206,7 @@ if __name__ == "__main__":
     log_folder = Path(args.log_folder)
     mask_folder = Path(args.mask_folder)
     if not input_folder.exists():
-        raise RuntimeError("Specified input folder does not exist!")
+        raise RuntimeError(f"Specified input folder '{input_folder}' does not exist!")
     if not mask_folder.exists():
         raise RuntimeError("Specified mask folder does not exist!")
     output_folder.mkdir(parents=True, exist_ok=True)
