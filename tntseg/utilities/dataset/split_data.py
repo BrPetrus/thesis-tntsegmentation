@@ -127,11 +127,6 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
         # Find bounding boxes of all tunnels
         for tunnel_id in tunnel_ids:
             zs, rows, cols = bbox_3d(gt_timeslice == tunnel_id)
-            # extracted_tunnel_gt = gt_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
-            # extracted_tunnel_img = img_timeslice[zs[0]:zs[1]+1, rows[0]:rows[1]+1, cols[0]:cols[1]+1]
-            # extracted_tunnels.append(
-            #     (extracted_tunnel_gt, extracted_tunnel_img)
-            # )
 
             if tunnel_id == 0:
                 continue  # Skip BG
