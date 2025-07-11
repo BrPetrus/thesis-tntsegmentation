@@ -141,11 +141,12 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
                     # Evaluate metrics
                     total += np.prod(inputs.shape)
-                    thresholded = torch.sigmoid(inputs) > 0.5
+                    thresholded = torch.sigmoid(outputs) > 0.5
                     TP += ((thresholded == True) & (masks == True)).float().sum()
                     TN += ((thresholded == False) & (masks == False)).float().sum()
                     FP += ((thresholded == True) & (masks == False)).float().sum()
                     FN += ((thresholded == False) & (masks == True)).float().sum()
+                    assert total == sum([TP, TN, FP, FN])
 
                     # Save first batch
                     if batch_idx == 0:
