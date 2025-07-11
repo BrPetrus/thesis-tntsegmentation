@@ -35,6 +35,9 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Train/Test Split
     train_x, test_x = train_test_split(df, test_size=1/3., random_state=seed)
+    train_x, valid_x = train_test_split(train_x, test_size=1/5, random_state=seed)
+
+    logger.info(f"Train {len(train_x)} Test {len(test_x)} Validation {len(valid_x)}")
 
     # Define transforms
     transforms_train = A.Compose([
@@ -45,11 +48,11 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
         A.CenterCrop3D(size=(7,32,32)),  # TODO: is this okay?
         A.ToTensor3D()
     ])
-     
 
     # Create datasets
     train_dataset = TNTDataset(train_x, transforms=transforms_train)
     test_dataset = TNTDataset(test_x, transforms=transform_test)
+    valid_dataset = TNTDataset(valid_x, transforms=transform_test)
 
     # Create dataloaders
     train_dataloader = DataLoader(
@@ -60,6 +63,12 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
     )
     test_dataloader = DataLoader(
         test_dataset,
+        batch_size=config.batch_size,
+        shuffle=config.shuffle,
+        num_workers=config.num_workers,
+    )
+    valid_dataloader = DataLoader(
+        valid_dataset,
         batch_size=config.batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers,
@@ -103,19 +112,52 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
                         mask_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
                         # Save prediction
                         tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
-                        logger.info(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                        logger.debug(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
                         
                         # Save input image
                         tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
-                        logger.info(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
+                        logger.debug(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
                         
                         # Save mask
                         tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
-                        logger.info(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
+                        logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
+                
+            # Run evaluation on validation set
+            with torch.no_grad():
+                nn.eval()
+                val_loss = 0.0
+                for batch_idx, batch in enumerate(tqdm(valid_dataloader, desc=f"Validation")):
+                    inputs, masks = batch
+                    inputs, masks = inputs.to(config.device), masks.to(config.device)
 
+                    loss = criterion(outputs, masks)
+                    val_loss += loss
 
-            mlflow.log_metric("train_loss", epoch_loss, step=epoch)
-            logger.info(f"Epoch {epoch+1}/{config.epochs}, Loss: {epoch_loss:.4f}")
+                    # Save first batch
+                    if batch_idx == 0:
+                        predictions = torch.sigmoid(outputs).cpu().detach().numpy()
+                        inputs_np = inputs.cpu().detach().numpy()
+                        masks_np = masks.cpu().detach().numpy()
+                        
+                        for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
+                            prediction_path = output_folder / f"epoch_val_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+                            input_path = output_folder / f"epoch_val_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+                            mask_path = output_folder / f"epoch_val_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+                            # Save prediction
+                            tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
+                            logger.debug(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                            
+                            # Save input image
+                            tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+                            logger.debug(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
+                            
+                            # Save mask
+                            tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+                            logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
+
+            mlflow.log_metric("train/loss", epoch_loss, step=epoch)
+            mlflow.log_metric("val/loss", val_loss, step=epoch)
+            logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
 
         # Test set
         nn.eval()
@@ -128,10 +170,31 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             prediction = nn(input)
             prediction = torch.nn.functional.sigmoid(prediction)
 
-            inputs.append(input.cpu().detach())
-            masks.append(mask.cpu().detach())
-            predictions.append(prediction.cpu().detach())
-        
+            inputs.append(input.cpu().detach().numpy())
+            masks.append(mask.cpu().detach().numpy())
+            predictions.append(prediction.cpu().detach().numpy())
+
+
+        # Save predictions, inputs, and masks for the test set
+        for batch_idx, (input_batch, mask_batch, prediction_batch) in enumerate(zip(inputs, masks, predictions)):
+            for i, (input_img, mask, prediction) in enumerate(zip(input_batch, mask_batch, prediction_batch)):
+                prediction_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+                input_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+                mask_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+                
+                # Save prediction
+                tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
+                logger.debug(f"Saved test prediction for batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                
+                # Save input image
+                tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+                logger.debug(f"Saved test input image for batch {batch_idx+1}, sample {i+1} at {input_path}")
+                
+                # Save mask
+                tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+                logger.debug(f"Saved test mask for batch {batch_idx+1}, sample {i+1} at {mask_path}")
+
+            
         # NOTE: last batch might have wrong size
         inputs = np.concat(inputs, axis=0).flatten()
         masks = np.concat(masks, axis=0).flatten()
@@ -183,7 +246,7 @@ if __name__ == "__main__":
                         help="Seed value for the train/test split.")
     parser.add_argument("--mlflow_address", type=str, default="127.0.0.1",
                         help="IP address of the MLFlow server")
-    parser.add_argument("--mlflow_port", type=str, default="8080",
+    parser.add_argument("--mlflow_port", type=str, default="8000",
                         help="Port of the MLFlow server")
     parser.add_argument("--epochs", type=int, default=10,
                         help="Number of epochs for training.")
@@ -217,6 +280,8 @@ if __name__ == "__main__":
     logger.debug(f"Output folder: {args.output_folder}")
     logger.debug(f"Log folder: {args.log_folder}")
     logger.info(f"Using MLFlow serve at {args.mlflow_address}:{args.mlflow_port}")
+    
+    logger.info("Trying to create mlflow tracking")
     mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     config = Config(
