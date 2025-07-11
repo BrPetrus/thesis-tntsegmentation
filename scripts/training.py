@@ -130,7 +130,7 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
                     inputs, masks = batch
                     inputs, masks = inputs.to(config.device), masks.to(config.device)
 
-                    loss = criterion(outputs, masks)
+                    loss = criterion(inputs, masks)
                     val_loss += loss
 
                     # Save first batch
