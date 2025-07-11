@@ -41,11 +41,11 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Define transforms
     transforms_train = A.Compose([
-        A.RandomCrop3D(size=(7,64, 64)),
+        A.CenterCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
-        A.RandomCrop3D(size=(7,64,64)),  # TODO: is this okay?
+        A.CenterCrop3D(size=(7,64,64)),  # TODO: is this okay?
         A.ToTensor3D()
     ])
 

@@ -7,9 +7,9 @@ TIME=$((10*3600))
 echo "Setting time limit to $(($TIME / 3600)) hours"
 ulimit -t $TIME
 
-INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations32/IMG"
+INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations64/IMG"
 OUTPUT_FOLDER="./output"
-MASK_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations32/GT_MERGED_LABELS"
+MASK_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations64/GT_MERGED_LABELS"
 LOG_FOLDER="./output/logs"
 EPOCHS=500
 DEVICE="cuda"
