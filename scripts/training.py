@@ -41,11 +41,11 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Define transforms
     transforms_train = A.Compose([
-        A.CenterCrop3D(size=(7,32,32)),
+        A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
-        A.CenterCrop3D(size=(7,32,32)),  # TODO: is this okay?
+        A.RandomCrop3D(size=(7,64,64)),  # TODO: is this okay?
         A.ToTensor3D()
     ])
 
@@ -126,12 +126,26 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             with torch.no_grad():
                 nn.eval()
                 val_loss = 0.0
+                total = 0
+                TP = 0
+                FP = 0
+                FN = 0
+                TN = 0
                 for batch_idx, batch in enumerate(tqdm(valid_dataloader, desc=f"Validation")):
                     inputs, masks = batch
                     inputs, masks = inputs.to(config.device), masks.to(config.device)
 
-                    loss = criterion(inputs, masks)
+                    outputs = nn(inputs)
+                    loss = criterion(outputs, masks)
                     val_loss += loss
+
+                    # Evaluate metrics
+                    total += np.prod(inputs.shape)
+                    thresholded = torch.sigmoid(inputs) > 0.5
+                    TP += ((thresholded == True) & (masks == True)).float().sum()
+                    TN += ((thresholded == False) & (masks == False)).float().sum()
+                    FP += ((thresholded == True) & (masks == False)).float().sum()
+                    FN += ((thresholded == False) & (masks == True)).float().sum()
 
                     # Save first batch
                     if batch_idx == 0:
@@ -155,8 +169,16 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
                             tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
                             logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
 
+            # Calculate metrics
+            accuracy = (TP+TN) / (total)
+            precision = (TP) / (TP+FP)
+            recall = TP / (TP+FN)
+
             mlflow.log_metric("train/loss", epoch_loss, step=epoch)
             mlflow.log_metric("val/loss", val_loss, step=epoch)
+            mlflow.log_metric("val/accuracy", accuracy, step=epoch)
+            mlflow.log_metric("val/precision", precision, step=epoch)
+            mlflow.log_metric("val/recall", recall, step=epoch)
             logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
 
         # Test set
@@ -164,15 +186,16 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
         inputs = []
         masks = []
         predictions = []
-        for batch_idx, batch in enumerate(tqdm(test_dataloader, desc="Evaluation on test set")):
-            input, mask = batch
-            input, mask = input.to(config.device), mask.to(config.device)
-            prediction = nn(input)
-            prediction = torch.nn.functional.sigmoid(prediction)
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(tqdm(test_dataloader, desc="Evaluation on test set")):
+                input, mask = batch
+                input, mask = input.to(config.device), mask.to(config.device)
+                prediction = nn(input)
+                prediction = torch.nn.functional.sigmoid(prediction)
 
-            inputs.append(input.cpu().detach().numpy())
-            masks.append(mask.cpu().detach().numpy())
-            predictions.append(prediction.cpu().detach().numpy())
+                inputs.append(input.cpu().detach().numpy())
+                masks.append(mask.cpu().detach().numpy())
+                predictions.append(prediction.cpu().detach().numpy())
 
 
         # Save predictions, inputs, and masks for the test set
