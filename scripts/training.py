@@ -200,6 +200,7 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             
             if epochs_since_last_improvement >= config.notimprovement_tolerance:
                 logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
+                break
 
         # Test set
         nn.eval()
