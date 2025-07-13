@@ -27,6 +27,7 @@ class Config:
     shuffle: bool
     device: str
     test_size: float = 1/3
+    notimprovement_tolerance: int = 5
 
 
 def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config) -> None:
@@ -41,7 +42,10 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Define transforms
     transforms_train = A.Compose([
-        A.CenterCrop3D(size=(7,64, 64)),
+       # A.HorizontalFlip(p=0.5),
+        # A.RandomBrightnessContrast(p=0.5),
+        # A.Rotate(),
+        A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
@@ -84,6 +88,10 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
     # MLFlow
     with mlflow.start_run():
         mlflow.log_params(config.__dict__)
+
+        # Last time that the eval loss improved
+        epochs_since_last_improvement = 0
+        last_better_eval_loss = np.inf
 
         for epoch in range(config.epochs):
             nn.train()
@@ -181,6 +189,17 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             mlflow.log_metric("val/precision", precision, step=epoch)
             mlflow.log_metric("val/recall", recall, step=epoch)
             logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
+            logger.info(f"Epoch {epoch+1}/{config.epochs}, Val/Acc: {accuracy}, Val/Prec: {precision}, Val/Recall: {recall}")
+
+
+            if last_better_eval_loss > val_loss:
+                last_better_eval_loss = val_loss
+                epochs_since_last_improvement = 0
+            else:
+                epochs_since_last_improvement += 1
+            
+            if epochs_since_last_improvement >= config.notimprovement_tolerance:
+                logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
 
         # Test set
         nn.eval()
