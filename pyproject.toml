@@ -39,6 +39,9 @@ torch-gpu = [
     "torch==2.6.0+cu124",
     "torchvision==0.21.0+cu124"
 ]
+jupyter = [
+    "jupyterlab>=4.1.6",
+]
 
 
 [tool.uv]
