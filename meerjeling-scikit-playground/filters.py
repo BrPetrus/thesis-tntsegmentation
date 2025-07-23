@@ -22,6 +22,44 @@ def percentile_stretch(arr: NDArray[np.unsignedinteger | np.floating], low: floa
 
 # def hessian_matrix_anisotropic():
 
+# def meijering_filter_alternative(arr: NDArray[np.floating], sigmas: List[float], alpha: Optional[float] = None) -> NDArray[np.float64]:
+#     if not np.issubdtype(arr.dtype, np.floating):
+#         raise ValueError("Expected a floating dtype")
+
+#     # Calculate the hessian matrix
+#     hessian = hessian_matrix(arr, sigma=sigmas, mode='constant', use_gaussian_derivatives=False)
+#     hxx, hxy, hxz, hyy, hyz, hzz = hessian
+
+#     new_hessian = np.zeros_like(hessian)
+#     # # Modify the hessian
+#     # for z in range(arr.shape[0]):
+#     #     for y in range(arr.shape[1]):
+#     #         for x in range(arr.shape[0]):
+#     #             new_hessian[]
+#     # new_hessian[0] = hxx + alpha/2. * (hyy+hzz)
+#     # new_hessian[1] = (1 - alpha/2.) * hxy
+#     # new_hessian[2] = (1 - alpha/2.) * hxz
+#     # new_hessian[3] = hyy + alpha/2. * (hxx + hzz)
+#     # new_hessian[4] = (1 - alpha/2.) * hyz
+#     # new_hessian[5] = hzz + alpha/2. * (hxx + hyy)
+
+#     # Calculate the eigenvals
+#     eigens = hessian_matrix_eigvals(hessian)
+
+
+
+#     max_eigenval_at_pixel = np.take_along_axis(
+#         eigens,
+#         np.abs(norm_eigenvals).argmax(0)[None],
+#         0).squeeze(0)
+#     minimum_eigenval_global = norm_eigenvals.min()
+
+#     max_eigenval_at_pixel[ max_eigenval_at_pixel >= 0] = 0
+#     max_eigenval_at_pixel /= minimum_eigenval_global
+
+#     return max_eigenval_at_pixel
+
+
 def meijering_filter(arr: NDArray[np.floating], sigmas: List[float], alpha: Optional[float] = None) -> NDArray[np.float64]:    
     # This is a modified version of the scikit-image meijering filter.
     if not np.issubdtype(arr.dtype, np.floating):
@@ -55,15 +93,15 @@ def main(path: str, sigma_1, sigma_2, sigma_3):
     import tifffile
     import matplotlib.pyplot as plt
     import skimage.morphology as skmorph
-    raw_data = tifffile.imread(path).astype(np.float64)[3]
-    # arr = percentile_stretch(raw_data)
-    arr = -1 * percentile_stretch(raw_data) + 1.0
-    arr = skmorph.erosion(arr, skmorph.disk(3))
+    raw_data = tifffile.imread(path).astype(np.float64)
+    arr = percentile_stretch(raw_data)
+    # arr = -1 * percentile_stretch(raw_data) + 1.0
+    # arr = skmorph.erosion(arr, skmorph.disk(3))
     print(f"Array shape {arr.shape}")
-    res = meijering_filter(arr, [float(sigma_1), float(sigma_2)])
+    res = meijering_filter(arr, [float(sigma_1), float(sigma_2), float(sigma_3)], -1/3)
     fig, ax = plt.subplots(ncols=2)
-    ax[0].imshow(arr, 'gray')
-    ax[1].imshow(res, 'gray')
+    ax[0].imshow(arr[2], 'gray')
+    ax[1].imshow(res[2], 'gray')
     fig.tight_layout()
     plt.show()
 
