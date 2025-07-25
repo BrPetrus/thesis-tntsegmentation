@@ -77,6 +77,13 @@ def focal_tversky_loss(tp: int, fp: int, fn: int, alpha: float = 0.5, beta: floa
     tversky = tversky_index(tp, fp, fn, alpha, beta)
     return (1 - tversky) ** gamma
 
+def accuracy(tp: int, fp: int, fn: int, tn: int) -> float:
+    return (tp + tn) / (tp+fp+fn+tn)
+def precision(tp: int, fp: int) -> float:
+    return (tp) / (tp+fp) if tp+fp > 0 else 0.
+def recall(tp: int, fn: int) -> float:
+    return tp / (tp+fn) if tp+fn > 0 else 0.
+
 
 def calculate_batch_stats(prediction_batch: NDArray[np.uint8], label_batch: NDArray[np.uint8], negative_val: int = 0, positive_val: int = 255) -> Stats:
     """
