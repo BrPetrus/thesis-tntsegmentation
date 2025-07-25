@@ -1,8 +1,10 @@
+from turtle import forward
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 from tntseg.nn.models.unet3d_basic import UNet3d
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -18,6 +20,9 @@ import mlflow
 from sklearn import metrics as skmetrics
 import sklearn.metrics as skmetrics
 import tntseg.utilities.metrics.metrics as tntmetrics
+from typing import List
+from torch.types import Tensor
+import tntseg.utilities.metrics.metrics_torch as tntloss
 
 @dataclass
 class Config:
@@ -34,9 +39,52 @@ class Config:
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
+    cross_entropy_loss_weight: float = 1.0
     use_dice_loss: bool = True
-    use_focal_tversky_loss: bool = False
+    dice_loss_weight: float = 1.0
+    use_focal_tversky_loss: bool = True
+    focal_tversky_loss_weight: float = 1.0
+    train_focal_tversky_alpha: float = 0.8
+    train_focal_tversky_beta: float = 0.2
+    train_focal_tversky_gamma: float = 2
 
+def create_loss_criterion(config: Config) -> nn.Module:
+    loss_functions = []
+    weights = []
+
+    if config.use_cross_entropy:
+        loss_functions.append(nn.BCEWithLogitsLoss())
+        weights.append(config.cross_entropy_loss_weight)
+    if config.use_dice_loss:
+        loss_functions.append(tntloss.DiceLoss())
+        weights.append(config.dice_loss_weight)
+    if config.use_focal_tversky_loss:
+        loss_functions.append(
+            tntloss.FocalTverskyLoss(
+                alpha=config.train_focal_tversky_alpha,
+                beta=config.train_focal_tversky_beta,
+                gamma=config.train_focal_tversky_gamma
+            ))
+        weights.append(config.focal_tversky_loss_weight)
+    return CombinedLoss(loss_functions, weights)
+
+
+class CombinedLoss(nn.Module):
+    def __init__(self, loss_functions: List[nn.Module], loss_weights: List[float]):
+        super().__init__()
+        if len(loss_functions) != len(loss_weights):
+            raise ValueError("Number of loss functions must match number of weights")
+        self.loss_functions = nn.ModuleList(loss_functions)
+        self.loss_weights = loss_weights
+    def forward(self, pred: Tensor, mask: Tensor) -> Tensor:
+        total_loss = 0.0
+        for loss_fun, weight in zip(self.loss_functions, self.loss_weights):
+            if isinstance(loss_fun, nn.BCEWithLogitsLoss):
+                loss = loss_fun(pred, mask)
+            else:
+                loss = loss_fun(torch.sigmoid(pred), mask)
+            total_loss += weight*loss
+        return total_loss
 
 
 def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config) -> None:
@@ -92,7 +140,7 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Training loop
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
-    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = create_loss_criterion(config)
 
     # MLFlow
     with mlflow.start_run():
@@ -188,7 +236,6 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
                             logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
 
             # Calculate metrics
-            # accuracy = (TP+TN) / (total)
             accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
             precision = tntmetrics.precision(TP, FP)
             recall = tntmetrics.recall(TP, FN)
