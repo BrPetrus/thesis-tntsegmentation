@@ -1,4 +1,4 @@
-from split_data import add_padding
+from tntseg.utilities.dataset.split_data import add_padding
 import numpy as np
 
 
