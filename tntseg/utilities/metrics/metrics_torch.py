@@ -28,9 +28,8 @@ class DiceLoss(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     
-    def forward(self, pred, label) -> Tensor:
-        pred = F.sigmoid(pred)
-        numerator = 2 * torch.sum(pred, label)
-        # TODO: why sometimes squared?
-        denom = torch.sum(torch.pow(pred, 2)) + torch.sum(torch.pow(label, 2))
+    def forward(self, pred, label, eta: float = 1e-6) -> Tensor:
+        numerator = 2 * torch.sum(pred * label)
+        # squared version is more commonly used for binary segmentation
+        denom = torch.sum(torch.pow(pred, 2)) + torch.sum(torch.pow(label, 2)) + eta
         return 1 - numerator / (denom)

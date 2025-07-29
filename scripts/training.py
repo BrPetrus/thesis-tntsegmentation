@@ -34,15 +34,15 @@ class Config:
     shuffle: bool
     device: str
     test_size: float = 1/3
-    notimprovement_tolerance: int = 5
+    notimprovement_tolerance: int = 20
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
-    cross_entropy_loss_weight: float = 1.0
+    cross_entropy_loss_weight: float = 0.5
     use_dice_loss: bool = True
-    dice_loss_weight: float = 1.0
-    use_focal_tversky_loss: bool = True
+    dice_loss_weight: float = 0.5
+    use_focal_tversky_loss: bool = False
     focal_tversky_loss_weight: float = 1.0
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
@@ -99,9 +99,10 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Define transforms
     transforms_train = A.Compose([
-       # A.HorizontalFlip(p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
-        # A.Rotate(),
+        A.Rotate(),
         A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
