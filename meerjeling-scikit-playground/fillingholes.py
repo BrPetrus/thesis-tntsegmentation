@@ -7,6 +7,7 @@ import scipy.linalg
 import skimage.filters as skfilters
 import skimage.morphology as skmorph
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from torch import Value
 from morphology import create_umbra, fillhole_morphology
 from filters import percentile_stretch
 from PIL import Image
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import tifffile
 import skimage
+from sklearn.metrics import f1_score, jaccard_score, accuracy_score, precision_score, recall_score, ConfusionMatrixDisplay
 
 @dataclass
 class ParametersSettings:
@@ -81,7 +83,7 @@ def find(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArr
     threshold_low_mask[thresholded] = False 
 
     # Now remove small objects
-    thresholded_no_small = skmorph.remove_small_objects(threshold_low_mask, 50)
+    thresholded_no_small = skmorph.remove_small_objects(threshold_low_mask, 100)
 
     result = np.zeros_like(stretched, dtype=np.uint8)
     result[thresholded] = 255
@@ -99,15 +101,59 @@ def find(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArr
 
     # tifffile.imwrite(output_folder / "blurred.tif", blurred)
 
-def evaluate(pred, mask):
-    pass
+    return result
+
+def evaluate(pred: NDArray[np.floating | np.integer], label: NDArray[np.uint16]):
+    if label.dtype == np.uint16:
+        label[label > 0] = 255  # Convert instance segmentation to semantic segmentation
+        # raise ValueError(f"Expected uint16, got {label.dtype} for ground truth.")
+    # if label.max() != 255 or label.min() != 0:
+        # raise ValueError(f"Ground truth values must belong to set {0, 1}!")
+
+    if pred.dtype == np.float32:
+        if pred.max() > 1.0 or pred.min() < 0.0:
+            raise ValueError(f"Unrecognizable prediction. The values must be in range [0, 1]")
+        pred = (pred * 255).astype(np.uint8)
+    elif pred.dtype == np.uint8:
+        if pred.max() != 255 or pred.min() != 0:
+            raise ValueError(f"Ground truth values must belong to set {0, 255}!")
+    else:
+        raise ValueError(f"Expected float32 or uint8, got {pred.dtype}")
+    # Visualize 4 random slices
+    # indices = np.random.choice(pred.shape[0], size=4, replace=False)
+    nrows=7
+    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(10, 10))
+    for i in range(nrows):
+        axes[i][0].imshow(pred[i])
+        axes[i][1].imshow(label[i])
+    plt.tight_layout()
+    pred = pred.flatten()
+    label = label.flatten()
+
+    prec = precision_score(label, pred, pos_label=255)
+    acc = accuracy_score(label, pred)
+    recall = recall_score(label, pred, pos_label=255)
+    f1 = f1_score(label, pred, pos_label=255)
+    jaccard = jaccard_score(label, pred, pos_label=255)
+
+    print(f"precision: {prec}\n"
+          f"accuracy: {acc}\n"
+          f"recall: {recall}\n"
+          f"f1: {f1}\n"
+          f"jaccard: {jaccard}")
+
+    ConfusionMatrixDisplay.from_predictions(label, pred)
+
+    plt.show()
+    return prec, acc, recall, f1, jaccard
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run algorithm to find cells")
     parser.add_argument("image", type=Path, help="Path to the image")
     parser.add_argument("--output", type=Path, help="Output folder", default=Path('.') / "output")
-    parser.add_argument("--groundtruth", type=Path, help="Ground Truth")
+    parser.add_argument("--groundtruth", type=Path, help="Ground Truth", default=None)
     args = parser.parse_args()
 
     # Load the image into memory
@@ -119,6 +165,10 @@ if __name__ == "__main__":
     )
 
     res = find(img, args.output, params)
+    res[res == 255] = 0  # Remove cells
+    res[res == 127] = 255  # Just the tunnels
 
     # enter evaluations
-    if args.
+    if args.groundtruth != None:
+        gt = tifffile.imread(args.groundtruth)
+        evaluate(res, gt)
