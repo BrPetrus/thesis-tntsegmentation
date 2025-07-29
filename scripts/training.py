@@ -1,8 +1,10 @@
+from turtle import forward
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 from tntseg.nn.models.unet3d_basic import UNet3d
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -16,6 +18,11 @@ import albumentations as A
 import tifffile
 import mlflow
 from sklearn import metrics as skmetrics
+import sklearn.metrics as skmetrics
+import tntseg.utilities.metrics.metrics as tntmetrics
+from typing import List
+from torch.types import Tensor
+import tntseg.utilities.metrics.metrics_torch as tntloss
 
 @dataclass
 class Config:
@@ -27,7 +34,57 @@ class Config:
     shuffle: bool
     device: str
     test_size: float = 1/3
-    notimprovement_tolerance: int = 5
+    notimprovement_tolerance: int = 20
+    eval_tversky_alpha: float = 0.8
+    eval_tversky_beta: float = 0.2
+    eval_tversky_gamma: float = 2
+    use_cross_entropy: bool = True
+    cross_entropy_loss_weight: float = 0.5
+    use_dice_loss: bool = True
+    dice_loss_weight: float = 0.5
+    use_focal_tversky_loss: bool = False
+    focal_tversky_loss_weight: float = 1.0
+    train_focal_tversky_alpha: float = 0.8
+    train_focal_tversky_beta: float = 0.2
+    train_focal_tversky_gamma: float = 2
+
+def create_loss_criterion(config: Config) -> nn.Module:
+    loss_functions = []
+    weights = []
+
+    if config.use_cross_entropy:
+        loss_functions.append(nn.BCEWithLogitsLoss())
+        weights.append(config.cross_entropy_loss_weight)
+    if config.use_dice_loss:
+        loss_functions.append(tntloss.DiceLoss())
+        weights.append(config.dice_loss_weight)
+    if config.use_focal_tversky_loss:
+        loss_functions.append(
+            tntloss.FocalTverskyLoss(
+                alpha=config.train_focal_tversky_alpha,
+                beta=config.train_focal_tversky_beta,
+                gamma=config.train_focal_tversky_gamma
+            ))
+        weights.append(config.focal_tversky_loss_weight)
+    return CombinedLoss(loss_functions, weights)
+
+
+class CombinedLoss(nn.Module):
+    def __init__(self, loss_functions: List[nn.Module], loss_weights: List[float]):
+        super().__init__()
+        if len(loss_functions) != len(loss_weights):
+            raise ValueError("Number of loss functions must match number of weights")
+        self.loss_functions = nn.ModuleList(loss_functions)
+        self.loss_weights = loss_weights
+    def forward(self, pred: Tensor, mask: Tensor) -> Tensor:
+        total_loss = 0.0
+        for loss_fun, weight in zip(self.loss_functions, self.loss_weights):
+            if isinstance(loss_fun, nn.BCEWithLogitsLoss):
+                loss = loss_fun(pred, mask)
+            else:
+                loss = loss_fun(torch.sigmoid(pred), mask)
+            total_loss += weight*loss
+        return total_loss
 
 
 def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config) -> None:
@@ -42,9 +99,10 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Define transforms
     transforms_train = A.Compose([
-       # A.HorizontalFlip(p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
-        # A.Rotate(),
+        A.Rotate(),
         A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
@@ -83,7 +141,7 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Training loop
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
-    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = create_loss_criterion(config)
 
     # MLFlow
     with mlflow.start_run():
@@ -179,15 +237,26 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
                             logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
 
             # Calculate metrics
-            accuracy = (TP+TN) / (total)
-            precision = (TP) / (TP+FP)
-            recall = TP / (TP+FN)
+            accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
+            precision = tntmetrics.precision(TP, FP)
+            recall = tntmetrics.recall(TP, FN)
+            jaccard = tntmetrics.jaccard_index(TP, FP, FN)
+            dice = tntmetrics.dice_coefficient(TP, FP, FN)
+            tversky = tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta)
+            focal_tversky = tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
 
-            mlflow.log_metric("train/loss", epoch_loss, step=epoch)
-            mlflow.log_metric("val/loss", val_loss, step=epoch)
-            mlflow.log_metric("val/accuracy", accuracy, step=epoch)
-            mlflow.log_metric("val/precision", precision, step=epoch)
-            mlflow.log_metric("val/recall", recall, step=epoch)
+            mlflow.log_metrics({
+                "train/loss": epoch_loss,
+                "val/loss": val_loss,
+                "val/accuracy": accuracy,
+                "val/precision": precision, 
+                "val/recall": recall,
+                "val/jaccard": jaccard,
+                "val/dice": dice,
+                "val/tversky": tversky,
+                "val/focaltversky": focal_tversky
+            }, step=epoch)
+
             logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
             logger.info(f"Epoch {epoch+1}/{config.epochs}, Val/Acc: {accuracy}, Val/Prec: {precision}, Val/Recall: {recall}")
 
@@ -254,15 +323,33 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
         # Find Accuracy, Recall, Precision, and F1 Score
         binary_predictions = (predictions > 0.5).astype(np.bool)
         binary_masks = (masks == 1.0)
-        accuracy = skmetrics.accuracy_score(binary_masks, binary_predictions)
-        f1score = skmetrics.f1_score(binary_masks, binary_predictions)
-        recall = skmetrics.recall_score(binary_masks, binary_predictions)
-        precision = skmetrics.precision_score(binary_masks, binary_predictions)
+        sk_accuracy = skmetrics.accuracy_score(binary_masks, binary_predictions)
+        sk_f1score = skmetrics.f1_score(binary_masks, binary_predictions)
+        sk_recall = skmetrics.recall_score(binary_masks, binary_predictions)
+        sk_precision = skmetrics.precision_score(binary_masks, binary_predictions)
+        # Calculate additional metrics using test set predictions
+
+        # a =tntmetrics.calc_stats(binary_predictions, binary_masks)
+        TP, FP, FN, TN = tntmetrics.calculate_batch_stats(binary_predictions.astype(np.uint8) * 255, binary_masks.astype(np.uint8)*255, 0, 255)
+        jaccard = tntmetrics.jaccard_index(TP, FP, FN)
+        dice = tntmetrics.dice_coefficient(TP, FP, FN)
+        tversky = tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta)
+        focal_tversky = tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
+        accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
+        precision = tntmetrics.precision(TP, FP)
+        recall = tntmetrics.recall(TP, FN)
         mlflow.log_metrics({
-            "end_accuracy": accuracy,
-            "end_f1score": f1score,
-            "end_recall": recall,
-            "end_precision": precision,
+            "test/jaccard": jaccard,
+            "test/dice": dice, 
+            "test/tversky": tversky,
+            "test/focal_tversky": focal_tversky,
+            "test/accuracy": accuracy,
+            "test/precision": precision,
+            "test/recall": recall,
+            "test/accuracy_skmetric": sk_accuracy,
+            "test/f1score_skmetric": sk_f1score,
+            "test/recall_skmetric": sk_recall,
+            "test/precision_skmetric": sk_precision,
         })
 
         # After training, you might log the final model
