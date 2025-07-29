@@ -20,7 +20,7 @@ import skimage
 class ParametersSettings:
     sigma: List[float] | float
 
-def main(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArray[np.uint8]:
+def find(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArray[np.uint8]:
     if img.ndim != 3:
         raise ValueError("Expected 3D data")
 
@@ -99,12 +99,15 @@ def main(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArr
 
     # tifffile.imwrite(output_folder / "blurred.tif", blurred)
 
+def evaluate(pred, mask):
+    pass
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run algorithm to find cells")
     parser.add_argument("image", type=Path, help="Path to the image")
     parser.add_argument("--output", type=Path, help="Output folder", default=Path('.') / "output")
+    parser.add_argument("--groundtruth", type=Path, help="Ground Truth")
     args = parser.parse_args()
 
     # Load the image into memory
@@ -115,4 +118,7 @@ if __name__ == "__main__":
         sigma=[0, 2, 2]
     )
 
-    main(img, args.output, params)
+    res = find(img, args.output, params)
+
+    # enter evaluations
+    if args.
