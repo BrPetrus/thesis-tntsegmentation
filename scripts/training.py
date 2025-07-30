@@ -350,7 +350,7 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
             "test/f1score_skmetric": sk_f1score,
             "test/recall_skmetric": sk_recall,
             "test/precision_skmetric": sk_precision,
-        })
+        }, step=epoch)
 
         # After training, you might log the final model
         mlflow.pytorch.log_model(nn, "model")
