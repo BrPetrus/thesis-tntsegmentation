@@ -57,44 +57,64 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
         c_right_pad = c - (c_left_pad)
         return np.pad(img, ((z_left_pad, z_right_pad), (r_left_pad, r_right_pad), (c_left_pad, c_right_pad)))
 
+    # Handle z dimension
     z_minimum_size = minimum_patch_size[0]
     patch = img.copy()
     if z_minimum_size > z_span:
-        # return img[z_from:z_span+z_from, r_from:r_from+r_span, c_from:c_from+c_span]
         z_pad_left = (z_minimum_size - z_span) // 2
-        z_pad_right = z_minimum_size - (z_span + z_pad_left)  # Note: both even and odd spans must be handled
+        z_pad_right = z_minimum_size - (z_span + z_pad_left)
 
-        # Greedily try to expand as much as we can
-        z_expand_right = min(img.shape[0], z_from+z_span+z_pad_right) - z_from - z_span
-        z_expand_left = z_from - max(0, z_from-z_pad_left)
-        patch = patch[z_from-z_expand_left:z_from+z_span+z_expand_right]
+        z_from_ideal = z_from - z_pad_left
+        z_to_ideal = z_from + z_span + z_pad_right
+        if z_from_ideal < 0:
+            z_to_ideal = min(img.shape[0], z_to_ideal + abs(z_from_ideal))
+            z_from_ideal = 0
+        if z_to_ideal > img.shape[0]:
+            z_from_ideal = max(0, z_from_ideal - (z_to_ideal - img.shape[0]))
+            z_to_ideal = img.shape[0]
+        
+        patch = patch[z_from_ideal:z_to_ideal, :, :]
     else:
         patch = patch[z_from:z_from+z_span, :, :]
 
+    # Handle r dimension
     r_minimum_size = minimum_patch_size[1]
     if r_minimum_size > r_span:
         r_pad_left = (r_minimum_size - r_span) // 2
         r_pad_right = r_minimum_size - (r_span + r_pad_left)
 
-        # Greedily try to expand as much as we can
-        r_expand_right = min(patch.shape[1], r_from+r_span+r_pad_right) - r_from - r_span
-        r_expand_left = r_from - max(0, r_from-r_pad_left)
-        patch = patch[:, r_from-r_expand_left:r_from+r_span+r_expand_right]
+        r_from_ideal = r_from - r_pad_left
+        r_to_ideal = r_from + r_span + r_pad_right
+        if r_from_ideal < 0:
+            r_to_ideal = min(patch.shape[1], r_to_ideal + abs(r_from_ideal))
+            r_from_ideal = 0
+        if r_to_ideal > patch.shape[1]:
+            r_from_ideal = max(0, r_from_ideal - (r_to_ideal - patch.shape[1]))
+            r_to_ideal = patch.shape[1]
+        
+        patch = patch[:, r_from_ideal:r_to_ideal, :]
     else:
         patch = patch[:, r_from:r_from+r_span, :]
 
+    # Handle c dimension
     c_minimum_size = minimum_patch_size[2]
     if c_minimum_size > c_span:
         c_pad_left = (c_minimum_size - c_span) // 2
         c_pad_right = c_minimum_size - (c_span + c_pad_left)
 
-        # Greedily try to expand as much as we can
-        c_expand_right = min(patch.shape[2], c_from+c_span+c_pad_right) - c_from - c_span
-        c_expand_left = c_from - max(0, c_from-c_pad_left)
-        patch = patch[:, :, c_from-c_expand_left:c_from+c_span+c_expand_right]
+        c_from_ideal = c_from - c_pad_left
+        c_to_ideal = c_from + c_span + c_pad_right
+        if c_from_ideal < 0:
+            c_to_ideal = min(patch.shape[2], c_to_ideal + abs(c_from_ideal))
+            c_from_ideal = 0
+        if c_to_ideal > patch.shape[2]:
+            c_from_ideal = max(0, c_from_ideal - (c_to_ideal - patch.shape[2]))
+            c_to_ideal = patch.shape[2]
+        
+        patch = patch[:, :, c_from_ideal:c_to_ideal]
     else:
         patch = patch[:, :, c_from:c_from+c_span]
-
+  
     # Now fill with zeros
     return _zero_fill(
         patch,
