@@ -43,7 +43,7 @@ class Config:
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.5
     ce_use_weights: bool = True
-    ce_weights: Tuple[float, float] = (1./3602171, 1./67845) 
+    ce_pos_weight: float  = 3602171 / 67845  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.5
     use_focal_tversky_loss: bool = False
@@ -59,7 +59,7 @@ def create_loss_criterion(config: Config) -> nn.Module:
     if config.use_cross_entropy:
         if config.ce_use_weights:
             # Use weights
-            loss_functions.append(nn.BCEWithLogitsLoss(weight=torch.tensor(config.ce_weights)))
+            loss_functions.append(nn.BCEWithLogitsLoss(pos_weight=torch.tensor(config.ce_pos_weight)))
         else:
             loss_functions.append(nn.BCEWithLogitsLoss())
         weights.append(config.cross_entropy_loss_weight)
