@@ -45,7 +45,7 @@ class Config:
     ce_use_weights: bool = True
     ce_pos_weight: float  = (3602171+67845) / 67845  # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
-    use_dice_loss: bool = True
+    use_dice_loss: bool = False
     dice_loss_weight: float = 0.5
     use_focal_tversky_loss: bool = False
     focal_tversky_loss_weight: float = 1.0
@@ -95,6 +95,7 @@ class CombinedLoss(nn.Module):
             else:
                 loss = loss_fun(torch.sigmoid(pred), mask)
             total_loss += weight*loss
+            logger.debug(f"{type(loss_fun)} - {loss}")
         return total_loss
 
 
