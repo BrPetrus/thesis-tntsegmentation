@@ -16,7 +16,7 @@ DEVICE="cuda"
 WORKERS=4
 BATCH=16
 MLFLOW_SERVER_PORT=8000
-LR=0.00001
+LR=0.001
 
 nice -n 19 python training.py \
     --input_folder "${INPUT_FOLDER}" \
