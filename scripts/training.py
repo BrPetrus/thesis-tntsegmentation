@@ -36,7 +36,7 @@ class Config:
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
-    notimprovement_tolerance: int = 500
+    notimprovement_tolerance: int = 50
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2

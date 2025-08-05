@@ -11,12 +11,12 @@ INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations90v
 OUTPUT_FOLDER="./output"
 MASK_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations90v2/GT_MERGED_LABELS"
 LOG_FOLDER="./output/logs"
-EPOCHS=500
+EPOCHS=250
 DEVICE="cuda"
 WORKERS=4
 BATCH=16
 MLFLOW_SERVER_PORT=8000
-LR=0.0001
+LR=0.00001
 
 nice -n 19 python training.py \
     --input_folder "${INPUT_FOLDER}" \
