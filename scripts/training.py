@@ -43,7 +43,8 @@ class Config:
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.5
     ce_use_weights: bool = True
-    ce_pos_weight: float  = 3602171 / 67845  # Negative/positive ratio to penalize
+    # ce_pos_weight: float  = 3602171 / 67845  # Negative/positive ratio to penalize
+    ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.5
     use_focal_tversky_loss: bool = False
