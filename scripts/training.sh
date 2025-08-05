@@ -1,17 +1,17 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 TIME=$((10*3600))
 echo "Setting time limit to $(($TIME / 3600)) hours"
 ulimit -t $TIME
 
-INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations90/IMG"
+INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations90v2/IMG"
 OUTPUT_FOLDER="./output"
-MASK_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations90/GT_MERGED_LABELS"
+MASK_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/splitannotations90v2/GT_MERGED_LABELS"
 LOG_FOLDER="./output/logs"
-EPOCHS=20
+EPOCHS=50
 DEVICE="cuda"
 WORKERS=4
 BATCH=16
