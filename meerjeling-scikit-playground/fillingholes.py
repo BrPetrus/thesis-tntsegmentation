@@ -22,6 +22,16 @@ from sklearn.metrics import f1_score, jaccard_score, accuracy_score, precision_s
 class ParametersSettings:
     sigma: List[float] | float
 
+def cell_border_heuristic(segmentation: NDArray[np.uint8]) -> NDArray[np.uint8]:
+    if segmentation.dtype != np.uint8:
+        raise ValueError(f"Expected uint8 type, got {segmentation.dtype}")
+    segmentation = segmentation.copy()
+
+    # for z_slice in segmentation.shape[0]:
+    #     # Find cell 
+    
+
+
 def find(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArray[np.uint8]:
     if img.ndim != 3:
         raise ValueError("Expected 3D data")
@@ -52,7 +62,7 @@ def find(img: NDArray, output_folder: Path, params: ParametersSettings) -> NDArr
     #     # Remove tunnels
     #     eroded[z_index] = skmorph.opening(eroded[z_index], se)
     se = skmorph.footprint_rectangle([5, 4, 4])
-    eroded = skmorph.opening(stretched, se, mode='wrap')
+    eroded = skmorph.opening(stretched, se, mode='mirror')
 
     # Filling holes
     filled = eroded.copy()
