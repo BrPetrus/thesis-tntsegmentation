@@ -90,6 +90,7 @@ class TNTDataset(Dataset):
     def __len__(self) -> int:
         return len(self.data)
     
+    # TODO: fix types
     def __getitem__(self, idx: int) -> NDArray[np.uint16] | Tuple[NDArray[np.uint16], NDArray[np.bool]]:
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")

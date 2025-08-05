@@ -20,7 +20,7 @@ import mlflow
 from sklearn import metrics as skmetrics
 import sklearn.metrics as skmetrics
 import tntseg.utilities.metrics.metrics as tntmetrics
-from typing import List
+from typing import List, Tuple
 from torch.types import Tensor
 import tntseg.utilities.metrics.metrics_torch as tntloss
 
@@ -33,6 +33,8 @@ class Config:
     num_workers: int
     shuffle: bool
     device: str
+    dataset_std: float = 0.07579
+    dataset_mean: float = 0.05988
     test_size: float = 1/3
     notimprovement_tolerance: int = 20
     eval_tversky_alpha: float = 0.8
@@ -40,6 +42,8 @@ class Config:
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.5
+    ce_use_weights: bool = False 
+    ce_weights: Tuple[float, float] = (1./3602171, 1./67845) 
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.5
     use_focal_tversky_loss: bool = False
@@ -53,6 +57,9 @@ def create_loss_criterion(config: Config) -> nn.Module:
     weights = []
 
     if config.use_cross_entropy:
+        if config.ce_use_weights:
+            # Use weights
+            loss_functions.append(nn.BCEWithLogitsLoss(weight=torch.tensor(config.ce_weights)))
         loss_functions.append(nn.BCEWithLogitsLoss())
         weights.append(config.cross_entropy_loss_weight)
     if config.use_dice_loss:
@@ -99,6 +106,12 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
 
     # Define transforms
     transforms_train = A.Compose([
+        A.Normalize(
+            mean=config.dataset_mean,
+            std=config.dataset_std,
+            max_pixel_value=1.0,
+            p=1.0
+        ),
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
@@ -107,6 +120,12 @@ def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: log
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
+        A.Normalize(
+            mean=config.dataset_mean,
+            std=config.dataset_std,
+            max_pixel_value=1.0,
+            p=1.0
+        ),
         A.CenterCrop3D(size=(7,64,64)),  # TODO: is this okay?
         A.ToTensor3D()
     ])
