@@ -42,7 +42,7 @@ class Config:
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.5
-    ce_use_weights: bool = False 
+    ce_use_weights: bool = True
     ce_weights: Tuple[float, float] = (1./3602171, 1./67845) 
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.5
@@ -60,7 +60,8 @@ def create_loss_criterion(config: Config) -> nn.Module:
         if config.ce_use_weights:
             # Use weights
             loss_functions.append(nn.BCEWithLogitsLoss(weight=torch.tensor(config.ce_weights)))
-        loss_functions.append(nn.BCEWithLogitsLoss())
+        else:
+            loss_functions.append(nn.BCEWithLogitsLoss())
         weights.append(config.cross_entropy_loss_weight)
     if config.use_dice_loss:
         loss_functions.append(tntloss.DiceLoss())
