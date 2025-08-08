@@ -33,6 +33,7 @@ class Config:
     num_workers: int
     shuffle: bool
     device: str
+    input_folder: str
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
@@ -446,6 +447,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         batch_size=args.batch_size,
+        input_folder=input_folder
     )
 
     # Run training
