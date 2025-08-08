@@ -228,6 +228,7 @@ if __name__ == "__main__":
     parser.add_argument('--min_size', type=int, nargs=3, metavar=('MIN_Z', 'MIN_Y', 'MIN_X'),
                         default=[7, 32, 32],
                         help="Minimum size (z, y, x) for each patch. If the bounding box is smaller, it will be padded around the centroid. If not possible, mirror padding is used.")
+    parser.add_argument("--add_random_crops", type=int, default=0, help="How many extra crops to add.")
     args = parser.parse_args()
 
 
