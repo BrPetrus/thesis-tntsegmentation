@@ -44,14 +44,11 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     logger.info("Loading model...")
     model = UNet3d(n_channels_in=1, n_classes_out=1)
     try:
-        checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model = torch.load(checkpoint_path, weights_only=False, map_location=torch.device(device))
+        # model.load_state_dict(checkpoint['model_state_dict'])
         logger.info("Model state loaded")
     except FileNotFoundError:
         logger.error(f"Path {checkpoint_path} does not exists")
-        return
-    except KeyError:
-        logger.error("Checkpoint is missing 'model_state_dict' entry")
         return
     model.to(device)
     model.eval()
@@ -61,8 +58,8 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     df = load_dataset_metadata(img_folder=input_folder)
 
     # Load the images, split them into CROP_SIZE chunks and export them
-    for row in df:
-        img_path = row['img_path']
+    for img_path in df['img_path']:
+        # img_path = row['img_path']
         try:
             img = tifffile.imread(img_path)
         except:
@@ -78,7 +75,7 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
         for r in range(img.shape[1] // CROP_SIZE[1]):
             for c in range(img.shape[2] // CROP_SIZE[2]):
                 tile = img[:, r * CROP_SIZE[1]:(r+1) * CROP_SIZE[1], c*CROP_SIZE[2]:(c+1)*CROP_SIZE[2]]
-                tifffile.imwrite(f"{i:10}_r-{r}_c-{c}.tif", tile)
+                tifffile.imwrite(tile_output_path / f"{i:10}_r-{r}_c-{c}.tif", tile)
                 i += 1
 
     # Create the TNTDataset object
@@ -109,18 +106,20 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     all_tiles = []
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Inference"):
-            inputs = inputs.to(device)
-            outputs = model(inputs)
+            batch = batch.to(device)[:, np.newaxis, ...]  # Add channel
+            outputs = model(batch)
             prob = torch.sigmoid(outputs)
             thresh = (prob > 0.5).detach().cpu().numpy()
 
             # Save
             for i in range(thresh.shape[0]):
                 prediction_mask = thresh[i].squeeze()  # Remove channel
+                prob_float = prob[i].detach().cpu().numpy().squeeze().astype(np.float32)
                 prediction_mask_uint8 = (prediction_mask * 255).astype(np.uint8)
                 tifffile.imwrite(output_inference_path / f"{img_idx:10}.tif", prediction_mask_uint8)
+                tifffile.imwrite(output_inference_path / f"{img_idx:10}-sigmoid.tif", prob_float)
                 img_idx += 1
-            all_tiles.append(thresh)
+                all_tiles.append(prediction_mask_uint8)
     logger.info("Inference complete") 
 
     # Stiching it together
@@ -132,9 +131,28 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     for img_idx in range(num_images):
         full_height = CROP_SIZE[1]*number_of_rows
         full_width = CROP_SIZE[2]*number_of_cols
-        img = all_tiles[img_idx*tiles_per_image:(img_idx+1)*tiles_per_image]
-        img = np.array(img)
-        assert CROP_SIZE[0] == 7
-        img = img.reshape(7, full_height, full_width)
-        tifffile.imwrite(stitched_output_folder / f"img_idx.tif", img)
+        relevant_tiles = np.array(all_tiles[img_idx*tiles_per_image:(img_idx+1)*tiles_per_image])
+        # img = np.array(img)
+        # assert CROP_SIZE[0] == 7
+        # img = img.reshape(7, full_height, full_width)
+        stitched = np.zeros((7, full_height, full_width)).astype(np.uint8)
+
+        for r in range(number_of_rows):
+            for c in range(number_of_cols):
+                stitched[:, r*CROP_SIZE[1]:(r+1)*CROP_SIZE[1], c*CROP_SIZE[2]:(c+1)*CROP_SIZE[2]] = relevant_tiles[r*number_of_rows+c]
+
+        
+
+        tifffile.imwrite(stitched_output_folder / f"img_idx.tif", stitched)
     logger.info("Done stitching")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Run inference on 3D images')
+    parser.add_argument('checkpoint_path', type=Path, help='Path to model checkpoint')
+    parser.add_argument('input_folder', type=Path, help='Folder containing input images')
+    parser.add_argument('output_folder', type=Path, help='Folder for output predictions')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for inference')
+    args = parser.parse_args()
+
+    main(args.checkpoint_path, args.input_folder, args.output_folder, args.batch_size)
