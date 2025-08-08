@@ -47,7 +47,7 @@ def bbox_3d(img: NDArray) -> List[Tuple[int, int]]:
     return [(rmin, rmax), (cmin, cmax), (zmin, zmax)]
 
 
-def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, minimum_patch_size: Tuple[int,int,int]) -> NDArray:
+def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, minimum_patch_size: Tuple[int,int,int], limits_z, limits_r, limits_c) -> NDArray:
     def _zero_fill(img: NDArray, z, r, c):
         z_left_pad = z // 2
         z_right_pad = z - (z_left_pad)
@@ -66,13 +66,12 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
 
         z_from_ideal = z_from - z_pad_left
         z_to_ideal = z_from + z_span + z_pad_right
-        if z_from_ideal < 0:
-            z_to_ideal = min(img.shape[0], z_to_ideal + abs(z_from_ideal))
-            z_from_ideal = 0
-        if z_to_ideal > img.shape[0]:
-            z_from_ideal = max(0, z_from_ideal - (z_to_ideal - img.shape[0]))
-            z_to_ideal = img.shape[0]
-        
+        if z_from_ideal < limits_z[0]:
+            z_to_ideal = min(limits_z[1], z_to_ideal + abs(z_from_ideal))
+            z_from_ideal = limits_z[0]
+        if z_to_ideal > limits_z[1]:
+            z_from_ideal = max(limits_z[0], z_from_ideal - (z_to_ideal - limits_z[1]))
+            z_to_ideal = limits_z[1]
         patch = patch[z_from_ideal:z_to_ideal, :, :]
     else:
         patch = patch[z_from:z_from+z_span, :, :]
@@ -85,13 +84,12 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
 
         r_from_ideal = r_from - r_pad_left
         r_to_ideal = r_from + r_span + r_pad_right
-        if r_from_ideal < 0:
-            r_to_ideal = min(patch.shape[1], r_to_ideal + abs(r_from_ideal))
-            r_from_ideal = 0
-        if r_to_ideal > patch.shape[1]:
-            r_from_ideal = max(0, r_from_ideal - (r_to_ideal - patch.shape[1]))
-            r_to_ideal = patch.shape[1]
-        
+        if r_from_ideal < limits_r[0]:
+            r_to_ideal = min(limits_r[1], r_to_ideal + abs(r_from_ideal))
+            r_from_ideal = limits_r[0]
+        if r_to_ideal > limits_r[1]:
+            r_from_ideal = max(limits_r[0], r_from_ideal - (r_to_ideal - limits_r[1]))
+            r_to_ideal = limits_r[1]
         patch = patch[:, r_from_ideal:r_to_ideal, :]
     else:
         patch = patch[:, r_from:r_from+r_span, :]
@@ -104,13 +102,12 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
 
         c_from_ideal = c_from - c_pad_left
         c_to_ideal = c_from + c_span + c_pad_right
-        if c_from_ideal < 0:
-            c_to_ideal = min(patch.shape[2], c_to_ideal + abs(c_from_ideal))
-            c_from_ideal = 0
-        if c_to_ideal > patch.shape[2]:
-            c_from_ideal = max(0, c_from_ideal - (c_to_ideal - patch.shape[2]))
-            c_to_ideal = patch.shape[2]
-        
+        if c_from_ideal < limits_c[0]:
+            c_to_ideal = min(limits_c[1], c_to_ideal + abs(c_from_ideal))
+            c_from_ideal = limits_c[0]
+        if c_to_ideal > limits_c[1]:
+            c_from_ideal = max(limits_c[0], c_from_ideal - (c_to_ideal - limits_c[1]))
+            c_to_ideal = limits_c[1]
         patch = patch[:, :, c_from_ideal:c_to_ideal]
     else:
         patch = patch[:, :, c_from:c_from+c_span]
@@ -124,7 +121,7 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
     )
 
 
-def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0) -> List[Tuple[NDArray, NDArray]]:
+def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0, train_quad: int = 1) -> List[Tuple[NDArray, NDArray]]:
     extracted_tunnels = []
 
     # Keep track of largest size
@@ -134,6 +131,14 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
     largest_col_range_id = 0,0
     largest_z_range = 0
     largest_z_range_id = 0,0
+
+    # Figure out which quad belongs to the training section
+    if train_quad == 1:
+        z_limits = (0, 7)
+        r_limits = (0, 256)
+        c_limits = (256, 512)
+    else:
+        raise NotImplementedError
 
 
     # Go through each time frame
@@ -165,8 +170,8 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
             z_span = zs[1]-zs[0]+1
             row_span = rows[1]-rows[0]+1
             col_span = cols[1]-cols[0]+1
-            extracted_gt_padded = add_padding(gt_timeslice, zs[0], z_span, rows[0], row_span, cols[0], col_span, minimum_patch_size)
-            extracted_img_padded = add_padding(img_timeslice, zs[0], z_span, rows[0], row_span, cols[0], col_span, minimum_patch_size)
+            extracted_gt_padded = add_padding(gt_timeslice, zs[0], z_span, rows[0], row_span, cols[0], col_span, minimum_patch_size, limits_z=z_limits, limits_c=c_limits, limits_r=r_limits)
+            extracted_img_padded = add_padding(img_timeslice, zs[0], z_span, rows[0], row_span, cols[0], col_span, minimum_patch_size, limits_z=z_limits, limits_c=c_limits, limits_r=r_limits)
 
             extracted_tunnels.append(
                 (extracted_gt_padded, extracted_img_padded)
