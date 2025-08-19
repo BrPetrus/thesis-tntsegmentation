@@ -121,7 +121,7 @@ def add_padding(img: NDArray, z_from, z_span, r_from, r_span, c_from, c_span, mi
     )
 
 
-def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0, train_quad: int = 1) -> List[Tuple[NDArray, NDArray]]:
+def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int], time_dim: int = 0, train_quad: int = 1, number_random_crops: Optional[int] = None) -> List[Tuple[NDArray, NDArray]]:
     extracted_tunnels = []
 
     # Keep track of largest size
@@ -166,6 +166,15 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
                 largest_z_range = cols[1]-cols[0]+1
                 largest_z_range_id = tunnel_id, t_idx
 
+            # Check how much of the tunnel falls into the training quadrant
+            overlap_mask = (gt_timeslice == tunnel_id)
+            overlap_mask = overlap_mask[z_limits[0]:z_limits[1], r_limits[0]:r_limits[1], c_limits[0]:c_limits[1]]
+            total_tunnel_size = np.sum(gt_timeslice == tunnel_id)
+            overlap_size = np.sum(overlap_mask)
+            if overlap_size / total_tunnel_size > 0.5:
+                print(f"Skipping tunnel with id={tunnel_id} since it is {overlap_size / total_tunnel_size * 100: .1}% inside the test part")
+                continue
+
             # Now figure out the correct padding
             z_span = zs[1]-zs[0]+1
             row_span = rows[1]-rows[0]+1
@@ -176,6 +185,16 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
             extracted_tunnels.append(
                 (extracted_gt_padded, extracted_img_padded)
             )
+        
+    if number_random_crops is not None:
+        random_crops = []
+        # Adding random crops which might not contain any tunnels or cells
+        # for random_crop in range(number_random_crops):
+        while len(random_crops) != number_random_crops:
+            top_left = np.random.randint()
+            
+
+
             
         
     print(f"Largest row range {largest_row_range} found for tunnel {largest_row_range_id[0]} at time slot {largest_row_range_id[1]}")
@@ -184,7 +203,7 @@ def process(gt: NDArray, imgs: NDArray, minimum_patch_size: Tuple[int, int, int]
     return extracted_tunnels
 
 
-def main(input_folder: str, output_folder: str, minimum_patch_size: List[int], overwrite_output_flag: bool = False) -> None:
+def main(input_folder: str, output_folder: str, minimum_patch_size: List[int], overwrite_output_flag: bool = False, number_of_random_crops: Optional[int] = None) -> None:
     if len(minimum_patch_size) != 3:
         raise ValueError(f"Invalid minimum patch size. Expected 3 dimensions!")
     print(f"Using minimum patch size: {minimum_patch_size}")
@@ -232,4 +251,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    main(args.input_folder, args.output_folder, args.min_size, args.output_overwrite)
+    main(args.input_folder, args.output_folder, args.min_size, args.output_overwrite, args.add_random_crops)
