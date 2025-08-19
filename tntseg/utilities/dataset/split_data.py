@@ -6,6 +6,8 @@ from typing import List, Tuple, Optional, Dict
 from numpy.typing import NDArray
 import logging
 
+from torch.distributions.constraints import positive_integer
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -232,7 +234,8 @@ def generate_random_crop(
     image: NDArray, 
     gt_image: NDArray, 
     min_size: Tuple[int, int, int],
-    non_training_limits: Dict[str, Tuple[int, int]]
+    non_training_limits: Dict[str, Tuple[int, int]],
+    invert_training_limits: bool = False
 ) -> Optional[Tuple[NDArray, NDArray]]:
     """
     Generate a completely random crop from the non-training region.
@@ -242,42 +245,53 @@ def generate_random_crop(
         gt_image: Ground truth image
         min_size: Minimum crop size (z, rows, cols)
         non_training_limits: Limits of the non-training region
+        invert_training_limits: Invert the meaning of training limits
         
     Returns:
-        Tuple of (gt_crop, img_crop) or None if crop is not possible
+        Tuple of (gt_crop, img_crop, crop_coords) where crop_coords is [(z_start,z_end), (r_start,r_end), (c_start,c_end)]
+        Returns None if crop is not possible
     """
-    z_lim, r_lim, c_lim = non_training_limits['z'], non_training_limits['r'], non_training_limits['c']
+    # assert non_training_limits['z'] == (0, 7) 
+    if non_training_limits['z'] != (0, 7):
+        raise ValueError("Limits on z dimenstion is not supported for creating random crops")
+    possible_crop_mask = np.ones(image.shape[1:], dtype=bool)  # This will represent a map of all possible places for the top right coordinate of the patch
+    possible_crop_mask[non_training_limits['r'][0]:non_training_limits['r'][1], non_training_limits['c'][0]:non_training_limits['c'][1]] = False
+    if invert_training_limits:
+        possible_crop_mask != possible_crop_mask
+        possible_crop_mask[non_training_limits['r'][0]:non_training_limits['r'][0]+min_size[1], non_training_limits['c'][0]:non_training_limits['c'][0]+min_size[2]] = False
+    else:
+        # possible_crop_mask[:min_size[1], :min_size[2]] = False
+        possible_crop_mask[:, :min_size[2]] = False
+        possible_crop_mask[-min_size[1]:, :] = False
+
+        slice_r = slice(max(0, non_training_limits['r'][0] - min_size[0]), non_training_limits['r'][0])
+        if slice_r.start != slice_r.stop:
+            slice_c = non_training_limits['c']
+            possible_crop_mask[slice_r, slice_c] = False
+
+        slice_r = non_training_limits['r']
+        slice_c = slice(non_training_limits['c'][1], min(non_training_limits['c'][1]+min_size[2], image.shape[2]))
+        if slice_c.start != slice_c.stop:
+            possible_crop_mask[slice_r, slice_c] = False
+
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.imshow(possible_crop_mask)
+    plt.savefig('possible_crops.png')
     
-    # Maximum starting position for the crop
-    max_z_start = z_lim[1] - min_size[0]
-    max_r_start = r_lim[1] - min_size[1]
-    max_c_start = c_lim[1] - min_size[2]
-    
-    if max_z_start < z_lim[0] or max_r_start < r_lim[0] or max_c_start < c_lim[0]:
-        logger.warning("Non-training region is too small for the minimum crop size")
-        return None
-    
-    # Generate truly random crop with no bias
-    z_start = np.random.randint(z_lim[0], max_z_start + 1)
-    r_start = np.random.randint(r_lim[0], max_r_start + 1)
-    c_start = np.random.randint(c_lim[0], max_c_start + 1)
-    
-    # Extract crop
-    gt_crop = gt_image[
-        z_start:z_start + min_size[0], 
-        r_start:r_start + min_size[1], 
-        c_start:c_start + min_size[2]
-    ]
-    img_crop = image[
-        z_start:z_start + min_size[0], 
-        r_start:r_start + min_size[1], 
-        c_start:c_start + min_size[2]
-    ]
-    
+    # Now pick the topright coordinate randomly
+    valid_indices = np.argwhere(possible_crop_mask == True)
+    top_right_corner = valid_indices[np.random.randint(valid_indices.shape[0])]
+    bottom_left_corner = top_right_corner[0] + min_size[1], top_right_corner[1] - min_size[2]
+
+    slice_r = slice(bottom_left_corner[0], top_right_corner[0])
+    slice_c = slice(bottom_left_corner[1], top_right_corner[1])
+    gt_crop = gt_image[0:7, slice_r, slice_c]
+    img_crop = image[0:7, slice_r, slice_c]
+
     # Log whether the crop has any tunnels (for information only)
     has_tunnels = np.any(gt_crop > 0)
     logger.debug(f"Generated random crop with tunnels: {has_tunnels}")
-    
     return gt_crop, img_crop
 
 def extract_patches(
@@ -368,52 +382,32 @@ def extract_patches(
     # Add random crops if requested
     if num_random_crops > 0:
         logger.info(f"Adding {num_random_crops} random crops")
-        
-        # Calculate the non-training limits to avoid the training quadrant
-        non_train_limits = {}
-        for axis in ['z', 'r', 'c']:
-            # For z-axis, we use the full range
-            if axis == 'z':
-                non_train_limits[axis] = train_limits[axis]
-            else:
-                # For r and c axes, use complementary quadrants to training area
-                if train_limits[axis][0] == 0:
-                    # If training starts at 0, use the upper half
-                    mid = gt.shape[1] if axis == 'r' else gt.shape[2]
-                    non_train_limits[axis] = (train_limits[axis][1], mid)
-                else:
-                    # If training ends at max, use the lower half
-                    non_train_limits[axis] = (0, train_limits[axis][0])
-        
-        # Generate random crops
+
         for r_idx in range(num_random_crops):
-            # Pick a random time slice
+            # Pick random time slot
             t_idx = np.random.randint(0, gt.shape[0])
-            
+
             # Generate a random crop
-            crop_result = generate_random_crop(
-                imgs[t_idx], gt[t_idx], min_size, non_train_limits
-            )
+            crop_result = generate_random_crop(imgs[t_idx], gt[t_idx], min_size, train_limits)
+            gt_crop, img_crop = crop_result
+            patch_id = f"r{r_idx}_t{t_idx}"  # Include time index in random crop ID
             
-            if crop_result is not None:
-                gt_crop, img_crop = crop_result
-                patch_id = f"r{r_idx}_t{t_idx}"  # Include time index in random crop ID
-                
-                # For random crops, the extraction coordinates are the actual crop coordinates
-                z_start = z_start
-                z_end = z_start + min_size[0]
-                r_start = r_start
-                r_end = r_start + min_size[1]
-                c_start = c_start
-                c_end = c_start + min_size[2]
-                
-                extraction_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
-                
-                # The bbox is the same as the extraction coords for random crops
-                random_bbox = extraction_coords
-                
-                logger.info(f"Random crop {patch_id} extraction coords: z={extraction_coords[0]}, r={extraction_coords[1]}, c={extraction_coords[2]}")
-                extracted_patches.append((gt_crop, img_crop, patch_id, random_bbox, extraction_coords))
+            # For random crops, the extraction coordinates are the actual crop coordinates
+            z_start = z_start
+            z_end = z_start + min_size[0]
+            r_start = r_start
+            r_end = r_start + min_size[1]
+            c_start = c_start
+            c_end = c_start + min_size[2]
+            
+            extraction_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+            
+            # The bbox is the same as the extraction coords for random crops
+            random_bbox = extraction_coords
+            
+            logger.info(f"Random crop {patch_id} extraction coords: z={extraction_coords[0]}, r={extraction_coords[1]}, c={extraction_coords[2]}")
+            extracted_patches.append((gt_crop, img_crop, patch_id, random_bbox, extraction_coords))
+    
     
     # Calculate average patch sizes
     if patch_stats['total'] > 0:
