@@ -43,7 +43,7 @@ def load_images(gt_path: Path, orig_path: Path) -> Tuple[NDArray, NDArray, List[
         gt_images.append(gt_img)
         
         # Find and load the corresponding original file
-        orig_file = orig_path / f"t{time_id}.tif"
+        orig_file = orig_path / f"t{time_id:03}.tif"
         if not orig_file.exists():
             logger.error(f"Missing original image for GT {gt_file.name} (expected {orig_file})")
             continue
@@ -91,16 +91,16 @@ def get_quadrant_limits(quadrant: int, image_shape: Tuple[int, int, int]) -> Dic
         z_limits = (0, z_depth)
         
         if quadrant == 1:  # Top right
-            r_limits = (half_rows, rows)
+            r_limits = (0, half_rows)
             c_limits = (half_cols, cols)
         elif quadrant == 2:  # Top left
-            r_limits = (half_rows, rows)
+            r_limits = (0, half_rows)
             c_limits = (0, half_cols)
         elif quadrant == 3:  # Bottom left
-            r_limits = (0, half_rows)
+            r_limits = (half_rows, rows)
             c_limits = (0, half_cols)
         elif quadrant == 4:  # Bottom right
-            r_limits = (0, half_rows)
+            r_limits = (half_rows, rows)
             c_limits = (half_cols, cols)
         else:
             raise ValueError(f"Invalid quadrant: {quadrant}. Must be 1, 2, 3, or 4.")
@@ -163,7 +163,7 @@ def extract_patch_with_padding(
     image: NDArray, 
     bbox: List[Tuple[int, int]], 
     min_size: Tuple[int, int, int]
-) -> NDArray:
+) -> Tuple[NDArray, List[Tuple[int, int]]]:
     """
     Extract a patch from an image using the bounding box and ensure it meets the minimum size.
     
@@ -173,7 +173,8 @@ def extract_patch_with_padding(
         min_size: Minimum size (z, rows, cols)
         
     Returns:
-        Extracted patch with padding if necessary
+        Tuple of (extracted_patch, extraction_coords)
+        Where extraction_coords is [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
     """
     # Extract the original bounds
     (z_min, z_max), (r_min, r_max), (c_min, c_max) = bbox
@@ -204,6 +205,9 @@ def extract_patch_with_padding(
     c_start = max(0, c_min - c_pad_before)
     c_end = min(image.shape[2], c_max + 1 + c_pad_after)
     
+    # Store the actual extraction coordinates
+    extraction_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+    
     # Extract the patch
     patch = image[z_start:z_end, r_start:r_end, c_start:c_end]
     
@@ -222,7 +226,7 @@ def extract_patch_with_padding(
         )
         patch = np.pad(patch, pad_width, mode='constant')
     
-    return patch
+    return patch, extraction_coords
 
 def generate_random_crop(
     image: NDArray, 
@@ -283,7 +287,7 @@ def extract_patches(
     train_quad: int,
     overlap_threshold: float = 0.5,
     num_random_crops: int = 0
-) -> List[Tuple[NDArray, NDArray]]:
+) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
     Extract patches containing tunnels from the non-training quadrant.
     
@@ -296,7 +300,7 @@ def extract_patches(
         num_random_crops: Number of random crops to add
         
     Returns:
-        List of (gt_patch, img_patch) tuples
+        List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples
     """
     extracted_patches = []
     patch_stats = {
@@ -340,8 +344,11 @@ def extract_patches(
                 continue
                 
             # Extract patches with padding to meet minimum size
-            gt_patch = extract_patch_with_padding(gt_slice, bbox, min_size)
-            img_patch = extract_patch_with_padding(img_slice, bbox, min_size)
+            gt_patch, gt_coords = extract_patch_with_padding(gt_slice, bbox, min_size)
+            img_patch, _ = extract_patch_with_padding(img_slice, bbox, min_size)
+            
+            # Create patch ID from time index and tunnel ID
+            patch_id = f"t{t_idx}_id{tunnel_id}"
             
             # Update statistics
             patch_stats['total'] += 1
@@ -352,7 +359,11 @@ def extract_patches(
             patch_stats['r_avg'] += gt_patch.shape[1]
             patch_stats['c_avg'] += gt_patch.shape[2]
             
-            extracted_patches.append((gt_patch, img_patch))
+            # Log the bounding box and extraction coordinates
+            logger.info(f"Tunnel {tunnel_id} bbox: z={bbox[0]}, r={bbox[1]}, c={bbox[2]}")
+            logger.info(f"Extraction coords: z={gt_coords[0]}, r={gt_coords[1]}, c={gt_coords[2]}")
+            
+            extracted_patches.append((gt_patch, img_patch, patch_id, bbox, gt_coords))
     
     # Add random crops if requested
     if num_random_crops > 0:
@@ -375,7 +386,7 @@ def extract_patches(
                     non_train_limits[axis] = (0, train_limits[axis][0])
         
         # Generate random crops
-        for _ in range(num_random_crops):
+        for r_idx in range(num_random_crops):
             # Pick a random time slice
             t_idx = np.random.randint(0, gt.shape[0])
             
@@ -386,7 +397,23 @@ def extract_patches(
             
             if crop_result is not None:
                 gt_crop, img_crop = crop_result
-                extracted_patches.append((gt_crop, img_crop))
+                patch_id = f"r{r_idx}_t{t_idx}"  # Include time index in random crop ID
+                
+                # For random crops, the extraction coordinates are the actual crop coordinates
+                z_start = z_start
+                z_end = z_start + min_size[0]
+                r_start = r_start
+                r_end = r_start + min_size[1]
+                c_start = c_start
+                c_end = c_start + min_size[2]
+                
+                extraction_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+                
+                # The bbox is the same as the extraction coords for random crops
+                random_bbox = extraction_coords
+                
+                logger.info(f"Random crop {patch_id} extraction coords: z={extraction_coords[0]}, r={extraction_coords[1]}, c={extraction_coords[2]}")
+                extracted_patches.append((gt_crop, img_crop, patch_id, random_bbox, extraction_coords))
     
     # Calculate average patch sizes
     if patch_stats['total'] > 0:
@@ -407,7 +434,7 @@ def extract_test_patches(
     train_quad: int,
     overlap_threshold: float = 0.5,
     num_random_crops: int = 0
-) -> List[Tuple[NDArray, NDArray]]:
+) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
     Extract test patches from the training quadrant.
     
@@ -420,7 +447,7 @@ def extract_test_patches(
         num_random_crops: Number of random crops to add
         
     Returns:
-        List of (gt_patch, img_patch) tuples from the test quadrant
+        List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples from the test quadrant
     """
     extracted_patches = []
     patch_stats = {
@@ -466,8 +493,11 @@ def extract_test_patches(
                 continue
                 
             # Extract patches with padding to meet minimum size
-            gt_patch = extract_patch_with_padding(gt_slice, bbox, min_size)
-            img_patch = extract_patch_with_padding(img_slice, bbox, min_size)
+            gt_patch, gt_coords = extract_patch_with_padding(gt_slice, bbox, min_size)
+            img_patch, _ = extract_patch_with_padding(img_slice, bbox, min_size)
+            
+            # Create patch ID from time index and tunnel ID
+            patch_id = f"t{t_idx}_id{tunnel_id}"
             
             # Update statistics
             patch_stats['total'] += 1
@@ -478,13 +508,17 @@ def extract_test_patches(
             patch_stats['r_avg'] += gt_patch.shape[1]
             patch_stats['c_avg'] += gt_patch.shape[2]
             
-            extracted_patches.append((gt_patch, img_patch))
+            # Log the bounding box and extraction coordinates
+            logger.info(f"Test tunnel {tunnel_id} bbox: z={bbox[0]}, r={bbox[1]}, c={bbox[2]}")
+            logger.info(f"Test extraction coords: z={gt_coords[0]}, r={gt_coords[1]}, c={gt_coords[2]}")
+            
+            extracted_patches.append((gt_patch, img_patch, patch_id, bbox, gt_coords))
     
     # Add random crops from the test quadrant if requested
     if num_random_crops > 0:
         logger.info(f"Adding {num_random_crops} random crops from test quadrant")
         
-        for _ in range(num_random_crops):
+        for r_idx in range(num_random_crops):
             # Pick a random time slice
             t_idx = np.random.randint(0, gt.shape[0])
             
@@ -495,7 +529,20 @@ def extract_test_patches(
             
             if crop_result is not None:
                 gt_crop, img_crop = crop_result
-                extracted_patches.append((gt_crop, img_crop))
+                patch_id = f"r{r_idx}_t{t_idx}"  # Include time index
+                
+                # For random crops, use the crop coordinates as both bbox and extraction coords
+                z_start = test_limits['z'][0]
+                z_end = z_start + min_size[0]
+                r_start = test_limits['r'][0]
+                r_end = r_start + min_size[1]
+                c_start = test_limits['c'][0]
+                c_end = c_start + min_size[2]
+                
+                random_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+                
+                logger.info(f"Random test crop {patch_id} coords: z={random_coords[0]}, r={random_coords[1]}, c={random_coords[2]}")
+                extracted_patches.append((gt_crop, img_crop, patch_id, random_coords, random_coords))
     
     # Calculate average patch sizes
     if patch_stats['total'] > 0:
@@ -588,19 +635,28 @@ def main(
     
     # Save training patches
     logger.info(f"Saving {len(train_patches)} training patches")
-    for i, (patch_gt, patch_img) in enumerate(train_patches):
-        tifffile.imwrite(train_path / "GT" / f"{i}.tif", patch_gt)
-        tifffile.imwrite(train_path / "IMG" / f"{i}.tif", patch_img)
+    for i, (patch_gt, patch_img, patch_id, bbox, extraction_coords) in enumerate(train_patches):
+        logger.info(f"Saving training patch {patch_id}")
+        logger.info(f"  Original bbox: z={bbox[0]}, r={bbox[1]}, c={bbox[2]}")
+        logger.info(f"  Extraction coords: z={extraction_coords[0]}, r={extraction_coords[1]}, c={extraction_coords[2]}")
+        
+        # Save the original patch ID which includes time and tunnel ID info
+        tifffile.imwrite(train_path / "GT" / f"{patch_id}.tif", patch_gt)
+        tifffile.imwrite(train_path / "IMG" / f"{patch_id}.tif", patch_img)
         binary_mask = (patch_gt > 0).astype(np.uint8) * 255
-        tifffile.imwrite(train_path / "GT_MERGED_LABELS" / f"{i}.tif", binary_mask)
-    
+        tifffile.imwrite(train_path / "GT_MERGED_LABELS" / f"{patch_id}.tif", binary_mask)
+
     # Save testing patches
     logger.info(f"Saving {len(test_patches)} testing patches")
-    for i, (patch_gt, patch_img) in enumerate(test_patches):
-        tifffile.imwrite(test_path / "GT" / f"{i}.tif", patch_gt)
-        tifffile.imwrite(test_path / "IMG" / f"{i}.tif", patch_img)
+    for i, (patch_gt, patch_img, patch_id, bbox, extraction_coords) in enumerate(test_patches):
+        logger.info(f"Saving testing patch {patch_id}")
+        logger.info(f"  Original bbox: z={bbox[0]}, r={bbox[1]}, c={bbox[2]}")
+        logger.info(f"  Extraction coords: z={extraction_coords[0]}, r={extraction_coords[1]}, c={extraction_coords[2]}")
+        
+        tifffile.imwrite(test_path / "GT" / f"{patch_id}.tif", patch_gt)
+        tifffile.imwrite(test_path / "IMG" / f"{patch_id}.tif", patch_img)
         binary_mask = (patch_gt > 0).astype(np.uint8) * 255
-        tifffile.imwrite(test_path / "GT_MERGED_LABELS" / f"{i}.tif", binary_mask)
+        tifffile.imwrite(test_path / "GT_MERGED_LABELS" / f"{patch_id}.tif", binary_mask)
     
     logger.info("Done!")
 
