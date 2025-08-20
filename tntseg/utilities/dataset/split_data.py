@@ -323,17 +323,11 @@ def generate_random_crop(
         if slice_c.start != slice_c.stop:
             possible_crop_mask[slice_r, slice_c] = False
 
-    import matplotlib.pyplot as plt
-    plt.figure()
-    plt.imshow(possible_crop_mask)
-    plt.savefig('possible_crops.png')
-    
     # Now pick the topright coordinate randomly
     valid_indices = np.argwhere(possible_crop_mask == True)
     top_right_corner = valid_indices[np.random.randint(valid_indices.shape[0])]
     bottom_left_corner = top_right_corner[0] + min_size[1], top_right_corner[1] - min_size[2]
 
-    slice_r = slice(bottom_left_corner[0], top_right_corner[0])
     slice_r = slice(top_right_corner[0], bottom_left_corner[0])
     slice_c = slice(bottom_left_corner[1], top_right_corner[1])
     gt_crop = gt_image[0:7, slice_r, slice_c]
@@ -442,14 +436,7 @@ def extract_patches(
             gt_crop, img_crop, bbox = crop_result
             patch_id = f"r{r_idx}_t{t_idx}"  # Include time index in random crop ID
             
-            # # For random crops, the extraction coordinates are the actual crop coordinates
-            # z_start = z_start
-            # z_end = z_start + min_size[0]
-            # r_start = r_start
-            # r_end = r_start + min_size[1]
-            # c_start = c_start
-            # c_end = c_start + min_size[2]
-            
+            # For random crops, the extraction coordinates are the actual crop coordinates
             extraction_coords = [bbox['z'], bbox['r'], bbox['c']]
             
             # The bbox is the same as the extraction coords for random crops
@@ -725,8 +712,6 @@ def main(
                 
                 # Extract tunnel ID from patch_id
                 tunnel_id = int(patch_id.split('_id')[1])
-                # # Mark this tunnel ID specially in GT visualization (add a large offset)
-                # vis_gt[vis_gt == tunnel_id] = tunnel_id + 1000
                 vis_gt[gt[t_idx] == tunnel_id] = 256
 
         
