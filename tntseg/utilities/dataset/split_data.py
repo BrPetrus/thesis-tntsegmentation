@@ -213,20 +213,70 @@ def extract_patch_with_padding(
     # Extract the patch
     patch = image[z_start:z_end, r_start:r_end, c_start:c_end]
     
-    # If the patch is still smaller than the minimum size, add zero padding
+    # If the patch is still smaller than the minimum size, try expanding in both directions
     if patch.shape[0] < min_size[0] or patch.shape[1] < min_size[1] or patch.shape[2] < min_size[2]:
-        # Calculate remaining padding needed
-        z_pad_remaining = max(0, min_size[0] - patch.shape[0])
-        r_pad_remaining = max(0, min_size[1] - patch.shape[1])
-        c_pad_remaining = max(0, min_size[2] - patch.shape[2])
+        # Calculate remaining size differences
+        z_remaining = max(0, min_size[0] - patch.shape[0])
+        r_remaining = max(0, min_size[1] - patch.shape[1]) 
+        c_remaining = max(0, min_size[2] - patch.shape[2])
         
-        # Add padding
-        pad_width = (
-            (z_pad_remaining // 2, z_pad_remaining - z_pad_remaining // 2),
-            (r_pad_remaining // 2, r_pad_remaining - r_pad_remaining // 2),
-            (c_pad_remaining // 2, c_pad_remaining - c_pad_remaining // 2)
-        )
-        patch = np.pad(patch, pad_width, mode='constant')
+        # Try expanding extraction coordinates first
+        if z_remaining > 0:
+            # Try expanding half to left and half to right
+            z_left = min(z_remaining//2, z_start)  # How much we can expand left
+            z_right = min(z_remaining - z_left, image.shape[0] - z_end)  # Remaining expansion to right
+            # If we couldn't expand fully to left, try expanding more to right
+            if z_left < z_remaining//2:
+                z_right = min(z_remaining - z_left, image.shape[0] - z_end)
+            # If we still can't expand enough to right, expand more to left
+            if z_right < (z_remaining - z_left):
+                z_left = min(z_remaining - z_right, z_start)
+            new_z_start = z_start - z_left
+            new_z_end = z_end + z_right
+            patch = image[new_z_start:new_z_end, r_start:r_end, c_start:c_end]
+            extraction_coords[0] = (new_z_start, new_z_end)
+            
+        if r_remaining > 0:
+            # Similar logic for rows
+            r_left = min(r_remaining//2, r_start)
+            r_right = min(r_remaining - r_left, image.shape[1] - r_end)
+            if r_left < r_remaining//2:
+                r_right = min(r_remaining - r_left, image.shape[1] - r_end)
+            if r_right < (r_remaining - r_left):
+                r_left = min(r_remaining - r_right, r_start)
+            new_r_start = r_start - r_left
+            new_r_end = r_end + r_right
+            patch = image[extraction_coords[0][0]:extraction_coords[0][1], 
+                 new_r_start:new_r_end, c_start:c_end]
+            extraction_coords[1] = (new_r_start, new_r_end)
+            
+        if c_remaining > 0:
+            # Similar logic for columns
+            c_left = min(c_remaining//2, c_start)
+            c_right = min(c_remaining - c_left, image.shape[2] - c_end)
+            if c_left < c_remaining//2:
+                c_right = min(c_remaining - c_left, image.shape[2] - c_end)
+            if c_right < (c_remaining - c_left):
+                c_left = min(c_remaining - c_right, c_start)
+            new_c_start = c_start - c_left
+            new_c_end = c_end + c_right
+            patch = image[extraction_coords[0][0]:extraction_coords[0][1],
+                 extraction_coords[1][0]:extraction_coords[1][1],
+                 new_c_start:new_c_end]
+            extraction_coords[2] = (new_c_start, new_c_end)
+
+        # If still too small, pad with mirror values
+        if patch.shape[0] < min_size[0] or patch.shape[1] < min_size[1] or patch.shape[2] < min_size[2]:
+            z_pad = max(0, min_size[0] - patch.shape[0])
+            r_pad = max(0, min_size[1] - patch.shape[1])
+            c_pad = max(0, min_size[2] - patch.shape[2])
+            
+            pad_width = (
+                (z_pad//2, z_pad - z_pad//2),
+                (r_pad//2, r_pad - r_pad//2),
+                (c_pad//2, c_pad - c_pad//2)
+            )
+            patch = np.pad(patch, pad_width, mode='reflect')
     
     return patch, extraction_coords
 
