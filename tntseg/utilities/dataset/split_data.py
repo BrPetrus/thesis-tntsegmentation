@@ -7,10 +7,15 @@ from numpy.typing import NDArray
 import logging
 
 from torch.distributions.constraints import positive_integer
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Configure output logging to file
+fh = logging.FileHandler('dataset_split.log')
+fh.setLevel(logging.INFO)
+fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(fh)
 
 def load_images(gt_path: Path, orig_path: Path) -> Tuple[NDArray, NDArray, List[int]]:
     """

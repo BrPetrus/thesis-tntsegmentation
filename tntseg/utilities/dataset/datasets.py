@@ -79,7 +79,7 @@ class TNTDataset(Dataset):
                     raise RuntimeError(f"Size mismatch {img.shape} != {mask.shape}: {row['img_path']} and {row['mask_path']}")
 
                 # Convert to boolean array
-                if mask.dtype == np.uint8 and not set(np.unique(mask)).issubset(set(0,255)):
+                if mask.dtype == np.uint8 and not set(np.unique(mask)).issubset(set([0,255])):
                     raise RuntimeError(f"Expected just 0 and 255 in file at {row['mask_path']}, got {np.unique(mask)}")
                 elif mask.dtype == np.uint8:
                     mask //= 255

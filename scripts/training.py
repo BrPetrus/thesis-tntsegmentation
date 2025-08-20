@@ -100,15 +100,24 @@ class CombinedLoss(nn.Module):
         return total_loss
 
 
-def main(input_folder: Path, mask_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config) -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config) -> None:
     # Load metadata
-    df = load_dataset_metadata(input_folder, mask_folder)
+    input_folder_train = input_folder / "train"
+    if not input_folder_train.exists():
+        raise RuntimeError(f"Missing train subfolder at '{input_folder_train}'")
+    input_folder_test = input_folder / "test"
+    if not input_folder_test.exists():
+        raise RuntimeError(f"Missing testing subfolder at '{input_folder_test}'")
+    
+    df_train = load_dataset_metadata(input_folder_train / "IMG", input_folder_train / "GT_MERGED_LABELS") 
+    test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
 
     # Train/Test Split
-    train_x, test_x = train_test_split(df, test_size=1/3., random_state=seed)
-    train_x, valid_x = train_test_split(train_x, test_size=1/5, random_state=seed)
+    train_x, valid_x = train_test_split(df_train, test_size=1/3, random_state=seed)
 
     logger.info(f"Train {len(train_x)} Test {len(test_x)} Validation {len(valid_x)}")
+    total = len(train_x) + len(test_x) + len(valid_x)
+    logger.info(f"Train {len(train_x) / total * 100}% Test {len(test_x)/total*100}% Validation {len(valid_x)/total*100}%")
 
     # Define transforms
     transforms_train = A.Compose([
@@ -392,8 +401,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script for neural network.")
     parser.add_argument("--input_folder", type=str, required=True, 
                         help="Path to the input folder containing images.")
-    parser.add_argument("--mask_folder", type=str, required=True,
-                        help="Path to the folder containing masks.")
     parser.add_argument("--output_folder", type=str, required=True, 
                         help="Path to the output folder where checkpoint and other files will be stored.")
     parser.add_argument("--log_folder", type=str, required=True,
@@ -423,11 +430,8 @@ if __name__ == "__main__":
     output_folder = Path(args.output_folder)
     input_folder = Path(args.input_folder)
     log_folder = Path(args.log_folder)
-    mask_folder = Path(args.mask_folder)
     if not input_folder.exists():
         raise RuntimeError(f"Specified input folder '{input_folder}' does not exist!")
-    if not mask_folder.exists():
-        raise RuntimeError("Specified mask folder does not exist!")
     output_folder.mkdir(parents=True, exist_ok=True)
     log_folder.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(__name__)
@@ -451,7 +455,7 @@ if __name__ == "__main__":
     )
 
     # Run training
-    main(input_folder, mask_folder, output_folder, logger, args.random_state, config)
+    main(input_folder, output_folder, logger, args.random_state, config)
     
     
     
