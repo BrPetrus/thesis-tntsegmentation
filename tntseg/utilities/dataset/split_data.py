@@ -644,6 +644,75 @@ def main(
         binary_mask = (patch_gt > 0).astype(np.uint8) * 255
         tifffile.imwrite(test_path / "GT_MERGED_LABELS" / f"{patch_id}.tif", binary_mask)
     
+    # Create visualization of train/test split
+    logger.info("Creating visualization of train/test split")
+    
+    # Create a visualization for each time point
+    for t_idx in range(gt.shape[0]):
+        # Create RGB image (3 channels)
+        vis_img = np.zeros((*gt[t_idx].shape, 3), dtype=np.uint8)
+        
+        # Create copy of GT for visualization
+        vis_gt = gt[t_idx].copy()
+        
+        # Color training patches in blue, testing patches in red
+        for patch_gt, _, patch_id, _, coords in train_patches:
+            if patch_id.startswith(f't{t_idx}_'):  # Match time index
+                z_coords, r_coords, c_coords = coords
+                # Visualization
+                vis_img[z_coords[0]:z_coords[1], r_coords[0]:r_coords[1], c_coords[0]:c_coords[1], 2] = 128
+                
+                # Extract tunnel ID from patch_id (format: t<time>_id<tunnel_id>)
+                tunnel_id = int(patch_id.split('_id')[1])
+                # Remove this tunnel ID from the GT visualization
+                vis_gt[gt[t_idx] == tunnel_id] = 128
+        
+        for _, _, patch_id, _, coords in test_patches:
+            if patch_id.startswith(f't{t_idx}_'):  # Match time index
+                z_coords, r_coords, c_coords = coords
+                # Visualization
+                vis_img[z_coords[0]:z_coords[1], r_coords[0]:r_coords[1], c_coords[0]:c_coords[1], 0] = 128
+                
+                # Extract tunnel ID from patch_id
+                tunnel_id = int(patch_id.split('_id')[1])
+                # # Mark this tunnel ID specially in GT visualization (add a large offset)
+                # vis_gt[vis_gt == tunnel_id] = tunnel_id + 1000
+                vis_gt[gt[t_idx] == tunnel_id] = 256
+
+        
+        # Save visualization for each z-slice
+        vis_path = output_folder_path / "visualizations"
+        os.makedirs(vis_path, exist_ok=True)
+        for z in range(vis_img.shape[0]):
+            tifffile.imwrite(vis_path / f"split_vis_t{t_idx}_z{z}.tif", vis_img[z])
+            # Also save the modified GT showing which objects went where
+            tifffile.imwrite(vis_path / f"split_gt_t{t_idx}_z{z}.tif", vis_gt[z])
+
+    # Create separate visualization for random crops
+    logger.info("Creating visualization of random crops")
+    rand_vis_path = output_folder_path / "random_crops_vis"
+    os.makedirs(rand_vis_path, exist_ok=True)
+    
+    for t_idx in range(gt.shape[0]):
+        # Create RGB image for random crops
+        rand_vis_img = np.zeros((*gt[t_idx].shape, 3), dtype=np.uint8)
+        
+        # Mark training random crops in green
+        for _, _, patch_id, _, coords in train_patches:
+            if patch_id.startswith(f'r') and f't{t_idx}' in patch_id:
+                z_coords, r_coords, c_coords = coords
+                rand_vis_img[z_coords[0]:z_coords[1], r_coords[0]:r_coords[1], c_coords[0]:c_coords[1], 1] = 128
+        
+        # Mark testing random crops in yellow
+        for _, _, patch_id, _, coords in test_patches:
+            if patch_id.startswith(f'r') and f't{t_idx}' in patch_id:
+                z_coords, r_coords, c_coords = coords
+                rand_vis_img[z_coords[0]:z_coords[1], r_coords[0]:r_coords[1], c_coords[0]:c_coords[1], 1:] = 128
+        
+        # Save visualization for each z-slice
+        for z in range(rand_vis_img.shape[0]):
+            tifffile.imwrite(rand_vis_path / f"random_crops_vis_t{t_idx}_z{z}.tif", rand_vis_img[z])
+
     logger.info("Done!")
 
 if __name__ == "__main__":
