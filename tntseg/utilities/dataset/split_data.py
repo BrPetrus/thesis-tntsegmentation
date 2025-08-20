@@ -236,7 +236,7 @@ def generate_random_crop(
     min_size: Tuple[int, int, int],
     non_training_limits: Dict[str, Tuple[int, int]],
     invert_training_limits: bool = False
-) -> Optional[Tuple[NDArray, NDArray]]:
+) -> Optional[Tuple[NDArray, NDArray, Dict[str, Tuple[int, int]]]]:
     """
     Generate a completely random crop from the non-training region.
     
@@ -248,23 +248,22 @@ def generate_random_crop(
         invert_training_limits: Invert the meaning of training limits
         
     Returns:
-        Tuple of (gt_crop, img_crop, crop_coords) where crop_coords is [(z_start,z_end), (r_start,r_end), (c_start,c_end)]
+        Tuple of (gt_crop, img_crop, crop_coords) where crop_coords is a dict object holding the bbox coordinates
         Returns None if crop is not possible
     """
-    # assert non_training_limits['z'] == (0, 7) 
     if non_training_limits['z'] != (0, 7):
         raise ValueError("Limits on z dimenstion is not supported for creating random crops")
     possible_crop_mask = np.ones(image.shape[1:], dtype=bool)  # This will represent a map of all possible places for the top right coordinate of the patch
     possible_crop_mask[non_training_limits['r'][0]:non_training_limits['r'][1], non_training_limits['c'][0]:non_training_limits['c'][1]] = False
     if invert_training_limits:
-        possible_crop_mask != possible_crop_mask
-        possible_crop_mask[non_training_limits['r'][0]:non_training_limits['r'][0]+min_size[1], non_training_limits['c'][0]:non_training_limits['c'][0]+min_size[2]] = False
+        possible_crop_mask = ~possible_crop_mask
+        possible_crop_mask[non_training_limits['r'][0]:non_training_limits['r'][1], non_training_limits['c'][0]:non_training_limits['c'][0]+min_size[2]] = False
+        possible_crop_mask[non_training_limits['r'][1]-min_size[1]:non_training_limits['r'][1], non_training_limits['c'][0]:non_training_limits['c'][1]] = False
     else:
-        # possible_crop_mask[:min_size[1], :min_size[2]] = False
         possible_crop_mask[:, :min_size[2]] = False
         possible_crop_mask[-min_size[1]:, :] = False
 
-        slice_r = slice(max(0, non_training_limits['r'][0] - min_size[0]), non_training_limits['r'][0])
+        slice_r = slice(max(0, non_training_limits['r'][0] - min_size[1]), non_training_limits['r'][0])
         if slice_r.start != slice_r.stop:
             slice_c = non_training_limits['c']
             possible_crop_mask[slice_r, slice_c] = False
@@ -285,6 +284,7 @@ def generate_random_crop(
     bottom_left_corner = top_right_corner[0] + min_size[1], top_right_corner[1] - min_size[2]
 
     slice_r = slice(bottom_left_corner[0], top_right_corner[0])
+    slice_r = slice(top_right_corner[0], bottom_left_corner[0])
     slice_c = slice(bottom_left_corner[1], top_right_corner[1])
     gt_crop = gt_image[0:7, slice_r, slice_c]
     img_crop = image[0:7, slice_r, slice_c]
@@ -292,7 +292,7 @@ def generate_random_crop(
     # Log whether the crop has any tunnels (for information only)
     has_tunnels = np.any(gt_crop > 0)
     logger.debug(f"Generated random crop with tunnels: {has_tunnels}")
-    return gt_crop, img_crop
+    return gt_crop, img_crop, {'z': (0,7), 'r': (slice_r.start, slice_r.stop), 'c': (slice_c.start, slice_c.stop)}
 
 def extract_patches(
     gt: NDArray, 
@@ -389,18 +389,18 @@ def extract_patches(
 
             # Generate a random crop
             crop_result = generate_random_crop(imgs[t_idx], gt[t_idx], min_size, train_limits)
-            gt_crop, img_crop = crop_result
+            gt_crop, img_crop, bbox = crop_result
             patch_id = f"r{r_idx}_t{t_idx}"  # Include time index in random crop ID
             
-            # For random crops, the extraction coordinates are the actual crop coordinates
-            z_start = z_start
-            z_end = z_start + min_size[0]
-            r_start = r_start
-            r_end = r_start + min_size[1]
-            c_start = c_start
-            c_end = c_start + min_size[2]
+            # # For random crops, the extraction coordinates are the actual crop coordinates
+            # z_start = z_start
+            # z_end = z_start + min_size[0]
+            # r_start = r_start
+            # r_end = r_start + min_size[1]
+            # c_start = c_start
+            # c_end = c_start + min_size[2]
             
-            extraction_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+            extraction_coords = [bbox['z'], bbox['r'], bbox['c']]
             
             # The bbox is the same as the extraction coords for random crops
             random_bbox = extraction_coords
@@ -518,22 +518,14 @@ def extract_test_patches(
             
             # Generate a random crop from the test quadrant
             crop_result = generate_random_crop(
-                imgs[t_idx], gt[t_idx], min_size, test_limits
+                imgs[t_idx], gt[t_idx], min_size, test_limits, invert_training_limits=True
             )
             
             if crop_result is not None:
-                gt_crop, img_crop = crop_result
+                gt_crop, img_crop, bbox = crop_result
                 patch_id = f"r{r_idx}_t{t_idx}"  # Include time index
                 
-                # For random crops, use the crop coordinates as both bbox and extraction coords
-                z_start = test_limits['z'][0]
-                z_end = z_start + min_size[0]
-                r_start = test_limits['r'][0]
-                r_end = r_start + min_size[1]
-                c_start = test_limits['c'][0]
-                c_end = c_start + min_size[2]
-                
-                random_coords = [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+                random_coords = [bbox['z'], bbox['r'], bbox['c']]
                 
                 logger.info(f"Random test crop {patch_id} coords: z={random_coords[0]}, r={random_coords[1]}, c={random_coords[2]}")
                 extracted_patches.append((gt_crop, img_crop, patch_id, random_coords, random_coords))
