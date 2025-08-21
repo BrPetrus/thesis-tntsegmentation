@@ -16,8 +16,8 @@ MLFLOW_SERVER_PORT=8000
 LR=0.001
 
 nice -n 19 python training.py \
-    --input_folder "${INPUT_FOLDER}" \
-    --output_folder "${OUTPUT_FOLDER}" \
+    "${INPUT_FOLDER}" \
+    "${OUTPUT_FOLDER}" \
     --epochs ${EPOCHS} \
     --num_workers ${WORKERS} \
     --batch_size ${BATCH} \
