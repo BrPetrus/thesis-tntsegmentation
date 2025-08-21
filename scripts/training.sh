@@ -13,7 +13,7 @@ INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
 OUTPUT_FOLDER="./output-training"
 EPOCHS=500
 WORKERS=4
-BATCH=64
+BATCH=8
 MLFLOW_SERVER_PORT=8000
 LR=0.001
 
