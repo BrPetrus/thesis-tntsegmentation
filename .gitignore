@@ -9,6 +9,7 @@ uv.lock
 .mypy_cache
 *.log
 output/
+output*
 checkpoints
 
 # MLFlow
