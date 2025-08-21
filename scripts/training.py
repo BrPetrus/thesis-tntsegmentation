@@ -99,8 +99,7 @@ class CombinedLoss(nn.Module):
             logger.debug(f"{type(loss_fun)} - {loss}")
         return total_loss
 
-
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config) -> None:
+def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
     # Load metadata
     input_folder_train = input_folder / "train"
     if not input_folder_train.exists():
@@ -113,7 +112,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
 
     # Train/Test Split
-    train_x, valid_x = train_test_split(df_train, test_size=1/3, random_state=seed)
+    train_x, valid_x = train_test_split(df_train, test_size=validation_ratio, random_state=seed)
 
     logger.info(f"Train {len(train_x)} Test {len(test_x)} Validation {len(valid_x)}")
     total = len(train_x) + len(test_x) + len(valid_x)
@@ -169,11 +168,150 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         shuffle=config.shuffle,
         num_workers=config.num_workers,
     )
+    return train_dataloader, test_dataloader, valid_dataloader
+
+def _train_epoch() -> None:
+    pass
+def _eval_epoch() -> None:
+    pass
+def _calculate_metrics(nn: torch.Module, dataloader: DataLoader, criterion: torch.Module, epoch: int, prefix:str = "val") -> Tuple[int, int, int, int, float]:
+    # Run evaluation on validation set
+    with torch.no_grad():
+        nn.eval()
+        loss = 0.0
+        total = 0
+        TP = 0
+        FP = 0
+        FN = 0
+        TN = 0
+        for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"Validation")):
+            inputs, masks = batch
+            inputs, masks = inputs.to(config.device), masks.to(config.device)
+
+            outputs = nn(inputs)
+            batch_loss = criterion(outputs, masks)
+            loss += batch_loss
+
+            # Evaluate metrics
+            total += np.prod(inputs.shape)
+            thresholded = torch.sigmoid(outputs) > 0.5
+            TP += ((thresholded == True) & (masks == True)).float().sum()
+            TN += ((thresholded == False) & (masks == False)).float().sum()
+            FP += ((thresholded == True) & (masks == False)).float().sum()
+            FN += ((thresholded == False) & (masks == True)).float().sum()
+            assert total == sum([TP, TN, FP, FN])
+
+            # Save first batch
+            if batch_idx == 0:
+                predictions = torch.sigmoid(outputs).cpu().detach().numpy()
+                inputs_np = inputs.cpu().detach().numpy()
+                masks_np = masks.cpu().detach().numpy()
+                
+                for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
+                    prediction_path = output_folder / f"epoch_{prefix}_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+                    input_path = output_folder / f"epoch_{prefix}_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+                    mask_path = output_folder / f"epoch_{prefix}_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+                    # Save prediction
+                    tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
+                    logger.debug(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                    
+                    # Save input image
+                    tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+                    logger.debug(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
+                    
+                    # Save mask
+                    tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+                    logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
+    return TP, TN, FP, FN, loss
+
+
+def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch):
+    for batch_idx, batch in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.epochs}")):
+        inputs, masks = batch
+        inputs, masks = inputs.to(config.device), masks.to(config.device)
+
+        optimizer.zero_grad()
+        outputs = nn(inputs)
+        loss = criterion(outputs, masks)
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+
+        # Save predictions, inputs, and masks for the first batch of each epoch
+        if batch_idx == 0:
+            predictions = torch.sigmoid(outputs).cpu().detach().numpy()
+            inputs_np = inputs.cpu().detach().numpy()
+            masks_np = masks.cpu().detach().numpy()
+                
+            for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
+                prediction_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+                input_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+                mask_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+                    # Save prediction
+                tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
+                logger.debug(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+                    
+                    # Save input image
+                tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+                logger.debug(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
+                    
+                    # Save mask
+                tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+                logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
+    return epoch_loss
+
+def _train(nn: torch.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, test_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config) -> None:
+    # Last time that the eval loss improved
+    epochs_since_last_improvement = 0
+    last_better_eval_loss = np.inf
+
+    for epoch in range(config.epochs):
+        nn.train()
+        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch)
+            
+        TP, FP, FN, TN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val')
+        # Calculate metrics
+        accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
+        precision = tntmetrics.precision(TP, FP)
+        recall = tntmetrics.recall(TP, FN)
+        jaccard = tntmetrics.jaccard_index(TP, FP, FN)
+        dice = tntmetrics.dice_coefficient(TP, FP, FN)
+        tversky = tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta)
+        focal_tversky = tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
+
+        mlflow.log_metrics({
+            "train/loss": epoch_loss,
+            "val/loss": val_loss,
+            "val/accuracy": accuracy,
+            "val/precision": precision, 
+            "val/recall": recall,
+            "val/jaccard": jaccard,
+            "val/dice": dice,
+            "val/tversky": tversky,
+            "val/focaltversky": focal_tversky
+        }, step=epoch)
+
+        logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
+        logger.info(f"Epoch {epoch+1}/{config.epochs}, Val/Acc: {accuracy}, Val/Prec: {precision}, Val/Recall: {recall}")
+
+
+        if last_better_eval_loss > val_loss:
+            last_better_eval_loss = val_loss
+            epochs_since_last_improvement = 0
+        else:
+            epochs_since_last_improvement += 1
+        
+        if epochs_since_last_improvement >= config.notimprovement_tolerance:
+            logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
+            break
+
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None) -> None:
+    # Prepare dataloaders
+    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, seed) 
 
     # Create net
     nn = UNet3d(1, 1).to(config.device)
-
-    # Training loop
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
     criterion = create_loss_criterion(config)
 
@@ -181,129 +319,8 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     with mlflow.start_run():
         mlflow.log_params(config.__dict__)
 
-        # Last time that the eval loss improved
-        epochs_since_last_improvement = 0
-        last_better_eval_loss = np.inf
-
-        for epoch in range(config.epochs):
-            nn.train()
-            epoch_loss = 0.0
-            for batch_idx, batch in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.epochs}")):
-                inputs, masks = batch
-                inputs, masks = inputs.to(config.device), masks.to(config.device)
-
-                optimizer.zero_grad()
-                outputs = nn(inputs)
-                loss = criterion(outputs, masks)
-                loss.backward()
-                optimizer.step()
-
-                epoch_loss += loss.item()
-
-                # Save predictions, inputs, and masks for the first batch of each epoch
-                if batch_idx == 0:
-                    predictions = torch.sigmoid(outputs).cpu().detach().numpy()
-                    inputs_np = inputs.cpu().detach().numpy()
-                    masks_np = masks.cpu().detach().numpy()
-                    
-                    for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
-                        prediction_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
-                        input_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
-                        mask_path = output_folder / f"epoch_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
-                        # Save prediction
-                        tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
-                        logger.debug(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
-                        
-                        # Save input image
-                        tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
-                        logger.debug(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
-                        
-                        # Save mask
-                        tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
-                        logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
-                
-            # Run evaluation on validation set
-            with torch.no_grad():
-                nn.eval()
-                val_loss = 0.0
-                total = 0
-                TP = 0
-                FP = 0
-                FN = 0
-                TN = 0
-                for batch_idx, batch in enumerate(tqdm(valid_dataloader, desc=f"Validation")):
-                    inputs, masks = batch
-                    inputs, masks = inputs.to(config.device), masks.to(config.device)
-
-                    outputs = nn(inputs)
-                    loss = criterion(outputs, masks)
-                    val_loss += loss
-
-                    # Evaluate metrics
-                    total += np.prod(inputs.shape)
-                    thresholded = torch.sigmoid(outputs) > 0.5
-                    TP += ((thresholded == True) & (masks == True)).float().sum()
-                    TN += ((thresholded == False) & (masks == False)).float().sum()
-                    FP += ((thresholded == True) & (masks == False)).float().sum()
-                    FN += ((thresholded == False) & (masks == True)).float().sum()
-                    assert total == sum([TP, TN, FP, FN])
-
-                    # Save first batch
-                    if batch_idx == 0:
-                        predictions = torch.sigmoid(outputs).cpu().detach().numpy()
-                        inputs_np = inputs.cpu().detach().numpy()
-                        masks_np = masks.cpu().detach().numpy()
-                        
-                        for i, (prediction, input_img, mask) in enumerate(zip(predictions, inputs_np, masks_np)):
-                            prediction_path = output_folder / f"epoch_val_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
-                            input_path = output_folder / f"epoch_val_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
-                            mask_path = output_folder / f"epoch_val_{epoch+1}_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
-                            # Save prediction
-                            tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
-                            logger.debug(f"Saved prediction for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {prediction_path}")
-                            
-                            # Save input image
-                            tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
-                            logger.debug(f"Saved input image for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {input_path}")
-                            
-                            # Save mask
-                            tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
-                            logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
-
-            # Calculate metrics
-            accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
-            precision = tntmetrics.precision(TP, FP)
-            recall = tntmetrics.recall(TP, FN)
-            jaccard = tntmetrics.jaccard_index(TP, FP, FN)
-            dice = tntmetrics.dice_coefficient(TP, FP, FN)
-            tversky = tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta)
-            focal_tversky = tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
-
-            mlflow.log_metrics({
-                "train/loss": epoch_loss,
-                "val/loss": val_loss,
-                "val/accuracy": accuracy,
-                "val/precision": precision, 
-                "val/recall": recall,
-                "val/jaccard": jaccard,
-                "val/dice": dice,
-                "val/tversky": tversky,
-                "val/focaltversky": focal_tversky
-            }, step=epoch)
-
-            logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
-            logger.info(f"Epoch {epoch+1}/{config.epochs}, Val/Acc: {accuracy}, Val/Prec: {precision}, Val/Recall: {recall}")
-
-
-            if last_better_eval_loss > val_loss:
-                last_better_eval_loss = val_loss
-                epochs_since_last_improvement = 0
-            else:
-                epochs_since_last_improvement += 1
-            
-            if epochs_since_last_improvement >= config.notimprovement_tolerance:
-                logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
-                break
+        # Run training
+        _train(nn, optimizer, criterion, train_dataloader, test_dataloader, valid_dataloader, config)
 
         # Test set
         nn.eval()
@@ -371,9 +388,6 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         precision = tntmetrics.precision(TP, FP)
         recall = tntmetrics.recall(TP, FN)
 
-        # Now tile the train quad and run tiling inference on it
-        
-
         mlflow.log_metrics({
             "test/jaccard": jaccard,
             "test/dice": dice, 
@@ -387,6 +401,8 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
             "test/recall_skmetric": sk_recall,
             "test/precision_skmetric": sk_precision,
         }, step=epoch)
+
+        # Now tile the train quad and run tiling inference on it
 
         # After training, you might log the final model
         mlflow.pytorch.log_model(nn, "model")
@@ -458,6 +474,6 @@ if __name__ == "__main__":
 
     # Run training
     main(input_folder, output_folder, logger, args.random_state, config)
-    
-    
-    
+
+
+
