@@ -44,7 +44,7 @@ class Config:
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.5
-    ce_use_weights: bool = False
+    ce_use_weights: bool = True
     ce_pos_weight: float  = (3602171+67845) / 67845  # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
@@ -290,21 +290,26 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
             "val/tversky": tversky,
             "val/focaltversky": focal_tversky
         }, step=epoch)
-
         logger.info(f"Epoch {epoch+1}/{config.epochs}, Train/Loss: {epoch_loss:.4f}  Val/Loss: {val_loss}")
         logger.info(f"Epoch {epoch+1}/{config.epochs}, Val/Acc: {accuracy}, Val/Prec: {precision}, Val/Recall: {recall}")
         logger.info(f"Last improved {epochs_since_last_improvement} epochs ago.")
 
-
+        # Track best model weights
         if last_better_eval_loss > val_loss:
             last_better_eval_loss = val_loss
             epochs_since_last_improvement = 0
+            best_model_weights = nn.state_dict()  # Save best weights
         else:
             epochs_since_last_improvement += 1
         
         if epochs_since_last_improvement >= config.notimprovement_tolerance:
             logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
             break
+
+        # After training, load best weights
+        if 'best_model_weights' in locals():
+            nn.load_state_dict(best_model_weights)
+            logger.info("Loaded best model weights from training.")
 
 def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
