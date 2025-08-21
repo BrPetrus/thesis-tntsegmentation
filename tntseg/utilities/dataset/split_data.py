@@ -11,11 +11,7 @@ from torch.distributions.constraints import positive_integer
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Configure output logging to file
-fh = logging.FileHandler('dataset_split.log')
-fh.setLevel(logging.INFO)
-fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger.addHandler(fh)
+
 
 def load_images(gt_path: Path, orig_path: Path) -> Tuple[NDArray, NDArray, List[int]]:
     """
@@ -86,7 +82,7 @@ def get_quadrant_limits(quadrant: int, image_shape: Tuple[int, int, int]) -> Dic
         Note:
             Quadrants are arranged as:
                |
-            2  |  1
+            1  |  2
             ---+---
             3  |  4
                |
@@ -97,10 +93,10 @@ def get_quadrant_limits(quadrant: int, image_shape: Tuple[int, int, int]) -> Dic
         # Z limits are always the full depth
         z_limits = (0, z_depth)
         
-        if quadrant == 1:  # Top right
+        if quadrant == 2:  # Top right
             r_limits = (0, half_rows)
             c_limits = (half_cols, cols)
-        elif quadrant == 2:  # Top left
+        elif quadrant == 1:  # Top left
             r_limits = (0, half_rows)
             c_limits = (0, half_cols)
         elif quadrant == 3:  # Bottom left
@@ -607,16 +603,24 @@ def main(
     """
     if len(min_size) != 3:
         raise ValueError(f"Invalid minimum patch size. Expected 3 dimensions!")
-    
-    logger.info(f"Using minimum patch size: {min_size}")
-    logger.info(f"Using training quadrant: {train_quad}")
-    
+
     input_folder_path = Path(input_folder)
     output_folder_path = Path(output_folder)
     
     # Create output directories for both training and testing
     if output_folder_path.exists() and not overwrite:
         raise ValueError(f"Output folder {output_folder} already exists. Use --overwrite to overwrite.")
+    output_folder_path.mkdir(parents=True, exist_ok=overwrite)
+
+    # Configure output logging to file
+    fh = logging.FileHandler(str(output_folder_path / 'dataset_split.log'))
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(fh)
+    
+    logger.info(f"Using minimum patch size: {min_size}")
+    logger.info(f"Using training quadrant: {train_quad}")
+    
     
     # Training directories
     train_path = output_folder_path / "train"

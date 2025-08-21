@@ -1,4 +1,5 @@
 from turtle import forward
+import pandas as pd
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 from tntseg.nn.models.unet3d_basic import UNet3d
@@ -170,7 +171,8 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
     )
     return train_dataloader, test_dataloader, valid_dataloader
 
-def _calculate_metrics(nn: torch.Module, dataloader: DataLoader, criterion: torch.Module, epoch: int, prefix:str = "val") -> Tuple[int, int, int, int, float]:
+# TODO: think abou treplacing with batchstats from utlities metrics
+def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: torch.nn.Module, epoch: int, prefix: str, output_folder: Path) -> Tuple[int, int, int, int, float]:
     # Run evaluation on validation set
     with torch.no_grad():
         nn.eval()
@@ -221,7 +223,8 @@ def _calculate_metrics(nn: torch.Module, dataloader: DataLoader, criterion: torc
     return TP, TN, FP, FN, loss
 
 
-def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch):
+def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder: Path):
+    epoch_loss = 0.
     for batch_idx, batch in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.epochs}")):
         inputs, masks = batch
         inputs, masks = inputs.to(config.device), masks.to(config.device)
@@ -257,16 +260,16 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
                 logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
     return epoch_loss
 
-def _train(nn: torch.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, test_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config) -> None:
+def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config, output_folder: Path) -> None:
     # Last time that the eval loss improved
     epochs_since_last_improvement = 0
     last_better_eval_loss = np.inf
 
     for epoch in range(config.epochs):
         nn.train()
-        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch)
+        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder=output_folder)
             
-        TP, FP, FN, TN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val')
+        TP, FP, FN, TN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
         # Calculate metrics
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
         precision = tntmetrics.precision(TP, FP)
@@ -302,7 +305,7 @@ def _train(nn: torch.Module, optimizer: torch.optim.Optimizer, criterion: nn.Mod
             logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
             break
 
-def _run_test_inference(nn: torch.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
+def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
     nn.eval()
     inputs = []
@@ -400,7 +403,7 @@ def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config
     mlflow.log_metrics(metrics, step=epoch)
     return metrics
 
-def _run_test_quadrant(nn: torch.Module, test_x: pd.DataFrame, transform_test: A.Compose, 
+def _run_test_quadrant(nn: torch.nn.Module, test_x: pd.DataFrame, transform_test: A.Compose, 
                       quad_idx: int, config: Config, output_folder: Path, 
                       logger: logging.Logger, epoch: int) -> dict:
     """Run inference on a specific quadrant of test images."""
@@ -534,7 +537,7 @@ def _run_test_quadrant(nn: torch.Module, test_x: pd.DataFrame, transform_test: A
         logger.warning(f"No metrics calculated for quadrant {quad_idx}")
         return {}
 
-def _test(nn: torch.Module, test_dataloader: DataLoader, config: Config, 
+def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config, 
          output_folder: Path, logger: logging.Logger, epoch: int, test_x: pd.DataFrame,
          transform_test: A.Compose, quad_idx: int = None) -> None:
     """Run complete testing process."""
@@ -554,7 +557,21 @@ def _test(nn: torch.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None) -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+    output_folder_path = Path(output_folder)
+    output_folder_path.mkdir(exist_ok=True, parents=True)
+
+    # Configure output logging to file
+    fh = logging.FileHandler(str(output_folder_path / 'training.log'))
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(fh)
+
+    # Prepare mlflow
+    logger.info(f"Using MLFlow serve at {args.mlflow_address}:{args.mlflow_port}")
+    logger.info("Trying to create mlflow tracking")
+    mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
+
     # Prepare dataloaders
     train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, seed) 
     
@@ -582,7 +599,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         mlflow.log_params(config.__dict__)
 
         # Run training
-        _train(nn, optimizer, criterion, train_dataloader, test_dataloader, valid_dataloader, config)
+        _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
 
         # Run testing
         _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1, test_x, transform_test, quad_idx)
@@ -606,6 +623,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for data loading.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for data splitting.")
     parser.add_argument("--shuffle", action="store_true", help="Shuffle the dataset.")
+    parser.add_argument("--mlflow_address", type=str, default="127.0.0.1",
+                        help="IP address of the MLFlow server")
+    parser.add_argument("--mlflow_port", type=str, default="8000",
+                        help="Port of the MLFlow server")
     parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
                       help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
     
@@ -630,7 +651,7 @@ if __name__ == "__main__":
     )
 
     # Run training
-    main(args.input_folder, args.output_folder, logger, args.random_state, config, args.quad_idx)
+    main(args.input_folder, args.output_folder, logger, args.seed, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
 
 
 
