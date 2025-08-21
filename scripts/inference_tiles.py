@@ -159,6 +159,7 @@ if __name__ == "__main__":
     parser.add_argument('--quad_mode', action='store_true', help='Enable quadrant mode')
     parser.add_argument('--quad_idx', type=int, choices=[0, 1, 2, 3], 
                        help='Quadrant index (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)')
+    #FIX: the numbers are wrong
     
     args = parser.parse_args()
     
