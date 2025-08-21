@@ -7,7 +7,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import albumentations as A
-from albumentations.pytorch import ToTensorV2
+import os
 
 from tntseg.nn.models.unet3d_basic import UNet3d
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
@@ -29,7 +29,8 @@ def setup_logging(output_folder: Path):
     )
     return logging.getLogger(__name__)
 
-def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_size: int = 32):
+def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_size: int = 32, 
+         quad_mode: bool = False, quad_idx: int = None):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     output_folder.mkdir(parents=True, exist_ok=True)
     logger = setup_logging(output_folder)
@@ -39,56 +40,40 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     logger.info(f"  - Output folder: {output_folder}")
     logger.info(f"  - Device: {device}")
     logger.info(f"  - Batch size: {batch_size}")
+    if quad_mode:
+        logger.info(f"  - Quad mode: {quad_mode}, quad index: {quad_idx}")
 
     # Prepare the model
     logger.info("Loading model...")
     model = UNet3d(n_channels_in=1, n_classes_out=1)
     try:
-        model = torch.load(checkpoint_path, weights_only=False, map_location=torch.device(device))
-        # model.load_state_dict(checkpoint['model_state_dict'])
+        model = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        # model.load_state_dict(checkpoint)
         logger.info("Model state loaded")
-    except FileNotFoundError:
-        logger.error(f"Path {checkpoint_path} does not exists")
+    except Exception as e:
+        logger.error(f"Could not load checkpoint: {e}")
         return
     model.to(device)
     model.eval()
 
-    # Prepare the dataset
-    logger.info("Preparing dataset...")
-    df = load_dataset_metadata(img_folder=input_folder)
-
-    # Load the images, split them into CROP_SIZE chunks and export them
-    for img_path in df['img_path']:
-        # img_path = row['img_path']
-        try:
-            img = tifffile.imread(img_path)
-        except:
-            logger.error(f"Could not load img at {img_path}")
-            continue
-
-        # Tile the img
-        i = 0
-        number_of_rows = img.shape[1] // CROP_SIZE[1]
-        number_of_cols = img.shape[2] // CROP_SIZE[2] 
-        tile_output_path = output_folder / "tiles"
-        tile_output_path.mkdir(parents=True, exist_ok=True)
-        for r in range(img.shape[1] // CROP_SIZE[1]):
-            for c in range(img.shape[2] // CROP_SIZE[2]):
-                tile = img[:, r * CROP_SIZE[1]:(r+1) * CROP_SIZE[1], c*CROP_SIZE[2]:(c+1)*CROP_SIZE[2]]
-                tifffile.imwrite(tile_output_path / f"{i:10}_r-{r}_c-{c}.tif", tile)
-                i += 1
-
-    # Create the TNTDataset object
+    # Prepare transforms
     transforms = A.Compose([
         A.Normalize(mean=DATASET_MEAN, std=DATASET_STD, max_pixel_value=1.0, p=1.0),
-        A.CenterCrop(height=CROP_SIZE[1], width=CROP_SIZE[2]),
-        ToTensorV2()
+        A.ToTensorV2()
     ])
-    df_tiles = load_dataset_metadata(img_folder=str(tile_output_path))
+
+    # Prepare the dataset with tiling (and optional quad extraction)
+    logger.info("Preparing dataset...")
+    df = load_dataset_metadata(img_folder=input_folder)
     dataset = TNTDataset(
-        dataframe = df_tiles,
+        dataframe=df,
         load_masks=False,
         transforms=transforms,
+        tile=True,
+        tile_size=CROP_SIZE,
+        overlap=0,
+        quad_mode=quad_mode,
+        quad_idx=quad_idx
     )
     dataloader = DataLoader(
         dataset,
@@ -98,54 +83,71 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     )
     logger.info(f"Found {len(dataset)} tiles to process")
 
-    # Run the inference on tiles
-    logger.info("Running inference and saving the predictions...")
-    output_inference_path = output_folder / "predictions"
-    output_inference_path.mkdir(exist_ok=True, parents=True)
-    img_idx = 0
-    all_tiles = []
+    # Run inference
+    logger.info("Running inference...")
+    predictions = []
+    metadata = []
+    
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Inference"):
-            batch = batch.to(device)[:, np.newaxis, ...]  # Add channel
+        for batch_data in tqdm(dataloader, desc="Inference"):
+            batch, meta = batch_data  # Unpack (volume, metadata)
+            batch = batch.to(device)
+            
             outputs = model(batch)
-            prob = torch.sigmoid(outputs)
-            thresh = (prob > 0.5).detach().cpu().numpy()
+            probs = torch.sigmoid(outputs).detach().cpu().numpy()
+            
+            # Store predictions and metadata for stitching
+            for i in range(probs.shape[0]):
+                predictions.append(probs[i, 0])  # Remove channel dimension
+                metadata.append(meta[i])
 
-            # Save
-            for i in range(thresh.shape[0]):
-                prediction_mask = thresh[i].squeeze()  # Remove channel
-                prob_float = prob[i].detach().cpu().numpy().squeeze().astype(np.float32)
-                prediction_mask_uint8 = (prediction_mask * 255).astype(np.uint8)
-                tifffile.imwrite(output_inference_path / f"{img_idx:10}.tif", prediction_mask_uint8)
-                tifffile.imwrite(output_inference_path / f"{img_idx:10}-sigmoid.tif", prob_float)
-                img_idx += 1
-                all_tiles.append(prediction_mask_uint8)
-    logger.info("Inference complete") 
-
-    # Stiching it together
-    logger.info("Stitching tiles together...")
-    tiles_per_image = number_of_rows * number_of_cols
-    num_images = len(all_tiles) // tiles_per_image
-    stitched_output_folder = output_folder / "stitched"
-    stitched_output_folder.mkdir(parents=True, exist_ok=True)
-    for img_idx in range(num_images):
-        full_height = CROP_SIZE[1]*number_of_rows
-        full_width = CROP_SIZE[2]*number_of_cols
-        relevant_tiles = np.array(all_tiles[img_idx*tiles_per_image:(img_idx+1)*tiles_per_image])
-        # img = np.array(img)
-        # assert CROP_SIZE[0] == 7
-        # img = img.reshape(7, full_height, full_width)
-        stitched = np.zeros((7, full_height, full_width)).astype(np.uint8)
-
-        for r in range(number_of_rows):
-            for c in range(number_of_cols):
-                stitched[:, r*CROP_SIZE[1]:(r+1)*CROP_SIZE[1], c*CROP_SIZE[2]:(c+1)*CROP_SIZE[2]] = relevant_tiles[r*number_of_rows+c]
-
+    logger.info("Inference complete")
+    
+    # Save individual tiles if needed
+    tiles_output_path = output_folder / "tiles"
+    tiles_output_path.mkdir(exist_ok=True, parents=True)
+    
+    logger.info("Saving individual tiles...")
+    for i, (pred, meta) in enumerate(zip(predictions, metadata)):
+        # Generate a meaningful filename using metadata
+        if quad_mode:
+            tile_name = f"img{meta['image_idx']}_quad{meta['quad_idx']}"
+            if 'row' in meta:
+                tile_name += f"_r{meta['row']}_c{meta['col']}"
+        else:
+            tile_name = f"img{meta['image_idx']}"
+            if 'row' in meta:
+                tile_name += f"_r{meta['row']}_c{meta['col']}"
         
-
-        tifffile.imwrite(stitched_output_folder / f"img_idx.tif", stitched)
-    logger.info("Done stitching")
-
+        # Save probability map
+        prob_path = tiles_output_path / f"{tile_name}_prob.tif"
+        tifffile.imwrite(str(prob_path), pred.astype(np.float32))
+        
+        # Save binary prediction
+        binary_pred = (pred > 0.5).astype(np.uint8) * 255
+        binary_path = tiles_output_path / f"{tile_name}_binary.tif"
+        tifffile.imwrite(str(binary_path), binary_pred)
+    
+    # Stitch the predictions
+    logger.info("Stitching predictions...")
+    stitched_output_path = output_folder / "stitched"
+    stitched_output_path.mkdir(exist_ok=True, parents=True)
+    
+    # Use TNTDataset's stitch_predictions method
+    binary_preds = [(pred > 0.5).astype(np.uint8) * 255 for pred in predictions]
+    
+    # Stitch probability maps
+    prob_stitched = TNTDataset.stitch_predictions(
+        predictions, metadata, output_path=str(stitched_output_path / "prob")
+    )
+    
+    # Stitch binary predictions
+    binary_stitched = TNTDataset.stitch_predictions(
+        binary_preds, metadata, output_path=str(stitched_output_path / "binary")
+    )
+    
+    logger.info("Stitching complete!")
+    logger.info(f"Results saved to {output_folder}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run inference on 3D images')
@@ -153,6 +155,14 @@ if __name__ == "__main__":
     parser.add_argument('input_folder', type=Path, help='Folder containing input images')
     parser.add_argument('output_folder', type=Path, help='Folder for output predictions')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for inference')
+    parser.add_argument('--quad_mode', action='store_true', help='Enable quadrant mode')
+    parser.add_argument('--quad_idx', type=int, choices=[0, 1, 2, 3], 
+                       help='Quadrant index (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)')
+    
     args = parser.parse_args()
-
-    main(args.checkpoint_path, args.input_folder, args.output_folder, args.batch_size)
+    
+    if args.quad_mode and args.quad_idx is None:
+        parser.error("--quad_mode requires --quad_idx")
+    
+    main(args.checkpoint_path, args.input_folder, args.output_folder, 
+         args.batch_size, args.quad_mode, args.quad_idx)

@@ -362,8 +362,6 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         sk_recall = skmetrics.recall_score(binary_masks, binary_predictions)
         sk_precision = skmetrics.precision_score(binary_masks, binary_predictions)
         # Calculate additional metrics using test set predictions
-
-        # a =tntmetrics.calc_stats(binary_predictions, binary_masks)
         TP, FP, FN, TN = tntmetrics.calculate_batch_stats(binary_predictions.astype(np.uint8) * 255, binary_masks.astype(np.uint8)*255, 0, 255)
         jaccard = tntmetrics.jaccard_index(TP, FP, FN)
         dice = tntmetrics.dice_coefficient(TP, FP, FN)
@@ -372,6 +370,10 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
         precision = tntmetrics.precision(TP, FP)
         recall = tntmetrics.recall(TP, FN)
+
+        # Now tile the train quad and run tiling inference on it
+        
+
         mlflow.log_metrics({
             "test/jaccard": jaccard,
             "test/dice": dice, 
