@@ -306,10 +306,10 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
             logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
             break
 
-        # After training, load best weights
-        if 'best_model_weights' in locals():
-            nn.load_state_dict(best_model_weights)
-            logger.info("Loaded best model weights from training.")
+    # After training, load best weights
+    if 'best_model_weights' in locals():
+        nn.load_state_dict(best_model_weights)
+        logger.info("Loaded best model weights from training.")
 
 def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
