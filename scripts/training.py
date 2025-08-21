@@ -170,10 +170,6 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
     )
     return train_dataloader, test_dataloader, valid_dataloader
 
-def _train_epoch() -> None:
-    pass
-def _eval_epoch() -> None:
-    pass
 def _calculate_metrics(nn: torch.Module, dataloader: DataLoader, criterion: torch.Module, epoch: int, prefix:str = "val") -> Tuple[int, int, int, int, float]:
     # Run evaluation on validation set
     with torch.no_grad():
@@ -306,9 +302,275 @@ def _train(nn: torch.Module, optimizer: torch.optim.Optimizer, criterion: nn.Mod
             logger.info(f"Have not improved in the last {epochs_since_last_improvement} epochs! Exitting")
             break
 
+def _run_test_inference(nn: torch.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
+    """Run inference on the test set and collect inputs, masks, and predictions."""
+    nn.eval()
+    inputs = []
+    masks = []
+    predictions = []
+    
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Evaluation on test set"):
+            input_data, mask = batch
+            input_data, mask = input_data.to(config.device), mask.to(config.device)
+            prediction = nn(input_data)
+            prediction = torch.nn.functional.sigmoid(prediction)
+
+            inputs.append(input_data.cpu().detach().numpy())
+            masks.append(mask.cpu().detach().numpy())
+            predictions.append(prediction.cpu().detach().numpy())
+            
+    return inputs, masks, predictions
+
+def _save_test_outputs(inputs: List, masks: List, predictions: List, output_folder: Path, logger: logging.Logger) -> None:
+    """Save test predictions, inputs, and masks."""
+    for batch_idx, (input_batch, mask_batch, prediction_batch) in enumerate(zip(inputs, masks, predictions)):
+        for i, (input_img, mask, prediction) in enumerate(zip(input_batch, mask_batch, prediction_batch)):
+            prediction_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
+            input_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
+            mask_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
+            
+            # Save prediction
+            tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
+            logger.debug(f"Saved test prediction for batch {batch_idx+1}, sample {i+1} at {prediction_path}")
+            
+            # Save input image
+            tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
+            logger.debug(f"Saved test input image for batch {batch_idx+1}, sample {i+1} at {input_path}")
+            
+            # Save mask
+            tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
+            logger.debug(f"Saved test mask for batch {batch_idx+1}, sample {i+1} at {mask_path}")
+
+def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config: Config, epoch: int) -> dict:
+    """Calculate and log test metrics."""
+    # Flatten arrays for metric calculation
+    flat_inputs = np.concatenate(inputs, axis=0).flatten()
+    flat_masks = np.concatenate(masks, axis=0).flatten()
+    flat_predictions = np.concatenate(predictions, axis=0).flatten()
+    
+    # Generate PR curve
+    pr_curve = skmetrics.PrecisionRecallDisplay.from_predictions(
+        y_true=flat_masks,
+        y_pred=flat_predictions,
+    )
+    mlflow.log_figure(pr_curve.figure_, "pr-curve.png")
+    
+    # Calculate metrics
+    binary_predictions = (flat_predictions > 0.5).astype(bool)
+    binary_masks = (flat_masks == 1.0)
+    
+    # Scikit-learn metrics
+    sk_accuracy = skmetrics.accuracy_score(binary_masks, binary_predictions)
+    sk_f1score = skmetrics.f1_score(binary_masks, binary_predictions)
+    sk_recall = skmetrics.recall_score(binary_masks, binary_predictions)
+    sk_precision = skmetrics.precision_score(binary_masks, binary_predictions)
+    
+    # Custom metrics
+    TP, FP, FN, TN = tntmetrics.calculate_batch_stats(
+        binary_predictions.astype(np.uint8) * 255, 
+        binary_masks.astype(np.uint8) * 255, 
+        0, 255
+    )
+    
+    jaccard = tntmetrics.jaccard_index(TP, FP, FN)
+    dice = tntmetrics.dice_coefficient(TP, FP, FN)
+    tversky = tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta)
+    focal_tversky = tntmetrics.focal_tversky_loss(
+        TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma
+    )
+    accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
+    precision = tntmetrics.precision(TP, FP)
+    recall = tntmetrics.recall(TP, FN)
+    
+    metrics = {
+        "test/jaccard": jaccard,
+        "test/dice": dice, 
+        "test/tversky": tversky,
+        "test/focal_tversky": focal_tversky,
+        "test/accuracy": accuracy,
+        "test/precision": precision,
+        "test/recall": recall,
+        "test/accuracy_skmetric": sk_accuracy,
+        "test/f1score_skmetric": sk_f1score,
+        "test/recall_skmetric": sk_recall,
+        "test/precision_skmetric": sk_precision,
+    }
+    
+    mlflow.log_metrics(metrics, step=epoch)
+    return metrics
+
+def _run_test_quadrant(nn: torch.Module, test_x: pd.DataFrame, transform_test: A.Compose, 
+                      quad_idx: int, config: Config, output_folder: Path, 
+                      logger: logging.Logger, epoch: int) -> dict:
+    """Run inference on a specific quadrant of test images."""
+    quad_name = ["top-left", "top-right", "bottom-left", "bottom-right"][quad_idx]
+    logger.info(f"Processing {quad_name} quadrant (idx: {quad_idx})...")
+    
+    # Create dataset for this quadrant with tiling
+    quad_dataset = TNTDataset(
+        dataframe=test_x,
+        load_masks=True,  # We need masks for metrics
+        transforms=transform_test,
+        quad_mode=True,
+        quad_idx=quad_idx,
+        tile=True,
+        tile_size=(7, 64, 64),
+        overlap=0
+    )
+    
+    quad_dataloader = DataLoader(
+        quad_dataset,
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=config.num_workers
+    )
+    
+    # Run inference
+    predictions = []
+    metadata = []
+    all_masks = []
+    
+    nn.eval()  # Ensure model is in eval mode
+    with torch.no_grad():
+        for batch_data in tqdm(quad_dataloader, desc=f"Inference on quad {quad_idx}"):
+            inputs, masks, meta = batch_data  # Unpack (volume, mask, metadata)
+            inputs = inputs.unsqueeze(1).to(config.device)  # Add channel dimension
+            
+            outputs = nn(inputs)
+            probs = torch.sigmoid(outputs).detach().cpu().numpy()
+            
+            # Store predictions, masks, and metadata for stitching
+            for i in range(probs.shape[0]):
+                predictions.append(probs[i, 0])  # Remove channel dimension
+                all_masks.append(masks[i].cpu().numpy())
+                
+                # Handle metadata - convert tensors to Python types if needed
+                if isinstance(meta, dict):
+                    # If meta is a dictionary of lists/tensors
+                    meta_item = {k: v[i].item() if isinstance(v[i], torch.Tensor) else v[i] 
+                                for k, v in meta.items()}
+                else:
+                    # If meta is a list of dictionaries
+                    meta_item = meta[i]
+                
+                metadata.append(meta_item)
+    
+    # Stitch predictions and masks
+    logger.info(f"Stitching quad {quad_idx} predictions...")
+    quad_output_path = output_folder / f"quad_{quad_idx}"
+    quad_output_path.mkdir(exist_ok=True, parents=True)
+    
+    # Stitch predictions
+    stitched_preds = TNTDataset.stitch_predictions(
+        predictions, metadata, output_path=str(quad_output_path / "predictions")
+    )
+    
+    # Stitch masks
+    stitched_masks = TNTDataset.stitch_predictions(
+        all_masks, metadata, output_path=str(quad_output_path / "masks")
+    )
+    
+    # Calculate metrics for this quadrant
+    quad_metrics = {}
+    for img_idx in stitched_preds:
+        if img_idx not in stitched_masks:
+            logger.warning(f"No mask found for image {img_idx} in quadrant {quad_idx}")
+            continue
+        
+        pred = stitched_preds[img_idx]
+        mask = stitched_masks[img_idx]
+        
+        # Binarize prediction
+        binary_pred = (pred > 0.5).astype(np.uint8)
+        binary_mask = (mask > 0.5).astype(np.uint8)
+        
+        # Save binary prediction
+        tifffile.imwrite(
+            str(quad_output_path / f"binary_pred_img_{img_idx}.tif"), 
+            binary_pred * 255
+        )
+        
+        # Calculate stats
+        TP, FP, FN, TN = tntmetrics.calculate_batch_stats(
+            binary_pred * 255, binary_mask * 255, 0, 255
+        )
+        
+        # Calculate metrics
+        metrics_values = {
+            "accuracy": tntmetrics.accuracy(TP, FP, FN, TN),
+            "precision": tntmetrics.precision(TP, FP),
+            "recall": tntmetrics.recall(TP, FN),
+            "jaccard": tntmetrics.jaccard_index(TP, FP, FN),
+            "dice": tntmetrics.dice_coefficient(TP, FP, FN),
+            "tversky": tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta),
+            "focal_tversky": tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
+        }
+        
+        quad_metrics[f"img_{img_idx}"] = metrics_values
+        
+        # Log metrics to MLflow
+        for metric_name, value in metrics_values.items():
+            mlflow.log_metric(f"tiled_test/quad_{quad_idx}_img_{img_idx}_{metric_name}", value, step=epoch)
+    
+    # Log average metrics for this quadrant
+    if quad_metrics:
+        avg_metrics = {k: 0.0 for k in next(iter(quad_metrics.values()))}
+        for metrics_dict in quad_metrics.values():
+            for metric_name, value in metrics_dict.items():
+                avg_metrics[metric_name] += value
+        
+        # Average the metrics
+        for metric_name in avg_metrics:
+            avg_metrics[metric_name] /= len(quad_metrics)
+            mlflow.log_metric(f"tiled_test/quad_{quad_idx}_avg_{metric_name}", avg_metrics[metric_name], step=epoch)
+        
+        logger.info(f"Quadrant {quad_idx} testing completed")
+        logger.info(f"Average Dice: {avg_metrics['dice']:.4f}")
+        logger.info(f"Average Jaccard: {avg_metrics['jaccard']:.4f}")
+        
+        return avg_metrics
+    else:
+        logger.warning(f"No metrics calculated for quadrant {quad_idx}")
+        return {}
+
+def _test(nn: torch.Module, test_dataloader: DataLoader, config: Config, 
+         output_folder: Path, logger: logging.Logger, epoch: int, test_x: pd.DataFrame,
+         transform_test: A.Compose, quad_idx: int = None) -> None:
+    """Run complete testing process."""
+    logger.info("Starting test evaluation")
+    
+    # Standard test set evaluation
+    inputs, masks, predictions = _run_test_inference(nn, test_dataloader, config)
+    _save_test_outputs(inputs, masks, predictions, output_folder, logger)
+    metrics = _calculate_test_metrics(inputs, masks, predictions, config, epoch)
+    
+    logger.info(f"Test set metrics: Dice={metrics['test/dice']:.4f}, Jaccard={metrics['test/jaccard']:.4f}")
+    
+    # Quadrant-based evaluation if specified
+    if quad_idx is not None:
+        quad_metrics = _run_test_quadrant(nn, test_x, transform_test, quad_idx, config, output_folder, logger, epoch)
+        if quad_metrics:
+            logger.info(f"Quadrant {quad_idx} evaluation complete: "
+                       f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
+
 def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None) -> None:
     # Prepare dataloaders
     train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, seed) 
+    
+    # Get test_x and transform_test for quadrant testing
+    input_folder_test = input_folder / "test"
+    test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
+    transform_test = A.Compose([
+        A.Normalize(
+            mean=config.dataset_mean,
+            std=config.dataset_std,
+            max_pixel_value=1.0,
+            p=1.0
+        ),
+        A.CenterCrop3D(size=(7,64,64)),
+        A.ToTensor3D()
+    ])
 
     # Create net
     nn = UNet3d(1, 1).to(config.device)
@@ -322,89 +584,10 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         # Run training
         _train(nn, optimizer, criterion, train_dataloader, test_dataloader, valid_dataloader, config)
 
-        # Test set
-        nn.eval()
-        inputs = []
-        masks = []
-        predictions = []
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(tqdm(test_dataloader, desc="Evaluation on test set")):
-                input, mask = batch
-                input, mask = input.to(config.device), mask.to(config.device)
-                prediction = nn(input)
-                prediction = torch.nn.functional.sigmoid(prediction)
+        # Run testing
+        _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1, test_x, transform_test, quad_idx)
 
-                inputs.append(input.cpu().detach().numpy())
-                masks.append(mask.cpu().detach().numpy())
-                predictions.append(prediction.cpu().detach().numpy())
-
-
-        # Save predictions, inputs, and masks for the test set
-        for batch_idx, (input_batch, mask_batch, prediction_batch) in enumerate(zip(inputs, masks, predictions)):
-            for i, (input_img, mask, prediction) in enumerate(zip(input_batch, mask_batch, prediction_batch)):
-                prediction_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_prediction.tiff"
-                input_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_input.tiff"
-                mask_path = output_folder / f"test_batch_{batch_idx+1}_sample_{i+1}_mask.tiff"
-                
-                # Save prediction
-                tifffile.imwrite(prediction_path, prediction[0, ...].astype(np.float32))
-                logger.debug(f"Saved test prediction for batch {batch_idx+1}, sample {i+1} at {prediction_path}")
-                
-                # Save input image
-                tifffile.imwrite(input_path, input_img[0, ...].astype(np.float32))
-                logger.debug(f"Saved test input image for batch {batch_idx+1}, sample {i+1} at {input_path}")
-                
-                # Save mask
-                tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
-                logger.debug(f"Saved test mask for batch {batch_idx+1}, sample {i+1} at {mask_path}")
-
-            
-        # NOTE: last batch might have wrong size
-        inputs = np.concat(inputs, axis=0).flatten()
-        masks = np.concat(masks, axis=0).flatten()
-        predictions = np.concat(predictions, axis=0).flatten()
-
-        # Find PR curve
-        pr_curve = skmetrics.PrecisionRecallDisplay.from_predictions(
-            y_true=masks,
-            y_pred=predictions,
-        )
-        mlflow.log_figure(pr_curve.figure_, "pr-curve.png")
-
-        # Find Accuracy, Recall, Precision, and F1 Score
-        binary_predictions = (predictions > 0.5).astype(np.bool)
-        binary_masks = (masks == 1.0)
-        sk_accuracy = skmetrics.accuracy_score(binary_masks, binary_predictions)
-        sk_f1score = skmetrics.f1_score(binary_masks, binary_predictions)
-        sk_recall = skmetrics.recall_score(binary_masks, binary_predictions)
-        sk_precision = skmetrics.precision_score(binary_masks, binary_predictions)
-        # Calculate additional metrics using test set predictions
-        TP, FP, FN, TN = tntmetrics.calculate_batch_stats(binary_predictions.astype(np.uint8) * 255, binary_masks.astype(np.uint8)*255, 0, 255)
-        jaccard = tntmetrics.jaccard_index(TP, FP, FN)
-        dice = tntmetrics.dice_coefficient(TP, FP, FN)
-        tversky = tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta)
-        focal_tversky = tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
-        accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
-        precision = tntmetrics.precision(TP, FP)
-        recall = tntmetrics.recall(TP, FN)
-
-        mlflow.log_metrics({
-            "test/jaccard": jaccard,
-            "test/dice": dice, 
-            "test/tversky": tversky,
-            "test/focal_tversky": focal_tversky,
-            "test/accuracy": accuracy,
-            "test/precision": precision,
-            "test/recall": recall,
-            "test/accuracy_skmetric": sk_accuracy,
-            "test/f1score_skmetric": sk_f1score,
-            "test/recall_skmetric": sk_recall,
-            "test/precision_skmetric": sk_precision,
-        }, step=epoch)
-
-        # Now tile the train quad and run tiling inference on it
-
-        # After training, you might log the final model
+        # After training, log the final model
         mlflow.pytorch.log_model(nn, "model")
 
         # Also save the model
@@ -412,68 +595,42 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
         torch.save(nn.state_dict(), checkpoint_path)
         logger.info(f"Model checkpoint saved at {checkpoint_path}")
 
-
-
 if __name__ == "__main__":
     # Create argument parser
     parser = argparse.ArgumentParser(description="Training script for neural network.")
-    parser.add_argument("--input_folder", type=str, required=True, 
-                        help="Path to the input folder containing images.")
-    parser.add_argument("--output_folder", type=str, required=True, 
-                        help="Path to the output folder where checkpoint and other files will be stored.")
-    parser.add_argument("--log_folder", type=str, required=True,
-                        help="Path to the out folder where log files are stored.")
-    parser.add_argument("--random_state", type=int, default=42,
-                        help="Seed value for the train/test split.")
-    parser.add_argument("--mlflow_address", type=str, default="127.0.0.1",
-                        help="IP address of the MLFlow server")
-    parser.add_argument("--mlflow_port", type=str, default="8000",
-                        help="Port of the MLFlow server")
-    parser.add_argument("--epochs", type=int, default=10,
-                        help="Number of epochs for training.")
-    parser.add_argument("--lr", type=float, default=1.0e-3,
-                        help="Learning rate for the optimizer.")
-    parser.add_argument("--device", type=str, default="cpu",
-                        help="Device to use for training (e.g., 'cpu', 'cuda').")
-    parser.add_argument("--num_workers", type=int, default=1,
-                        help="Number of workers for data loading.")
-    parser.add_argument("--shuffle", type=bool, default=False,
-                        help="Whether to shuffle the dataset during training.")
-    parser.add_argument("--batch_size", type=int, default=1,
-                        help="Batch size for training.")
+    parser.add_argument("input_folder", type=Path, help="Path to the input folder containing the dataset.")
+    parser.add_argument("output_folder", type=Path, help="Path to the output folder for saving models and logs.")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs.")
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate.")
+    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training.")
+    parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for data loading.")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for data splitting.")
+    parser.add_argument("--shuffle", action="store_true", help="Shuffle the dataset.")
+    parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
+                      help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
     
-
-    # Parse arguments & Setup
     args = parser.parse_args()
-    output_folder = Path(args.output_folder)
-    input_folder = Path(args.input_folder)
-    log_folder = Path(args.log_folder)
-    if not input_folder.exists():
-        raise RuntimeError(f"Specified input folder '{input_folder}' does not exist!")
-    output_folder.mkdir(parents=True, exist_ok=True)
-    log_folder.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(filename=log_folder / 'training.log', encoding='utf-8', level=logging.DEBUG, format='%(asctime)s %(message)s')
-    logger.debug(f"Input folder: {args.input_folder}")
-    logger.debug(f"Output folder: {args.output_folder}")
-    logger.debug(f"Log folder: {args.log_folder}")
-    logger.info(f"Using MLFlow serve at {args.mlflow_address}:{args.mlflow_port}")
-    
-    logger.info("Trying to create mlflow tracking")
-    mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    # Log the arguments
+    logger.info(f"Arguments: {args}")
+
+    # Config
     config = Config(
         epochs=args.epochs,
         lr=args.lr,
-        device=args.device,
+        batch_size=args.batch_size,
+        device="cuda" if torch.cuda.is_available() else "cpu",
         num_workers=args.num_workers,
         shuffle=args.shuffle,
-        batch_size=args.batch_size,
-        input_folder=input_folder
+        input_folder=str(args.input_folder),
     )
 
     # Run training
-    main(input_folder, output_folder, logger, args.random_state, config)
+    main(args.input_folder, args.output_folder, logger, args.random_state, config, args.quad_idx)
 
 
 
