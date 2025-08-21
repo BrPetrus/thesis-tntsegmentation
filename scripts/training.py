@@ -38,14 +38,14 @@ class Config:
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
-    notimprovement_tolerance: int = 100
+    notimprovement_tolerance: int = 50
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.6
     ce_use_weights: bool = True
-    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 2. # Negative/positive ratio to penalize
+    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 4. # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.4

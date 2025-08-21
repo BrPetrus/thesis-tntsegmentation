@@ -11,11 +11,11 @@ ulimit -t $TIME
 # INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21"
 INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
 OUTPUT_FOLDER="./output-training"
-EPOCHS=250
+EPOCHS=500
 WORKERS=4
 BATCH=64
 MLFLOW_SERVER_PORT=8000
-LR=0.0025
+LR=0.001
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
