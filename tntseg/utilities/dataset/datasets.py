@@ -185,6 +185,7 @@ class TNTDataset(Dataset):
             if img.dtype != np.uint16:
                 img = img.astype(np.float32)
             else:
+                # TODO: fix
                 img = img.astype(np.float32)
             
             mask = None
@@ -364,7 +365,7 @@ class TNTDataset(Dataset):
         # Group by image_idx
         image_groups = {}
         for pred, meta in zip(predictions, metadata):
-            img_idx = meta['image_idx']
+            img_idx = meta['image_idx'].item()
             if img_idx not in image_groups:
                 image_groups[img_idx] = []
             image_groups[img_idx].append((pred, meta))
@@ -400,7 +401,7 @@ class TNTDataset(Dataset):
                     th = meta['height']
                     tw = meta['width']
                     
-                    stitched[:, start_h:start_h+th, start_w:start_w+tw] += pred
+                    stitched[:, start_h:start_h+th, start_w:start_w+tw] += pred[:,:,:]
                     weights[:, start_h:start_h+th, start_w:start_w+tw] += 1
                 
                 elif meta.get('is_quad', False) and meta.get('is_tile', False):
@@ -422,7 +423,10 @@ class TNTDataset(Dataset):
             # Average overlapping regions
             mask = weights > 0
             stitched[mask] /= weights[mask]
-            
+        
+            # Linear stretch
+            stitched = (stitched - stitched.min()) / (stitched.max() - stitched.min())
+            stitched *= 1
             stitched_results[img_idx] = stitched
             
             # Save if output path is provided

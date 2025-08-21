@@ -91,7 +91,7 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     with torch.no_grad():
         for batch_data in tqdm(dataloader, desc="Inference"):
             batch, meta = batch_data  # Unpack (volume, metadata)
-            batch = batch.to(device)
+            batch = batch.to(device)[:, np.newaxis, ...]  # Add channel
             
             outputs = model(batch)
             probs = torch.sigmoid(outputs).detach().cpu().numpy()
@@ -99,7 +99,8 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
             # Store predictions and metadata for stitching
             for i in range(probs.shape[0]):
                 predictions.append(probs[i, 0])  # Remove channel dimension
-                metadata.append(meta[i])
+                # Extract the i-th value for each key in meta and store as a flat dict
+                metadata.append({k: v[i] for k, v in meta.items()})
 
     logger.info("Inference complete")
     
