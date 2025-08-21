@@ -8,7 +8,8 @@ echo "Setting time limit to $(($TIME / 3600)) hours"
 ulimit -t $TIME
 
 # INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/splitannotations90v2/" 
-INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21"
+# INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21"
+INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
 OUTPUT_FOLDER="./output-training"
 EPOCHS=250
 WORKERS=4
