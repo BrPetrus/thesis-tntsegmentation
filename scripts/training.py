@@ -269,7 +269,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
         nn.train()
         epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder=output_folder)
             
-        TP, FP, FN, TN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
+        TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
         # Calculate metrics
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
         precision = tntmetrics.precision(TP, FP)
