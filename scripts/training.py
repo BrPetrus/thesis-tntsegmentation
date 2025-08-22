@@ -56,7 +56,7 @@ class Config:
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
     weight_decay: float = 0.0  # Add this line
-    crop_size: Tuple[int, int, int] = (7, 80, 80)
+    crop_size: Tuple[int, int, int] = (7, 32, 32)
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
