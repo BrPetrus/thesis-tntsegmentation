@@ -15,9 +15,9 @@ INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-
 OUTPUT_FOLDER="./output-training"
 EPOCHS=500
 WORKERS=4
-BATCH=16
+BATCH=8
 MLFLOW_SERVER_PORT=8000
-LR=0.0005
+LR=0.001
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
