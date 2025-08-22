@@ -9,11 +9,12 @@ ulimit -t $TIME
 
 # INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/splitannotations90v2/" 
 # INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21"
-INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
+# INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
+INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad2-norandomtest"
 OUTPUT_FOLDER="./output-training"
 EPOCHS=500
 WORKERS=4
-BATCH=8
+BATCH=16
 MLFLOW_SERVER_PORT=8000
 LR=0.001
 
