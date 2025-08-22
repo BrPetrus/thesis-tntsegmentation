@@ -130,7 +130,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
-        A.Rotate(),
+        # A.Rotate(),
         A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
