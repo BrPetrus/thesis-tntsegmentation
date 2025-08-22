@@ -131,7 +131,8 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
         A.Rotate(),
-        A.RandomCrop3D(size=(7,64, 64)),
+        # A.RandomCrop3D(size=(7,64, 64)),
+        A.CenterCrop3D(size=(7,64,64)),  # TODO: is this okay?
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
