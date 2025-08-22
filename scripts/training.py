@@ -35,6 +35,7 @@ class Config:
     shuffle: bool
     device: str
     input_folder: str
+    seed: int = 42
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
@@ -129,13 +130,14 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         ),
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
-        A.RandomBrightnessContrast(p=0.5),
-        A.Rotate(limit=45, p=0.5),
-        A.GaussianBlur(blur_limit=(3, 7), p=0.3),
+        # A.RandomBrightnessContrast(p=0.5),
+        A.Rotate(),
+        # A.Rotate(limit=45, p=0.5),
+        # A.GaussianBlur(blur_limit=(3, 7), p=0.3),
         # A.GaussNoise(var_limit=(0.001, 0.01), p=0.3),
         # A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.2),
         # A.GridDistortion(num_steps=5, distort_limit=0.3, p=0.2),
-        A.RandomGamma(p=0.3),
+        # A.RandomGamma(p=0.3),
         A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
@@ -568,7 +570,7 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
@@ -584,7 +586,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     # Prepare dataloaders
-    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, seed) 
+    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed) 
     
     # Get test_x and transform_test for quadrant testing
     input_folder_test = input_folder / "test"
@@ -659,10 +661,11 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
+        seed=args.seed
     )
 
     # Run training
-    main(args.input_folder, args.output_folder, logger, args.seed, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
+    main(args.input_folder, args.output_folder, logger, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
 
 
 

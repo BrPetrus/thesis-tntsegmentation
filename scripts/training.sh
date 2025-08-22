@@ -18,6 +18,7 @@ WORKERS=4
 BATCH=16
 MLFLOW_SERVER_PORT=8000
 LR=0.001
+SEED=42
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
@@ -26,6 +27,7 @@ nice -n 19 python training.py \
     --num_workers ${WORKERS} \
     --batch_size ${BATCH} \
     --mlflow_port ${MLFLOW_SERVER_PORT} \
-    --lr ${LR}
+    --lr ${LR} \
+    --seed ${SEED}
 
 
