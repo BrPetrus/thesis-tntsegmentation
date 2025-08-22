@@ -17,7 +17,7 @@ EPOCHS=500
 WORKERS=4
 BATCH=16
 MLFLOW_SERVER_PORT=8000
-LR=0.005
+LR=0.0005
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
