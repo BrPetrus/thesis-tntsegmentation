@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 TIME=$((10*3600))
