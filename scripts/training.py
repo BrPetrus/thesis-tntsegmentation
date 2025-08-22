@@ -56,6 +56,7 @@ class Config:
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
     weight_decay: float = 0.0  # Add this line
+    crop_size = (7, 80, 80)
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -133,7 +134,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
         A.Rotate(),
-        A.RandomCrop3D(size=(7,64, 64)),
+        A.RandomCrop3D(size=config.crop_size),
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
@@ -143,7 +144,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
             max_pixel_value=1.0,
             p=1.0
         ),
-        A.CenterCrop3D(size=(7,64,64)),  # TODO: is this okay?
+        A.CenterCrop3D(size=config.crop_size),  # TODO: is this okay?
         A.ToTensor3D()
     ])
 
@@ -593,7 +594,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
             max_pixel_value=1.0,
             p=1.0
         ),
-        A.CenterCrop3D(size=(7,64,64)),
+        A.CenterCrop3D(size=config.crop_size),
         A.ToTensor3D()
     ])
 
