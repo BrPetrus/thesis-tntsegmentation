@@ -55,6 +55,7 @@ class Config:
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
+    weight_decay: float = 0.0  # Add this line
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -132,12 +133,6 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
         A.Rotate(),
-        # A.Rotate(limit=45, p=0.5),
-        # A.GaussianBlur(blur_limit=(3, 7), p=0.3),
-        # A.GaussNoise(var_limit=(0.001, 0.01), p=0.3),
-        # A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.2),
-        # A.GridDistortion(num_steps=5, distort_limit=0.3, p=0.2),
-        # A.RandomGamma(p=0.3),
         A.RandomCrop3D(size=(7,64, 64)),
         A.ToTensor3D()
     ])
@@ -274,7 +269,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
 
     for epoch in range(config.epochs):
         nn.train()
-        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder=output_folder)
+        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder)
             
         TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
         # Calculate metrics
@@ -570,7 +565,7 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
@@ -604,7 +599,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     # Create net
     nn = UNet3d(1, 1).to(config.device)
-    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
+    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = create_loss_criterion(config)
 
     # MLFlow
@@ -642,7 +637,9 @@ if __name__ == "__main__":
                         help="Port of the MLFlow server")
     parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
                       help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
-    
+    parser.add_argument("--weight_decay", type=float, default=0.0,
+                      help="Weight decay (L2 penalty) for the optimizer. Default: 0.0")
+
     args = parser.parse_args()
 
     # Set up logging
@@ -661,7 +658,8 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
-        seed=args.seed
+        seed=args.seed,
+        weight_decay=args.weight_decay,
     )
 
     # Run training

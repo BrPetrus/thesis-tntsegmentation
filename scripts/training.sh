@@ -19,6 +19,7 @@ BATCH=16
 MLFLOW_SERVER_PORT=8000
 LR=0.001
 SEED=42
+WEIGHT_DECAY=1e-5
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
@@ -29,5 +30,6 @@ nice -n 19 python training.py \
     --mlflow_port ${MLFLOW_SERVER_PORT} \
     --lr ${LR} \
     --seed ${SEED}
+    --weight_decay ${WEIGHT_DECAY}
 
 
