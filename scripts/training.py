@@ -43,12 +43,12 @@ class Config:
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
-    cross_entropy_loss_weight: float = 0.5
+    cross_entropy_loss_weight: float = 0.8
     ce_use_weights: bool = True
     ce_pos_weight: float  = ((3602171+67845) / 67845.) # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
-    dice_loss_weight: float = 0.5
+    dice_loss_weight: float = 0.2
     use_focal_tversky_loss: bool = False
     focal_tversky_loss_weight: float = 1.0
     train_focal_tversky_alpha: float = 0.8
