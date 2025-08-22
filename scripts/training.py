@@ -130,9 +130,13 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.5),
-        A.Rotate(),
+        A.Rotate(limit=45, p=0.5),
         A.RandomCrop3D(size=(7,64, 64)),
-        # A.CenterCrop3D(size=(7,64,64)),  # TODO: is this okay?
+        A.GaussianBlur(blur_limit=(3, 7), p=0.3),
+        A.GaussNoise(var_limit=(0.001, 0.01), p=0.3),
+        A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.2),
+        A.GridDistortion(num_steps=5, distort_limit=0.3, p=0.2),
+        A.RandomGamma(p=0.3),
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
