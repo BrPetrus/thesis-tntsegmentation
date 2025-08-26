@@ -35,25 +35,28 @@ class Config:
     shuffle: bool
     device: str
     input_folder: str
+    seed: int = 42
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
-    notimprovement_tolerance: int = 100
+    notimprovement_tolerance: int = 50
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
-    cross_entropy_loss_weight: float = 0.6
+    cross_entropy_loss_weight: float = 0.4
     ce_use_weights: bool = True
-    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 2. # Negative/positive ratio to penalize
+    ce_pos_weight: float  = ((3602171) / 67845.) / 4. # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
-    dice_loss_weight: float = 0.4
+    dice_loss_weight: float = 0.6
     use_focal_tversky_loss: bool = False
     focal_tversky_loss_weight: float = 1.0
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
+    weight_decay: float = 0.0  # Add this line
+    crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -131,7 +134,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         A.VerticalFlip(p=0.5),
         # A.RandomBrightnessContrast(p=0.5),
         A.Rotate(),
-        A.RandomCrop3D(size=(7,64, 64)),
+        A.RandomCrop3D(size=config.crop_size),
         A.ToTensor3D()
     ])
     transform_test = A.Compose([
@@ -141,7 +144,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
             max_pixel_value=1.0,
             p=1.0
         ),
-        A.CenterCrop3D(size=(7,64,64)),  # TODO: is this okay?
+        A.CenterCrop3D(size=config.crop_size),  # TODO: is this okay?
         A.ToTensor3D()
     ])
 
@@ -267,7 +270,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
 
     for epoch in range(config.epochs):
         nn.train()
-        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder=output_folder)
+        epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder)
             
         TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
         # Calculate metrics
@@ -563,7 +566,7 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
@@ -579,7 +582,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     # Prepare dataloaders
-    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, seed) 
+    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed) 
     
     # Get test_x and transform_test for quadrant testing
     input_folder_test = input_folder / "test"
@@ -591,13 +594,13 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
             max_pixel_value=1.0,
             p=1.0
         ),
-        A.CenterCrop3D(size=(7,64,64)),
+        A.CenterCrop3D(size=config.crop_size),
         A.ToTensor3D()
     ])
 
     # Create net
     nn = UNet3d(1, 1).to(config.device)
-    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
+    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = create_loss_criterion(config)
 
     # MLFlow
@@ -635,7 +638,9 @@ if __name__ == "__main__":
                         help="Port of the MLFlow server")
     parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
                       help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
-    
+    parser.add_argument("--weight_decay", type=float, default=0.0,
+                      help="Weight decay (L2 penalty) for the optimizer. Default: 0.0")
+
     args = parser.parse_args()
 
     # Set up logging
@@ -654,10 +659,12 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
+        seed=args.seed,
+        weight_decay=args.weight_decay,
     )
 
     # Run training
-    main(args.input_folder, args.output_folder, logger, args.seed, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
+    main(args.input_folder, args.output_folder, logger, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
 
 
 
