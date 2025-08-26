@@ -614,8 +614,8 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     criterion = create_loss_criterion(config)
 
     # MLFlow
-    with mlflow.start_run():
-        mlflow.set_tag("mlflow.nn_name", config.neural_network)
+    with mlflow.start_run() as run:
+        mlflow.set_tag("nn_name", str(config.neural_network))
         mlflow.log_params(config.__dict__)
 
         # Run training
