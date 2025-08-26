@@ -35,6 +35,7 @@ class AnisotropicUNet3D(nn.Module):
         self.n_channels_in = n_channels_in
         self.n_classes_out = n_classes_out
         self.depth = depth
+        print(f"Using depth={self.depth}")
 
         # Generate channel configurations
         down_channels = []
