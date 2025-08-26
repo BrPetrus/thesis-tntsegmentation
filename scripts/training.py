@@ -39,7 +39,7 @@ class Config:
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
-    notimprovement_tolerance: int = 100
+    notimprovement_tolerance: int = 30
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
@@ -322,6 +322,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
     if 'best_model_weights' in locals():
         nn.load_state_dict(best_model_weights)
         logger.info("Loaded best model weights from training.")
+    mlflow.log_metric("epochs_trained", epoch)
 
 def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
