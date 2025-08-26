@@ -322,7 +322,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
     if 'best_model_weights' in locals():
         nn.load_state_dict(best_model_weights)
         logger.info("Loaded best model weights from training.")
-    mlflow.log_metric("epochs_trained", epoch)
+    mlflow.log_metric("epochs_trained", epoch-epochs_since_last_improvement)
 
 def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
