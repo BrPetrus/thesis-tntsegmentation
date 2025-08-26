@@ -3,6 +3,7 @@ import pandas as pd
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 from tntseg.nn.models.unet3d_basic import UNet3d
+from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 import numpy as np
 import torch
 import torch.nn as nn
@@ -54,6 +55,7 @@ class Config:
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
+    neural_network: str = "AnisotropicUNetV0"
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -80,6 +82,16 @@ def create_loss_criterion(config: Config) -> nn.Module:
             ))
         weights.append(config.focal_tversky_loss_weight)
     return CombinedLoss(loss_functions, weights)
+
+
+def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
+    match config.neural_network:
+        case 'AnisotropicUNetV0':
+            return AnisotropicUNet3D(in_channels, out_channels)
+        case 'BasicUNetV1':
+            return UNet3d(in_channels, out_channels)
+        case _:
+            raise ValueError(f"Unknown model type 'config.neural_network'")
 
 
 class CombinedLoss(nn.Module):
@@ -596,12 +608,14 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     ])
 
     # Create net
-    nn = UNet3d(1, 1).to(config.device)
+    # nn = UNet3d(1, 1).to(config.device)
+    nn = create_neural_network(config, 1, 1).to(config.device)
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
     criterion = create_loss_criterion(config)
 
     # MLFlow
     with mlflow.start_run():
+        mlflow.set_tag("mlflow.nn_name", config.neural_network)
         mlflow.log_params(config.__dict__)
 
         # Run training
@@ -635,7 +649,8 @@ if __name__ == "__main__":
                         help="Port of the MLFlow server")
     parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
                       help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
-    
+    parser.add_argument("--model", type=str, choices=["AnisotropicUNetV0", "BasicUNetV1"], default="AnisotropicUNetV0",
+                        help="Model architecture to use (AnisotropicUNetV0 or BasicUNetV1)")
     args = parser.parse_args()
 
     # Set up logging
@@ -654,6 +669,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
+        neural_network=args.model
     )
 
     # Run training

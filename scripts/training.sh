@@ -16,6 +16,7 @@ WORKERS=4
 BATCH=64
 MLFLOW_SERVER_PORT=8000
 LR=0.0025
+MODEL=BasicUNetV1
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
@@ -24,6 +25,7 @@ nice -n 19 python training.py \
     --num_workers ${WORKERS} \
     --batch_size ${BATCH} \
     --mlflow_port ${MLFLOW_SERVER_PORT} \
-    --lr ${LR}
+    --lr ${LR} \
+    --model ${MODEL}
 
 
