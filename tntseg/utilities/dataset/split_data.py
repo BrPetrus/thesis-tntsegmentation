@@ -586,7 +586,8 @@ def main(
     min_size: List[int], 
     train_quad: int,
     overwrite: bool = False, 
-    num_random_crops: int = 0,
+    num_random_crops_train: int = 0,
+    num_random_crops_test: int = 0,
     overlap_threshold: float = 0.5
 ) -> None:
     """
@@ -598,7 +599,8 @@ def main(
         min_size: Minimum patch size [z, rows, cols]
         train_quad: Quadrant to use for training (1-4)
         overwrite: Whether to overwrite existing output
-        num_random_crops: Number of random crops to add
+        num_random_crops_train: Number of random crops to add to the training set
+        num_random_crops_test: Number of random crops to add to the testing set
         overlap_threshold: Threshold for determining if a tunnel is in the training quadrant
     """
     if len(min_size) != 3:
@@ -653,7 +655,7 @@ def main(
         min_size=tuple(min_size), 
         train_quad=train_quad,
         overlap_threshold=overlap_threshold,
-        num_random_crops=num_random_crops
+        num_random_crops=num_random_crops_train
     )
     
     # Extract testing patches
@@ -662,7 +664,7 @@ def main(
         min_size=tuple(min_size),
         train_quad=train_quad,
         overlap_threshold=overlap_threshold,
-        num_random_crops=num_random_crops
+        num_random_crops=num_random_crops_test
     )
     
     # Save training patches
@@ -770,7 +772,8 @@ if __name__ == "__main__":
     parser.add_argument('--min_size', type=int, nargs=3, metavar=('MIN_Z', 'MIN_Y', 'MIN_X'),
                         default=[7, 32, 32],
                         help="Minimum size (z, y, x) for each patch.")
-    parser.add_argument("--random_crops", type=int, default=0, help="Number of random crops to add.")
+    parser.add_argument("--random_crops_train", type=int, default=0, help="Number of random crops to add to the training set.")
+    parser.add_argument("--random_crops_test", type=int, default=0, help="Number of random crops to add to the testing set.")
     parser.add_argument("--overlap_threshold", type=float, default=0.5, 
                         help="Threshold for determining if a tunnel is in the training quadrant.")
     

@@ -9,27 +9,30 @@ ulimit -t $TIME
 
 # INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/splitannotations90v2/" 
 # INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21"
-# INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
+INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
 INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad2-norandomtest"
-# INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad2-norandom"
-OUTPUT_FOLDER="./output-training"
-EPOCHS=500
+OUTPUT_FOLDER="./output-training-$(date +%Y-%m-%d_%H-%M-%S)"
+EPOCHS=250
 WORKERS=4
 BATCH=16
 MLFLOW_SERVER_PORT=8000
 LR=0.0005
+MODEL=AnisotropicUNetV0
 SEED=42
+MODEL_DEPTH=4
 WEIGHT_DECAY=0.0001
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
     "${OUTPUT_FOLDER}" \
-    --epochs ${EPOCHS} \
-    --num_workers ${WORKERS} \
-    --batch_size ${BATCH} \
-    --mlflow_port ${MLFLOW_SERVER_PORT} \
-    --lr ${LR} \
-    --seed ${SEED}
-    --weight_decay ${WEIGHT_DECAY}
+    --epochs "${EPOCHS}" \
+    --num_workers "${WORKERS}" \
+    --batch_size "${BATCH}" \
+    --mlflow_port "${MLFLOW_SERVER_PORT}" \
+    --lr "${LR}" \
+    --model "${MODEL}" \
+    --seed "${SEED}" \
+    --model_depth "${MODEL_DEPTH}" \
+    --weight_decay "${WEIGHT_DECAY}" \
 
 

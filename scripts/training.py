@@ -3,6 +3,7 @@ import pandas as pd
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 from tntseg.nn.models.unet3d_basic import UNet3d
+from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 import numpy as np
 import torch
 import torch.nn as nn
@@ -39,14 +40,14 @@ class Config:
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
     test_size: float = 1/3
-    notimprovement_tolerance: int = 50
+    notimprovement_tolerance: int = 30
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.4
     ce_use_weights: bool = True
-    ce_pos_weight: float  = ((3602171) / 67845.) / 4. # Negative/positive ratio to penalize
+    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 1. # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.6
@@ -55,7 +56,12 @@ class Config:
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
-    weight_decay: float = 0.0  # Add this line
+    neural_network: str = "AnisotropicUNetV0"
+    seed: int = 42
+    weight_decay: float = 0.0001
+    model_depth: int = 3 
+    base_channels: int = 64
+    channel_growth: int = 2
     crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 def create_loss_criterion(config: Config) -> nn.Module:
@@ -83,6 +89,16 @@ def create_loss_criterion(config: Config) -> nn.Module:
             ))
         weights.append(config.focal_tversky_loss_weight)
     return CombinedLoss(loss_functions, weights)
+
+
+def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
+    match config.neural_network:
+        case 'AnisotropicUNetV0':
+            return AnisotropicUNet3D(in_channels, out_channels, depth=config.model_depth, base_channels=config.base_channels, channel_growth=config.channel_growth)
+        case 'BasicUNetV1':
+            return UNet3d(in_channels, out_channels)
+        case _:
+            raise ValueError(f"Unknown model type 'config.neural_network'")
 
 
 class CombinedLoss(nn.Module):
@@ -313,6 +329,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
     if 'best_model_weights' in locals():
         nn.load_state_dict(best_model_weights)
         logger.info("Loaded best model weights from training.")
+    mlflow.log_metric("epochs_trained", epoch-epochs_since_last_improvement)
 
 def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
@@ -599,13 +616,19 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     ])
 
     # Create net
-    nn = UNet3d(1, 1).to(config.device)
+    # nn = UNet3d(1, 1).to(config.device)
+    nn = create_neural_network(config, 1, 1).to(config.device)
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = create_loss_criterion(config)
 
     # MLFlow
-    with mlflow.start_run():
+    with mlflow.start_run() as run:
+        mlflow.set_tag("nn_name", str(config.neural_network))
         mlflow.log_params(config.__dict__)
+        mlflow.log_param("model_depth", config.model_depth)
+        mlflow.log_param("base_channels", config.base_channels)
+        mlflow.log_param("channel_growth", config.channel_growth)
+        mlflow.set_tag("model_type", f"AnisotropicUNet3D_d{config.model_depth}")
 
         # Run training
         _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
@@ -638,6 +661,14 @@ if __name__ == "__main__":
                         help="Port of the MLFlow server")
     parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
                       help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
+    parser.add_argument("--model", type=str, choices=["AnisotropicUNetV0", "BasicUNetV1"], default="AnisotropicUNetV0",
+                        help="Model architecture to use (AnisotropicUNetV0 or BasicUNetV1)")
+    parser.add_argument("--model_depth", type=int, default=3,
+                  help="Depth of the UNet model (number of down/up sampling blocks)")
+    parser.add_argument("--base_channels", type=int, default=64,
+                  help="Number of channels in the first layer")
+    parser.add_argument("--channel_growth", type=int, default=2,
+                  help="Factor to multiply channels by at each depth")
     parser.add_argument("--weight_decay", type=float, default=0.0,
                       help="Weight decay (L2 penalty) for the optimizer. Default: 0.0")
 
@@ -659,6 +690,10 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
+        neural_network=args.model,
+        model_depth=args.model_depth,
+        base_channels=args.base_channels,
+        channel_growth=args.channel_growth,
         seed=args.seed,
         weight_decay=args.weight_decay,
     )
