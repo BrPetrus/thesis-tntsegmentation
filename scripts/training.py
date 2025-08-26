@@ -57,6 +57,7 @@ class Config:
     train_focal_tversky_gamma: float = 2
     neural_network: str = "AnisotropicUNetV0"
     seed: int = 42
+    weight_decay: float = 0.0001
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -612,7 +613,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     # Create net
     # nn = UNet3d(1, 1).to(config.device)
     nn = create_neural_network(config, 1, 1).to(config.device)
-    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr)
+    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = create_loss_criterion(config)
 
     # MLFlow
