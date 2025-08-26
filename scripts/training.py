@@ -676,7 +676,7 @@ if __name__ == "__main__":
     )
 
     # Run training
-    main(args.input_folder, args.output_folder, logger, args.seed, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
+    main(args.input_folder, args.output_folder, logger, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
 
 
 
