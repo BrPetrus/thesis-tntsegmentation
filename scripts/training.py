@@ -92,15 +92,7 @@ def create_loss_criterion(config: Config) -> nn.Module:
 def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
     match config.neural_network:
         case 'AnisotropicUNetV0':
-            # New code using the factory
-            model_config = {
-                'n_channels_in': 1,
-                'n_classes_out': 1,
-                'depth': config.model_depth,  # Add this to your Config class
-                'base_channels': config.base_channels,  # Add this to your Config class
-                'channel_growth': config.channel_growth  # Add this to your Config class
-            }
-            return AnisotropicUNet3D(in_channels, out_channels)
+            return AnisotropicUNet3D(in_channels, out_channels, depth=config.model_depth, base_channels=config.base_channels, channel_growth=config.channel_growth)
         case 'BasicUNetV1':
             return UNet3d(in_channels, out_channels)
         case _:
