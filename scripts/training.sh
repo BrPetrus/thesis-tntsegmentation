@@ -19,7 +19,7 @@ MLFLOW_SERVER_PORT=8000
 LR=0.0005
 MODEL=AnisotropicUNetV0
 SEED=42
-MODEL_DEPTH=2
+MODEL_DEPTH=4
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
