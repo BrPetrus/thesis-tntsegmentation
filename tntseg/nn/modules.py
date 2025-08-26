@@ -23,7 +23,7 @@ class HorizontalBlock(nn.Module):
         return self.block(x)
 
 class DownscaleBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel: int | List[int] = 2, stride: Optional[int | List[int]] = None):
+    def __init__(self, kernel: int | List[int] = 2, stride: Optional[int | List[int]] = None):
         super().__init__()
         self.downsample = nn.Sequential(
             nn.MaxPool3d(kernel, stride),

@@ -32,8 +32,6 @@ class AnisotropicUNet3D(nn.Module):
                         stride=horizontal_stride
                     ),
                     DownscaleBlock(
-                        in_channels=64,
-                        out_channels=64,
                         kernel=downscale_kernel,
                         stride=downscale_stride
                     )
