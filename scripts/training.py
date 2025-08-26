@@ -58,6 +58,9 @@ class Config:
     neural_network: str = "AnisotropicUNetV0"
     seed: int = 42
     weight_decay: float = 0.0001
+    model_depth: int = 3  # Added model depth
+    base_channels: int = 64  # Added base channels
+    channel_growth: int = 2  # Added channel growth
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -89,6 +92,14 @@ def create_loss_criterion(config: Config) -> nn.Module:
 def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
     match config.neural_network:
         case 'AnisotropicUNetV0':
+            # New code using the factory
+            model_config = {
+                'n_channels_in': 1,
+                'n_classes_out': 1,
+                'depth': config.model_depth,  # Add this to your Config class
+                'base_channels': config.base_channels,  # Add this to your Config class
+                'channel_growth': config.channel_growth  # Add this to your Config class
+            }
             return AnisotropicUNet3D(in_channels, out_channels)
         case 'BasicUNetV1':
             return UNet3d(in_channels, out_channels)
@@ -620,6 +631,10 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     with mlflow.start_run() as run:
         mlflow.set_tag("nn_name", str(config.neural_network))
         mlflow.log_params(config.__dict__)
+        mlflow.log_param("model_depth", config.model_depth)
+        mlflow.log_param("base_channels", config.base_channels)
+        mlflow.log_param("channel_growth", config.channel_growth)
+        mlflow.set_tag("model_type", f"AnisotropicUNet3D_d{config.model_depth}")
 
         # Run training
         _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
@@ -654,6 +669,12 @@ if __name__ == "__main__":
                       help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
     parser.add_argument("--model", type=str, choices=["AnisotropicUNetV0", "BasicUNetV1"], default="AnisotropicUNetV0",
                         help="Model architecture to use (AnisotropicUNetV0 or BasicUNetV1)")
+    parser.add_argument("--model_depth", type=int, default=3,
+                  help="Depth of the UNet model (number of down/up sampling blocks)")
+    parser.add_argument("--base_channels", type=int, default=64,
+                  help="Number of channels in the first layer")
+    parser.add_argument("--channel_growth", type=int, default=2,
+                  help="Factor to multiply channels by at each depth")
     args = parser.parse_args()
 
     # Set up logging
@@ -673,6 +694,9 @@ if __name__ == "__main__":
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
         neural_network=args.model,
+        model_depth=args.model_depth,
+        base_channels=args.base_channels,
+        channel_growth=args.channel_growth
         
     )
 
