@@ -44,18 +44,19 @@ class Config:
     eval_tversky_beta: float = 0.2
     eval_tversky_gamma: float = 2
     use_cross_entropy: bool = True
-    cross_entropy_loss_weight: float = 0.6
+    cross_entropy_loss_weight: float = 0.4
     ce_use_weights: bool = True
-    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 2. # Negative/positive ratio to penalize
+    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 1. # Negative/positive ratio to penalize
     # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
-    dice_loss_weight: float = 0.4
+    dice_loss_weight: float = 0.6
     use_focal_tversky_loss: bool = False
     focal_tversky_loss_weight: float = 1.0
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
     neural_network: str = "AnisotropicUNetV0"
+    seed: int = 42
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []
@@ -576,7 +577,7 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: int, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
@@ -592,7 +593,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, seed: 
     mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     # Prepare dataloaders
-    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, seed) 
+    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed) 
     
     # Get test_x and transform_test for quadrant testing
     input_folder_test = input_folder / "test"
@@ -670,7 +671,8 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
-        neural_network=args.model
+        neural_network=args.model,
+        
     )
 
     # Run training
