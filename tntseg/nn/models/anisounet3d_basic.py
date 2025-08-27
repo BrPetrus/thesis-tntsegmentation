@@ -99,9 +99,9 @@ class AnisotropicUNet3D(nn.Module):
                     HorizontalBlock(
                         in_channels=in_chann,
                         out_channels=out_chann,
-                        kernel=horizontal_kernel,
+                        kernel=(3,3,3),
                         stride=horizontal_stride,
-                        padding=horizontal_padding
+                        padding=(1,1,1)
                     )
                 ])
             )
