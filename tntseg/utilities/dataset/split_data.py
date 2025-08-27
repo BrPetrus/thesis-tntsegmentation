@@ -1,4 +1,5 @@
 from pathlib import Path
+from matplotlib import pyplot as plt
 import numpy as np
 import os
 import tifffile
@@ -361,6 +362,7 @@ def extract_patches(
     Returns:
         List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples
     """
+    logger.info(f"Overlap threshold set to {overlap_threshold}")
     extracted_patches = []
     patch_stats = {
         'z_max': 0, 'r_max': 0, 'c_max': 0,
@@ -734,6 +736,15 @@ def main(
             # Also save the modified GT showing which objects went where
             tifffile.imwrite(vis_path / f"split_gt_t{t_idx}_z{z}.tif", vis_gt[z])
 
+        # Do a max projection on the original
+        maxproj_img = np.max(gt[t_idx]!=0, axis=0)
+        plt.figure()
+        plt.imshow(maxproj_img, 'gray')
+        plt.imshow(np.max(vis_img, axis=0), alpha=0.5)
+        plt.savefig(vis_path / f"t{t_idx}.png", dpi=300)
+        plt.show()
+        
+
     # Create separate visualization for random crops
     logger.info("Creating visualization of random crops")
     rand_vis_path = output_folder_path / "random_crops_vis"
@@ -774,7 +785,7 @@ if __name__ == "__main__":
                         help="Minimum size (z, y, x) for each patch.")
     parser.add_argument("--random_crops_train", type=int, default=0, help="Number of random crops to add to the training set.")
     parser.add_argument("--random_crops_test", type=int, default=0, help="Number of random crops to add to the testing set.")
-    parser.add_argument("--overlap_threshold", type=float, default=0.5, 
+    parser.add_argument("--overlap_threshold", type=float, default=0.2, 
                         help="Threshold for determining if a tunnel is in the training quadrant.")
     
     args = parser.parse_args()
