@@ -637,12 +637,26 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
         _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1, test_x, transform_test, quad_idx)
 
         # After training, log the final model
-        mlflow.pytorch.log_model(nn, "model")
+        with torch.no_grad():
+            nn.eval()
+            sample_input = torch.randn(config.batch_size, 1, *config.crop_size).to(config.device)
+            sample_output = nn(sample_input)
 
-        # Also save the model
-        checkpoint_path = output_folder / f"model_final.pth"
-        torch.save(nn.state_dict(), checkpoint_path)
-        logger.info(f"Model checkpoint saved at {checkpoint_path}")
+            # mlflow.pytorch.log_model(nn, "model")
+            mlflow.pytorch.log_model(nn,
+                name="model",
+                input_example=sample_input.cpu().numpy(),
+                signature=mlflow.models.infer_signature(
+                    sample_input.cpu().numpy(),
+                    sample_output.cpu().numpy()
+                )
+            )
+
+
+            # Also save the model
+            checkpoint_path = output_folder / f"model_final.pth"
+            torch.save(nn.state_dict(), checkpoint_path)
+            logger.info(f"Model checkpoint saved at {checkpoint_path}")
 
 if __name__ == "__main__":
     # Create argument parser
