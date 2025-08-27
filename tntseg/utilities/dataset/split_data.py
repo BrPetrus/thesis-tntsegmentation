@@ -588,7 +588,7 @@ def main(
     overwrite: bool = False, 
     num_random_crops_train: int = 0,
     num_random_crops_test: int = 0,
-    overlap_threshold: float = 0.5
+    overlap_threshold: float = 0.5,
 ) -> None:
     """
     Main function to extract and save training and testing patches.
@@ -785,6 +785,7 @@ if __name__ == "__main__":
         args.min_size, 
         args.train_quad,
         args.overwrite, 
-        args.random_crops,
+        args.random_crops_train,
+        args.random_crops_test,
         args.overlap_threshold
     )

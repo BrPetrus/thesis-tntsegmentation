@@ -10,6 +10,7 @@ import albumentations as A
 import os
 
 from tntseg.nn.models.unet3d_basic import UNet3d
+from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 
 DATASET_MEAN = 0.05988
@@ -45,7 +46,7 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
 
     # Prepare the model
     logger.info("Loading model...")
-    model = UNet3d(n_channels_in=1, n_classes_out=1)
+    model = AnisotropicUNet3D(n_channels_in=1, n_classes_out=1, depth=4)
     try:
         model = torch.load(checkpoint_path, map_location=device, weights_only=False)
         # model.load_state_dict(checkpoint)
