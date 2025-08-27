@@ -25,6 +25,7 @@ import tntseg.utilities.metrics.metrics as tntmetrics
 from typing import List, Tuple
 from torch.types import Tensor
 import tntseg.utilities.metrics.metrics_torch as tntloss
+from ast import literal_eval
 
 @dataclass
 class Config:
@@ -62,6 +63,8 @@ class Config:
     model_depth: int = 3 
     base_channels: int = 64
     channel_growth: int = 2
+    horizontal_kernel: Tuple[int, int, int] = (1, 3, 3) 
+    horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
     crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 def create_loss_criterion(config: Config) -> nn.Module:
@@ -94,11 +97,19 @@ def create_loss_criterion(config: Config) -> nn.Module:
 def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
     match config.neural_network:
         case 'AnisotropicUNetV0':
-            return AnisotropicUNet3D(in_channels, out_channels, depth=config.model_depth, base_channels=config.base_channels, channel_growth=config.channel_growth)
+            return AnisotropicUNet3D(
+                in_channels, 
+                out_channels, 
+                depth=config.model_depth, 
+                base_channels=config.base_channels, 
+                channel_growth=config.channel_growth,
+                horizontal_kernel=config.horizontal_kernel,
+                horizontal_padding=config.horizontal_padding
+            )
         case 'BasicUNetV1':
             return UNet3d(in_channels, out_channels)
         case _:
-            raise ValueError(f"Unknown model type 'config.neural_network'")
+            raise ValueError(f"Unknown model type '{config.neural_network}'")
 
 
 class CombinedLoss(nn.Module):
@@ -628,7 +639,9 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
         mlflow.log_param("model_depth", config.model_depth)
         mlflow.log_param("base_channels", config.base_channels)
         mlflow.log_param("channel_growth", config.channel_growth)
-        mlflow.set_tag("model_type", f"AnisotropicUNet3D_d{config.model_depth}")
+        # mlflow.set_tag("model_type", f"AnisotropicUNet3D_d{config.model_depth}")
+        mlflow.log_param("model_type", nn.get_signature())
+
 
         # Run training
         _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
@@ -658,6 +671,16 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
             torch.save(nn.state_dict(), checkpoint_path)
             logger.info(f"Model checkpoint saved at {checkpoint_path}")
 
+def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
+    """Parse comma-separated string into tuple of integers."""
+    try:
+        values = [int(x.strip()) for x in arg_string.split(',')]
+        if len(values) != 3:
+            raise ValueError(f"{arg_name} must have exactly 3 values")
+        return tuple(values)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"Invalid {arg_name}: {arg_string}. {str(e)}")
+
 if __name__ == "__main__":
     # Create argument parser
     parser = argparse.ArgumentParser(description="Training script for neural network.")
@@ -685,8 +708,16 @@ if __name__ == "__main__":
                   help="Factor to multiply channels by at each depth")
     parser.add_argument("--weight_decay", type=float, default=0.0,
                       help="Weight decay (L2 penalty) for the optimizer. Default: 0.0")
+    parser.add_argument("--horizontal_kernel", type=str, default="1,3,3",
+                  help="Horizontal kernel size as comma-separated values (depth,height,width). Default: '1,3,3'")
+    parser.add_argument("--horizontal_padding", type=str, default="0,1,1", 
+                  help="Horizontal padding as comma-separated values (depth,height,width). Default: '0,1,1'")
 
     args = parser.parse_args()
+    
+    # Parse the tuple arguments
+    horizontal_kernel = parse_tuple_arg(args.horizontal_kernel, "horizontal_kernel")
+    horizontal_padding = parse_tuple_arg(args.horizontal_padding, "horizontal_padding")
 
     # Set up logging
     logging.basicConfig(level=logging.INFO)
@@ -708,6 +739,8 @@ if __name__ == "__main__":
         model_depth=args.model_depth,
         base_channels=args.base_channels,
         channel_growth=args.channel_growth,
+        horizontal_kernel=horizontal_kernel,  # Add this
+        horizontal_padding=horizontal_padding,  # Add this
         seed=args.seed,
         weight_decay=args.weight_decay,
     )

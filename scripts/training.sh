@@ -21,6 +21,8 @@ MODEL=AnisotropicUNetV0
 SEED=42
 MODEL_DEPTH=4
 WEIGHT_DECAY=0.0001
+HORIZONTAL_KERNEL="1,3,3"
+HORIZONTAL_PADDING="0,1,1"
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
@@ -34,5 +36,7 @@ nice -n 19 python training.py \
     --seed "${SEED}" \
     --model_depth "${MODEL_DEPTH}" \
     --weight_decay "${WEIGHT_DECAY}" \
+    --horizontal_kernel "${HORIZONTAL_KERNEL}" \
+    --horizontal_padding "${HORIZONTAL_PADDING}"
 
 

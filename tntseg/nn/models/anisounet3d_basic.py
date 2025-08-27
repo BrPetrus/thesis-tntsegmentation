@@ -35,6 +35,7 @@ class AnisotropicUNet3D(nn.Module):
         self.n_channels_in = n_channels_in
         self.n_classes_out = n_classes_out
         self.depth = depth
+        self.horizontal_kernel = horizontal_kernel
         print(f"Using depth={self.depth}")
 
         # Generate channel configurations
@@ -128,6 +129,9 @@ class AnisotropicUNet3D(nn.Module):
             x = hor_block(x)
             
         return self.final_conv(x)
+    
+    def get_signature(self) -> str:
+        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}"
 
 
 def create_anisotropic_unet3d(config):
@@ -185,3 +189,13 @@ if __name__ == "__main__":
     shallow_net = create_anisotropic_unet3d(config)
     print("\nShallower Network:")
     summary(shallow_net, (1, 7, 64, 64))
+
+    # Truly 3D version
+    config['horizontal_kernel'] = (3, 3, 3)
+    config['horizontal_padding'] = (1, 1, 1)
+    config['horizontal_stride'] = (1, 1, 1)
+    config['depth'] = 4
+    deep_3d_net = create_anisotropic_unet3d(config)
+    print("\nDeep truly 3D network")
+    summary(deep_3d_net, (1, 7, 64, 64))
+    print(deep_3d_net.get_signature())
