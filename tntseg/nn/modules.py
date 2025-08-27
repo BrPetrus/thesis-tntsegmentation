@@ -10,11 +10,11 @@ class HorizontalBlock(nn.Module):
         super().__init__()
         self.block = nn.Sequential(
             # conv + batch + relu  * 2
-            nn.Conv3d(in_channels, out_channels, kernel, stride, padding),
+            nn.Conv3d(in_channels, out_channels, kernel, stride, padding, padding_mode="reflect"),
             nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
 
-            nn.Conv3d(out_channels, out_channels, kernel, stride, padding),
+            nn.Conv3d(out_channels, out_channels, kernel, stride, padding, padding_mode="reflect"),
             nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True)
         )
