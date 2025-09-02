@@ -1,4 +1,5 @@
 from turtle import forward
+import monai.transforms
 import pandas as pd
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
@@ -26,6 +27,10 @@ from typing import List, Tuple
 from torch.types import Tensor
 import tntseg.utilities.metrics.metrics_torch as tntloss
 from ast import literal_eval
+# from torchvision.transforms.v2 import ElasticTransform
+import monai
+import monai.transforms as MT
+
 
 @dataclass
 class Config:
@@ -150,29 +155,55 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
     logger.info(f"Train {len(train_x) / total * 100}% Test {len(test_x)/total*100}% Validation {len(valid_x)/total*100}%")
 
     # Define transforms
-    transforms_train = A.Compose([
-        A.Normalize(
-            mean=config.dataset_mean,
-            std=config.dataset_std,
-            max_pixel_value=1.0,
-            p=1.0
+    transforms_train = monai.compose.Compose([
+        # Normalise
+        monai.transforms.NormalizeIntensityd(
+            key=["volume"],
+            subtrahend=config.dataset_mean,
+            divisor=config.dataset_std
         ),
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.5),
-        # A.RandomBrightnessContrast(p=0.5),
-        A.Rotate(),
-        A.RandomCrop3D(size=config.crop_size),
-        A.ToTensor3D()
+        # Random flips
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=0),
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
+
+        # Random rotations
+        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=np.pi/2, range_y=np.pi/2, range_z=np.pi/2),
+
+        # Elastic deformations
+        MT.Rand3DElasticd(
+            keys=['volume', 'mask3d'],
+            sigma_range=(5, 8),
+            magnitude_range=(100, 200),
+            spatial_size=config.crop_size,
+            prob=0.5
+        ),
+
+        # RandomCrop
+        MT.RandCropByPosNegLabeld(
+            keys=['volume', 'mask3d'],
+            label_key='mask3d',
+            spatial_size=config.crop_size,
+            pos=1.,
+            neg=0.25,
+            num_samples=1
+        ),
+
+        # Convert to Tensor
+        MT.ToTensord(keys=['volume', 'mask3d']),
     ])
-    transform_test = A.Compose([
-        A.Normalize(
-            mean=config.dataset_mean,
-            std=config.dataset_std,
-            max_pixel_value=1.0,
-            p=1.0
+
+    transform_test = monai.compose.Compose([
+        MT.NormalizeIntensityd(
+            key=["volume"],
+            subtrahend=config.dataset_mean,
+            divisor=config.dataset_std
         ),
-        A.CenterCrop3D(size=config.crop_size),  # TODO: is this okay?
-        A.ToTensor3D()
+        MT.CenterSpatialCropd(
+            keys=["volume", "mask3d"],
+            roi_size=config.crop_size
+        ),
+        MT.ToTensord(keys=["volume", "mask3d"]),
     ])
 
     # Create datasets
