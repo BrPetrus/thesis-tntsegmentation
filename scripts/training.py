@@ -155,10 +155,10 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
     logger.info(f"Train {len(train_x) / total * 100}% Test {len(test_x)/total*100}% Validation {len(valid_x)/total*100}%")
 
     # Define transforms
-    transforms_train = monai.compose.Compose([
+    transforms_train = MT.Compose([
         # Normalise
         monai.transforms.NormalizeIntensityd(
-            key=["volume"],
+            keys=["volume"],
             subtrahend=config.dataset_mean,
             divisor=config.dataset_std
         ),
@@ -193,9 +193,9 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         MT.ToTensord(keys=['volume', 'mask3d']),
     ])
 
-    transform_test = monai.compose.Compose([
+    transform_test = MT.Compose([
         MT.NormalizeIntensityd(
-            key=["volume"],
+            keys=["volume"],
             subtrahend=config.dataset_mean,
             divisor=config.dataset_std
         ),
