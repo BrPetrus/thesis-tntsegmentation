@@ -200,8 +200,8 @@ def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
-        # Random rotations
-        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
+        # # Random rotations
+        # MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
 
         # Random zoom
         MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.5, min_zoom=0.8, max_zoom=1.5),
