@@ -135,7 +135,7 @@ class CombinedLoss(nn.Module):
             logger.debug(f"{type(loss_fun)} - {loss}")
         return total_loss
 
-def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
+def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
     # Load metadata
     input_folder_train = input_folder / "train"
     if not input_folder_train.exists():
@@ -703,11 +703,9 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     # Prepare dataloaders
-    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed) 
+    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed, config) 
 
     visualize_transform_effects(train_dataloader, num_samples=5, output_folder=output_folder_path / "transform_check")
-
-    return
     
     # Get test_x and transform_test for quadrant testing
     input_folder_test = input_folder / "test"

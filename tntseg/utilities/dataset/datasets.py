@@ -9,6 +9,7 @@ import tifffile
 from typing import Optional, Tuple, List
 import numpy as np
 from numpy.typing import NDArray
+import torch
 
 
 def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) -> pd.DataFrame:
@@ -342,12 +343,12 @@ class TNTDataset(Dataset):
 
         # MONAI compatible dictionary
         sample = {
-            'volume': data[np.newaxis, ...].copy()
+            'volume': torch.tensor(data[np.newaxis, ...], dtype=torch.float32)
         }
         
         if self.load_masks:
             mask = self.mask_data[idx]
-            sample['mask3d'] = mask[np.newaxis, ...].copy()
+            sample['mask3d'] = torch.tensor(mask[np.newaxis, ...], dtype=torch.float32)
             transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], transformed['mask3d'], self.tile_metadata[idx]
