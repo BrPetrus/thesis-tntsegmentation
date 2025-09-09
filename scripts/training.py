@@ -168,7 +168,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
         # Random rotations
-        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=np.pi/2, range_y=np.pi/2, range_z=np.pi/2),
+        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
 
         # Elastic deformations
         MT.Rand3DElasticd(
@@ -189,7 +189,11 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         #     num_samples=1
         # ),
         
-        MT.CenterSpatialCropd(
+        # MT.CenterSpatialCropd(
+        #     keys=['volume', 'mask3d'],
+        #     roi_size=config.crop_size
+        # ),
+        MT.RandSpatialCropd(
             keys=['volume', 'mask3d'],
             roi_size=config.crop_size
         ),
