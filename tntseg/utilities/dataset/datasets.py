@@ -10,6 +10,7 @@ from typing import Optional, Tuple, List
 import numpy as np
 from numpy.typing import NDArray
 import torch
+import time
 
 
 def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) -> pd.DataFrame:
@@ -337,6 +338,13 @@ class TNTDataset(Dataset):
     def __getitem__(self, idx: int):
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")
+
+        # Use a combination of the current time and the sample index to ensure uniqueness
+        seed = int(time.time() * 1000) % (2**32) + idx
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        from monai.data.utils import set_determinism
+        set_determinism(seed=seed)
         
         data = self.data[idx]
         data = (data - data.min()) / (data.max() - data.min())
