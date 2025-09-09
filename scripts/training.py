@@ -170,14 +170,14 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         # Random rotations
         MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
 
-        # Elastic deformations
-        MT.Rand3DElasticd(
-            keys=['volume', 'mask3d'],
-            sigma_range=(5, 8),
-            magnitude_range=(100, 200),
-            spatial_size=config.crop_size,
-            prob=0.5
-        ),
+        # # Elastic deformations
+        # MT.Rand3DElasticd(
+        #     keys=['volume', 'mask3d'],
+        #     sigma_range=(5, 8),
+        #     magnitude_range=(100, 200),
+        #     spatial_size=config.crop_size,
+        #     prob=0.5
+        # ),
 
         # # RandomCrop
         # MT.RandCropByPosNegLabeld(
