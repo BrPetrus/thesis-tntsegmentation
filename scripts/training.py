@@ -168,10 +168,10 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
         # Random rotations
-        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
+        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.8, range_x=0, range_y=0, range_z=np.pi/2),
 
         # Random zoom
-        MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.5, min_zoom=0.8, max_zoom=1.5),
+        MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.8, min_zoom=0.8, max_zoom=1.5),
 
         # # Elastic deformations
         # MT.Rand3DElasticd(
