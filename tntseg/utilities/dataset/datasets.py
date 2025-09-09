@@ -345,6 +345,7 @@ class TNTDataset(Dataset):
         np.random.seed(seed)
         torch.manual_seed(seed)
         set_determinism(seed=seed)
+        self.transforms.set_random_state(seed)
         
         data = self.data[idx]
         data = (data - data.min()) / (data.max() - data.min())
