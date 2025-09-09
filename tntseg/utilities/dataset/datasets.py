@@ -215,7 +215,7 @@ class TNTDataset(Dataset):
             
             for i in range(n_h):
                 for j in range(n_w):
-                    # Calculate tile coordinates
+                    # Calculate tile coordinates/print
                     start_h = min(i * step_h, h - th)
                     start_w = min(j * step_w, w - tw)
                     
@@ -342,14 +342,12 @@ class TNTDataset(Dataset):
             'volume': data[np.newaxis, ...]
         }
         
-        print(f"shape before transforms is {data.shape}")
         if self.load_masks:
             mask = self.mask_data[idx]
             sample['mask3d'] = mask[np.newaxis, ...]
             transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], transformed['mask3d'], self.tile_metadata[idx]
-            print(f"shape after transforms is {transformed['volume'].shape}")
             return transformed['volume'], transformed['mask3d']
         else:
             transformed = self.transforms(sample)
