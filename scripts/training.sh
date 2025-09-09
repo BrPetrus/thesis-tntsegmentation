@@ -13,7 +13,7 @@ ulimit -t $TIME
 INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad1-norandomtest"
 OUTPUT_FOLDER="./output-training-$(date +%Y-%m-%d_%H-%M-%S)"
 EPOCHS=250
-WORKERS=4
+WORKERS=0
 BATCH=32
 MLFLOW_SERVER_PORT=8000
 LR=0.0005
