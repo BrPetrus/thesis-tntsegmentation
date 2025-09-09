@@ -336,15 +336,23 @@ class TNTDataset(Dataset):
         
         data = self.data[idx]
         data = (data - data.min()) / (data.max() - data.min())
+
+        # MONAI compatible dictionary
+        sample = {
+            'volume': data[np.newaxis, ...]
+        }
         
+        print(f"shape before transforms is {data.shape}")
         if self.load_masks:
             mask = self.mask_data[idx]
-            transformed = self.transforms(volume=data, mask3d=mask)
+            sample['mask3d'] = mask[np.newaxis, ...]
+            transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], transformed['mask3d'], self.tile_metadata[idx]
+            print(f"shape after transforms is {transformed['volume'].shape}")
             return transformed['volume'], transformed['mask3d']
         else:
-            transformed = self.transforms(volume=data)
+            transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], self.tile_metadata[idx]
             return transformed['volume']

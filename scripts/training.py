@@ -179,14 +179,19 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
             prob=0.5
         ),
 
-        # RandomCrop
-        MT.RandCropByPosNegLabeld(
+        # # RandomCrop
+        # MT.RandCropByPosNegLabeld(
+        #     keys=['volume', 'mask3d'],
+        #     label_key='mask3d',
+        #     spatial_size=config.crop_size,
+        #     pos=1.,
+        #     neg=0.25,
+        #     num_samples=1
+        # ),
+        
+        MT.CenterSpatialCropd(
             keys=['volume', 'mask3d'],
-            label_key='mask3d',
-            spatial_size=config.crop_size,
-            pos=1.,
-            neg=0.25,
-            num_samples=1
+            roi_size=config.crop_size
         ),
 
         # Convert to Tensor
@@ -200,10 +205,12 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
             divisor=config.dataset_std
         ),
         MT.CenterSpatialCropd(
-            keys=["volume", "mask3d"],
+            keys=['volume', 'mask3d'],
             roi_size=config.crop_size
         ),
-        MT.ToTensord(keys=["volume", "mask3d"]),
+
+        # Convert to Tensor
+        MT.ToTensord(keys=['volume', 'mask3d']),
     ])
 
     # Create datasets
