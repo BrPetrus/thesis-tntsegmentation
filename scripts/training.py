@@ -335,6 +335,45 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
                 logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
     return epoch_loss
 
+def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
+    """Save before/after images to verify transformations are working"""
+    if output_folder:
+        output_path = Path(output_folder)
+        output_path.mkdir(exist_ok=True, parents=True)
+    
+    # Get raw data before transformations
+    dataset = dataloader.dataset
+    transforms_backup = dataset.transforms
+    
+    # Temporarily disable transforms
+    dataset.transforms = MT.Compose([MT.ToTensord(keys=['volume', 'mask3d'])])
+    
+    for i in range(min(num_samples, len(dataset))):
+        # Get original sample without transforms
+        orig_volume, orig_mask = dataset[i]
+        
+        # Restore transforms
+        dataset.transforms = transforms_backup
+        
+        # Get transformed sample
+        trans_volume, trans_mask = dataset[i]
+        
+        # Compare shapes and values
+        print(f"Sample {i}:")
+        print(f"  Original shape: {orig_volume.shape}, Transformed shape: {trans_volume.shape}")
+        print(f"  Original range: {orig_volume.min():.3f}-{orig_volume.max():.3f}, "
+              f"Transformed range: {trans_volume.min():.3f}-{trans_volume.max():.3f}")
+        
+        if output_folder:
+            # Save original and transformed as TIFF for comparison
+            tifffile.imwrite(output_path / f"sample_{i}_original.tiff", 
+                           orig_volume.astype(np.float32))
+            tifffile.imwrite(output_path / f"sample_{i}_transformed.tiff", 
+                           trans_volume.detach().cpu().numpy().astype(np.float32))
+    
+    # Restore transforms
+    dataset.transforms = transforms_backup
+
 def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config, output_folder: Path) -> None:
     # Last time that the eval loss improved
     epochs_since_last_improvement = 0
@@ -639,6 +678,8 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
+
+
 def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
@@ -656,6 +697,10 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     # Prepare dataloaders
     train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed) 
+
+    visualize_transform_effects(train_dataloader, num_samples=5, output_folder=output_folder_path / "transform_check")
+
+    return
     
     # Get test_x and transform_test for quadrant testing
     input_folder_test = input_folder / "test"
