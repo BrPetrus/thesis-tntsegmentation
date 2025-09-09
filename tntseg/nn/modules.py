@@ -13,12 +13,12 @@ class HorizontalBlock(nn.Module):
             nn.Conv3d(in_channels, out_channels, kernel, stride, padding, padding_mode="reflect"),
             nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Dropout3d(p=0.2),
+            # nn.Dropout3d(p=0.2),
 
             nn.Conv3d(out_channels, out_channels, kernel, stride, padding, padding_mode="reflect"),
             nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Dropout3d(p=0.2)
+            # nn.Dropout3d(p=0.2)
         )
     
     def forward(self, x):
