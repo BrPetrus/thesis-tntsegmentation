@@ -11,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 import torch
 import time
+from monai.utils import set_determinism
 
 
 def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) -> pd.DataFrame:
@@ -343,7 +344,6 @@ class TNTDataset(Dataset):
         seed = int(time.time() * 1000) % (2**32) + idx
         np.random.seed(seed)
         torch.manual_seed(seed)
-        from monai.data.utils import set_determinism
         set_determinism(seed=seed)
         
         data = self.data[idx]
