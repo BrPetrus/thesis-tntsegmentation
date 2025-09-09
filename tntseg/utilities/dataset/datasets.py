@@ -340,11 +340,11 @@ class TNTDataset(Dataset):
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")
 
-        # Use a combination of the current time and the sample index to ensure uniqueness
-        seed = int(time.time() * 1000) % (2**32) + idx
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        set_determinism(seed=seed)
+        # # Use a combination of the current time and the sample index to ensure uniqueness
+        # seed = int(time.time() * 1000) % (2**32) + idx
+        # np.random.seed(seed)
+        # torch.manual_seed(seed)
+        # set_determinism(seed=seed)
         
         data = self.data[idx]
         data = (data - data.min()) / (data.max() - data.min())

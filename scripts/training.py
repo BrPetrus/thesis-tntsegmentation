@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import argparse
 import logging
+import random
 import os
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -30,6 +31,7 @@ from ast import literal_eval
 # from torchvision.transforms.v2 import ElasticTransform
 import monai
 import monai.transforms as MT
+from monai.utils import set_determinism
 
 
 @dataclass
@@ -135,6 +137,31 @@ class CombinedLoss(nn.Module):
             logger.debug(f"{type(loss_fun)} - {loss}")
         return total_loss
 
+# import torch
+# import numpy as np
+# import random
+# from monai.utils import set_determinism
+
+def worker_init_fn(worker_id):
+    """
+    Ensures each data loading worker process has a unique random seed.
+
+    Args:
+        worker_id: An integer representing the worker's ID.
+    """
+    # Use PyTorch's `initial_seed()` as a base, as it's unique per DataLoader run
+    # and combines with the worker ID to ensure each worker is seeded differently.
+    worker_seed = torch.initial_seed() % (2**32) + worker_id
+
+    # Set seeds for all relevant libraries
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+    
+    # MONAI's `set_determinism` handles its own internal RNGs.
+    # Setting it here ensures consistency with the other seeds.
+    set_determinism(seed=worker_seed)
+
 def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
     # Load metadata
     input_folder_train = input_folder / "train"
@@ -237,6 +264,7 @@ def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_
         batch_size=config.batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers,
+        worker_init_fn=worker_init_fn
     )
     test_dataloader = DataLoader(
         test_dataset,
