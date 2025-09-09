@@ -157,21 +157,25 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
     # Define transforms
     transforms_train = MT.Compose([
         # Normalise
-        monai.transforms.NormalizeIntensityd(
+        MT.NormalizeIntensityd(
             keys=["volume"],
             subtrahend=config.dataset_mean,
             divisor=config.dataset_std
         ),
+
+        # Random noise
+        MT.RandGaussianNoised(keys=['volume'], prob=0.2, mean=0, std=0.01),
+
         # Random flips
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=0),
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
         # Random rotations
-        # MT.RandRotated(keys=['volume', 'mask3d'], prob=0.8, range_x=0, range_y=0, range_z=np.pi/2),
+        MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
 
         # Random zoom
-        MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.3, min_zoom=0.8, max_zoom=1.5),
+        MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.5, min_zoom=0.8, max_zoom=1.5),
 
         # # Elastic deformations
         # MT.Rand3DElasticd(
@@ -345,10 +349,10 @@ def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
     dataset = dataloader.dataset
     transforms_backup = dataset.transforms
     
-    # Temporarily disable transforms
-    dataset.transforms = MT.Compose([MT.ToTensord(keys=['volume', 'mask3d'])])
     
     for i in range(min(num_samples, len(dataset))):
+        # Temporarily disable transforms
+        dataset.transforms = MT.Compose([MT.ToTensord(keys=['volume', 'mask3d'])])
         # Get original sample without transforms
         orig_volume, orig_mask = dataset[i]
         
@@ -363,6 +367,9 @@ def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
         print(f"  Original shape: {orig_volume.shape}, Transformed shape: {trans_volume.shape}")
         print(f"  Original range: {orig_volume.min():.3f}-{orig_volume.max():.3f}, "
               f"Transformed range: {trans_volume.min():.3f}-{trans_volume.max():.3f}")
+        print(f"  Original mean: {orig_volume.mean():.3f}, std: {orig_volume.std():.3f}"
+              f"Transformed mean: {trans_volume.mean():.3f}, std{trans_volume.std():.3f}")
+              
         
         if output_folder:
             # Save original and transformed as TIFF for comparison

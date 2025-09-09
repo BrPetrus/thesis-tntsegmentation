@@ -129,6 +129,7 @@ class TNTDataset(Dataset):
     
     def _extract_quad(self):
         """Extract a specific quadrant from each image"""
+        raise DeprecationWarning
         for idx, row in self.dataframe.iterrows():
             img = tifffile.imread(row['img_path'])
             if img.dtype != np.uint16:
@@ -176,6 +177,7 @@ class TNTDataset(Dataset):
                 self.mask_data.append(quad_mask)
     
     def _generate_tiles(self):
+        raise DeprecationWarning
         """Generate tiles from full images"""
         if not self.tile_size:
             raise ValueError("tile_size must be specified when tile=True")
@@ -246,6 +248,7 @@ class TNTDataset(Dataset):
 
     def _extract_quad_and_tile(self):
         """Extract a quadrant and then tile it"""
+        raise DeprecationWarning
         if not self.tile_size:
             raise ValueError("tile_size must be specified when tile=True")
             
@@ -339,12 +342,12 @@ class TNTDataset(Dataset):
 
         # MONAI compatible dictionary
         sample = {
-            'volume': data[np.newaxis, ...]
+            'volume': data[np.newaxis, ...].copy()
         }
         
         if self.load_masks:
             mask = self.mask_data[idx]
-            sample['mask3d'] = mask[np.newaxis, ...]
+            sample['mask3d'] = mask[np.newaxis, ...].copy()
             transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], transformed['mask3d'], self.tile_metadata[idx]
