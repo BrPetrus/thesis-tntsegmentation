@@ -156,6 +156,8 @@ def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_
 
     # Define transforms
     transforms_train = MT.Compose([
+        MT.ToMetaTensord(keys=['volume', 'mask3d']),
+
         # Normalise
         MT.NormalizeIntensityd(
             keys=["volume"],
