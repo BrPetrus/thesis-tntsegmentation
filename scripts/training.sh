@@ -12,14 +12,14 @@ ulimit -t $TIME
 # INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
 INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad1-norandomtest"
 OUTPUT_FOLDER="./output-training-$(date +%Y-%m-%d_%H-%M-%S)"
-EPOCHS=250
+EPOCHS=500
 WORKERS=4
 BATCH=32
 MLFLOW_SERVER_PORT=8000
-LR=0.0005
+LR=0.0001
 MODEL=AnisotropicUNetV0
 SEED=42
-MODEL_DEPTH=5
+MODEL_DEPTH=4
 WEIGHT_DECAY=0.0001
 HORIZONTAL_KERNEL="1,3,3"
 HORIZONTAL_PADDING="0,1,1"

@@ -9,6 +9,9 @@ import tifffile
 from typing import Optional, Tuple, List
 import numpy as np
 from numpy.typing import NDArray
+import torch
+import time
+from monai.utils import set_determinism
 
 
 def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) -> pd.DataFrame:
@@ -129,6 +132,7 @@ class TNTDataset(Dataset):
     
     def _extract_quad(self):
         """Extract a specific quadrant from each image"""
+        raise DeprecationWarning
         for idx, row in self.dataframe.iterrows():
             img = tifffile.imread(row['img_path'])
             if img.dtype != np.uint16:
@@ -176,6 +180,7 @@ class TNTDataset(Dataset):
                 self.mask_data.append(quad_mask)
     
     def _generate_tiles(self):
+        raise DeprecationWarning
         """Generate tiles from full images"""
         if not self.tile_size:
             raise ValueError("tile_size must be specified when tile=True")
@@ -215,7 +220,7 @@ class TNTDataset(Dataset):
             
             for i in range(n_h):
                 for j in range(n_w):
-                    # Calculate tile coordinates
+                    # Calculate tile coordinates/print
                     start_h = min(i * step_h, h - th)
                     start_w = min(j * step_w, w - tw)
                     
@@ -246,6 +251,7 @@ class TNTDataset(Dataset):
 
     def _extract_quad_and_tile(self):
         """Extract a quadrant and then tile it"""
+        raise DeprecationWarning
         if not self.tile_size:
             raise ValueError("tile_size must be specified when tile=True")
             
@@ -333,18 +339,31 @@ class TNTDataset(Dataset):
     def __getitem__(self, idx: int):
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")
+
+        # Use a combination of the current time and the sample index to ensure uniqueness
+        seed = int(time.time() * 1000) % (2**32) + idx
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        set_determinism(seed=seed)
+        self.transforms.set_random_state(seed)
         
         data = self.data[idx]
         data = (data - data.min()) / (data.max() - data.min())
+
+        # MONAI compatible dictionary
+        sample = {
+            'volume': torch.tensor(data[np.newaxis, ...], dtype=torch.float32)
+        }
         
         if self.load_masks:
             mask = self.mask_data[idx]
-            transformed = self.transforms(volume=data, mask3d=mask)
+            sample['mask3d'] = torch.tensor(mask[np.newaxis, ...], dtype=torch.float32)
+            transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], transformed['mask3d'], self.tile_metadata[idx]
             return transformed['volume'], transformed['mask3d']
         else:
-            transformed = self.transforms(volume=data)
+            transformed = self.transforms(sample)
             if self.tile or self.quad_mode:
                 return transformed['volume'], self.tile_metadata[idx]
             return transformed['volume']

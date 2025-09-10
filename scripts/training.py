@@ -1,4 +1,5 @@
 from turtle import forward
+import monai.transforms
 import pandas as pd
 import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import argparse
 import logging
+import random
 import os
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -26,6 +28,11 @@ from typing import List, Tuple
 from torch.types import Tensor
 import tntseg.utilities.metrics.metrics_torch as tntloss
 from ast import literal_eval
+# from torchvision.transforms.v2 import ElasticTransform
+import monai
+import monai.transforms as MT
+from monai.utils import set_determinism
+
 
 @dataclass
 class Config:
@@ -130,7 +137,32 @@ class CombinedLoss(nn.Module):
             logger.debug(f"{type(loss_fun)} - {loss}")
         return total_loss
 
-def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
+# import torch
+# import numpy as np
+# import random
+# from monai.utils import set_determinism
+
+def worker_init_fn(worker_id):
+    """
+    Ensures each data loading worker process has a unique random seed.
+
+    Args:
+        worker_id: An integer representing the worker's ID.
+    """
+    # Use PyTorch's `initial_seed()` as a base, as it's unique per DataLoader run
+    # and combines with the worker ID to ensure each worker is seeded differently.
+    worker_seed = torch.initial_seed() % (2**32) + worker_id
+
+    # Set seeds for all relevant libraries
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+    
+    # MONAI's `set_determinism` handles its own internal RNGs.
+    # Setting it here ensures consistency with the other seeds.
+    set_determinism(seed=worker_seed)
+
+def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
     # Load metadata
     input_folder_train = input_folder / "train"
     if not input_folder_train.exists():
@@ -150,29 +182,75 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
     logger.info(f"Train {len(train_x) / total * 100}% Test {len(test_x)/total*100}% Validation {len(valid_x)/total*100}%")
 
     # Define transforms
-    transforms_train = A.Compose([
-        A.Normalize(
-            mean=config.dataset_mean,
-            std=config.dataset_std,
-            max_pixel_value=1.0,
-            p=1.0
+    transforms_train = MT.Compose([
+        MT.ToMetaTensord(keys=['volume', 'mask3d']),
+
+        # Normalise
+        MT.NormalizeIntensityd(
+            keys=["volume"],
+            subtrahend=config.dataset_mean,
+            divisor=config.dataset_std
         ),
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.5),
-        # A.RandomBrightnessContrast(p=0.5),
-        A.Rotate(),
-        A.RandomCrop3D(size=config.crop_size),
-        A.ToTensor3D()
+
+        # Random noise
+        MT.RandGaussianNoised(keys=['volume'], prob=0.2, mean=0, std=0.01),
+
+        # Random flips
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=0),
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
+
+        # # Random rotations
+        # MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
+
+        # Random zoom
+        MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.5, min_zoom=0.8, max_zoom=1.5),
+
+        # # Elastic deformations
+        # MT.Rand3DElasticd(
+        #     keys=['volume', 'mask3d'],
+        #     sigma_range=(5, 8),
+        #     magnitude_range=(100, 200),
+        #     spatial_size=config.crop_size,
+        #     prob=0.5
+        # ),
+
+        # # RandomCrop
+        # MT.RandCropByPosNegLabeld(
+        #     keys=['volume', 'mask3d'],
+        #     label_key='mask3d',
+        #     spatial_size=config.crop_size,
+        #     pos=1.,
+        #     neg=0.25,
+        #     num_samples=1
+        # ),
+        
+        # MT.CenterSpatialCropd(
+        #     keys=['volume', 'mask3d'],
+        #     roi_size=config.crop_size
+        # ),
+        MT.RandSpatialCropd(
+            keys=['volume', 'mask3d'],
+            roi_size=config.crop_size
+        ),
+
+        # Convert to Tensor
+        MT.ToTensord(keys=['volume', 'mask3d']),
     ])
-    transform_test = A.Compose([
-        A.Normalize(
-            mean=config.dataset_mean,
-            std=config.dataset_std,
-            max_pixel_value=1.0,
-            p=1.0
+
+    transform_test = MT.Compose([
+        MT.NormalizeIntensityd(
+            keys=["volume"],
+            subtrahend=config.dataset_mean,
+            divisor=config.dataset_std
         ),
-        A.CenterCrop3D(size=config.crop_size),  # TODO: is this okay?
-        A.ToTensor3D()
+        MT.CenterSpatialCropd(
+            keys=['volume', 'mask3d'],
+            roi_size=config.crop_size
+        ),
+
+        # Convert to Tensor
+        MT.ToTensord(keys=['volume', 'mask3d']),
     ])
 
     # Create datasets
@@ -186,6 +264,7 @@ def _prepare_datasets(input_folder: Path, seed: int, validation_ratio = 1/3.) ->
         batch_size=config.batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers,
+        worker_init_fn=worker_init_fn
     )
     test_dataloader = DataLoader(
         test_dataset,
@@ -289,6 +368,48 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
                 tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
                 logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
     return epoch_loss
+
+def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
+    """Save before/after images to verify transformations are working"""
+    if output_folder:
+        output_path = Path(output_folder)
+        output_path.mkdir(exist_ok=True, parents=True)
+    
+    # Get raw data before transformations
+    dataset = dataloader.dataset
+    transforms_backup = dataset.transforms
+    
+    
+    for i in range(min(num_samples, len(dataset))):
+        # Temporarily disable transforms
+        dataset.transforms = MT.Compose([MT.ToTensord(keys=['volume', 'mask3d'])])
+        # Get original sample without transforms
+        orig_volume, orig_mask = dataset[i]
+        
+        # Restore transforms
+        dataset.transforms = transforms_backup
+        
+        # Get transformed sample
+        trans_volume, trans_mask = dataset[i]
+        
+        # Compare shapes and values
+        print(f"Sample {i}:")
+        print(f"  Original shape: {orig_volume.shape}, Transformed shape: {trans_volume.shape}")
+        print(f"  Original range: {orig_volume.min():.3f}-{orig_volume.max():.3f}, "
+              f"Transformed range: {trans_volume.min():.3f}-{trans_volume.max():.3f}")
+        print(f"  Original mean: {orig_volume.mean():.3f}, std: {orig_volume.std():.3f}"
+              f"Transformed mean: {trans_volume.mean():.3f}, std{trans_volume.std():.3f}")
+              
+        
+        if output_folder:
+            # Save original and transformed as TIFF for comparison
+            tifffile.imwrite(output_path / f"sample_{i}_original.tiff", 
+                           orig_volume.astype(np.float32))
+            tifffile.imwrite(output_path / f"sample_{i}_transformed.tiff", 
+                           trans_volume.detach().cpu().numpy().astype(np.float32))
+    
+    # Restore transforms
+    dataset.transforms = transforms_backup
 
 def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config, output_folder: Path) -> None:
     # Last time that the eval loss improved
@@ -594,6 +715,8 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
             logger.info(f"Quadrant {quad_idx} evaluation complete: "
                        f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
+
+
 def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
@@ -610,7 +733,9 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
 
     # Prepare dataloaders
-    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed) 
+    train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed, config) 
+
+    visualize_transform_effects(train_dataloader, num_samples=5, output_folder=output_folder_path / "transform_check")
     
     # Get test_x and transform_test for quadrant testing
     input_folder_test = input_folder / "test"
