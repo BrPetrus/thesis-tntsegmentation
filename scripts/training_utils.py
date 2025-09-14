@@ -12,12 +12,15 @@ from typing import List, Tuple
 import tntseg.utilities.metrics.metrics_torch as tntloss
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.models.unet3d_basic import UNet3d
+from config import ModelType
+
+import monai.transforms as MT
 
 logger = logging.getLogger()
 
 def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
-    match config.neural_network:
-        case 'AnisotropicUNetV0':
+    match config.model_type:
+        case ModelType.AnisotropicUNet:
             return AnisotropicUNet3D(
                 in_channels, 
                 out_channels, 
@@ -27,16 +30,16 @@ def create_neural_network(config: Config, in_channels: int, out_channels: int) -
                 horizontal_kernel=config.horizontal_kernel,
                 horizontal_padding=config.horizontal_padding
             )
-        case 'BasicUNetV1':
+        case ModelType.UNet3D:
             return UNet3d(in_channels, out_channels)
-        case '2DCSNet':
+        case ModelType.CSNet2D:
             raise NotImplementedError
-        case 'AttentionUNet':
+        case ModelType.AttentionUNet:
             raise NotImplementedError
-        case 'SEBlockUNet':
+        case ModelType.UNetSEBlok:
             raise NotImplementedError
         case _:
-            raise ValueError(f"Unknown model type '{config.neural_network}'")
+            raise ValueError(f"Unknown model type '{config.model_type}'")
 
 def create_loss_criterion(config: Config) -> nn.Module:
     loss_functions = []

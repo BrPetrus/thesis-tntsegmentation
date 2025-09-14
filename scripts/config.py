@@ -6,6 +6,9 @@ from typing import Tuple
 class ModelType(StrEnum):
     AnisotropicUNet = auto()
     UNet3D = auto()
+    CSNet2D = auto()
+    AttentionUNet = auto()
+    UNetSEBlok = auto()
     Unkwnown = auto()
 
 @dataclass
@@ -37,7 +40,7 @@ class Config:
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
-    model_type = ModelType.AnisotropicUNet
+    model_type: ModelType = ModelType.AnisotropicUNet
     seed: int = 42
     weight_decay: float = 0.0001
     model_depth: int = 3 

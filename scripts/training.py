@@ -31,7 +31,7 @@ from scripts.training_utils import (
     CombinedLoss,
     visualize_transform_effects
 )
-from config import Config
+from config import Config, ModelType
 
 def worker_init_fn(worker_id):
     """
@@ -467,12 +467,11 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     # MLFlow
     with mlflow.start_run() as run:
-        mlflow.set_tag("nn_name", str(config.neural_network))
         mlflow.log_params(config.__dict__)
         mlflow.log_param("model_depth", config.model_depth)
         mlflow.log_param("base_channels", config.base_channels)
         mlflow.log_param("channel_growth", config.channel_growth)
-        mlflow.log_param("model_type", nn.get_signature())
+        mlflow.log_param("model_signature", nn.get_signature())
 
 
         # Run training
@@ -527,8 +526,8 @@ if __name__ == "__main__":
                         help="IP address of the MLFlow server")
     parser.add_argument("--mlflow_port", type=str, default="8000",
                         help="Port of the MLFlow server")
-    parser.add_argument("--model", type=str, choices=["AnisotropicUNetV0", "BasicUNetV1"], default="AnisotropicUNetV0",
-                        help="Model architecture to use (AnisotropicUNetV0 or BasicUNetV1)")
+    parser.add_argument("--model", type=str, choices=["anisotropicunet", "basicunet"], default="anisotropicunet", 
+                        help="Model architecture to use (AnisotropicUNet or BasicUNet)")
     parser.add_argument("--model_depth", type=int, default=3,
                   help="Depth of the UNet model (number of down/up sampling blocks)")
     parser.add_argument("--base_channels", type=int, default=64,
@@ -564,7 +563,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
-        neural_network=args.model,
+        model_type=ModelType(args.model),
         model_depth=args.model_depth,
         base_channels=args.base_channels,
         channel_growth=args.channel_growth,

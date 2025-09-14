@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass
 import mlflow.artifacts
 import mlflow.client
@@ -29,7 +28,7 @@ def evaluate_model(nn: nn.Module, data: Dataset) -> None:
 def main(model: nn.Module, database_path: str, quadrant_idx: int, batch_size: int, device: str = 'cpu') -> None:
     pass
     
-def fetch_model(client: mlflow.MlflowClient, experiment_name: str, run_name: str, model_path: str = 'model', device: str = 'cpu') -> Tuple[nn.Module, Config]:
+def fetch_model_mlflow(client: mlflow.MlflowClient, experiment_name: str, run_name: str, model_path: str = 'model', device: str = 'cpu') -> nn.Module:
     experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
         raise ValueError(f'Experiment with name "{experiment_name}" not found.')
@@ -49,42 +48,44 @@ def fetch_model(client: mlflow.MlflowClient, experiment_name: str, run_name: str
 
     # Construct the URI
     logged_model = client.get_logged_model(model_id=model_id)
-
-    # Initialise the neural network
-    params = run.data.params
-    if "neural_network" not in params.keys():
-        raise ValueError("Run does not contain metadata about model type")
-    neural_network_str = params['neural_network']
-    try:
-        neural_network = ModelType(neural_network_str)
-    except ValueError:
-        raise ValueError(f"Unknown model type with str '{neural_network_str}'")
-    config = Config(
-        **params
-    )
-    model = create_neural_network(config, 1, 1).to(device)
     
     # Download weights from MLFlow model registry
     model_uri = f'{logged_model.model_uri}/artifacts/data/model.pth'
     print(f"Using {model_uri} path")
-    temp_dir = tempfile.mkdtemp()
-    print(f"Saving to temporary folder '{temp_dir}'")
-    mlflow.artifacts.download_artifacts(artifact_uri=logged_model.model_uri, dst_path=temp_dir)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        print(f"Saving to temporary folder '{temp_dir}'")
+        mlflow.artifacts.download_artifacts(artifact_uri=logged_model.model_uri, dst_path=temp_dir)
 
-    # Load weights
-    state_dict = torch.load(os.path.join(neural_network_str, 'data', 'model.pth'), map_location=device)
-    model.load_state_dict(state_dict)
+        # Load weights
+        model = torch.load(os.path.join(temp_dir, 'data', 'model.pth'), map_location=device, weights_only=False)
+
     model.eval()
-    return model, config
+    return model
+
+def fetch_model_local(model_path: str, device: str = 'cpu') -> nn.Module:
+    """Load a model from a local file path.
+    
+    Args:
+        model_path: Path to the model .pth file
+        device: Device to load the model on
+        
+    Returns:
+        Loaded PyTorch model
+    """
+    model_path = Path(model_path)
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model not found at '{model_path}'")
+    
+    print(f"Loading model from '{model_path}'")
+    model = torch.load(model_path, map_location=device)
+    model.eval()
+    return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate deep learning models')
     parser.add_argument('run_name', type=str,
                         help='MLflow run name')
-    # parser.add_argument('model_type', type=str, required=True,
-    #                     choices=[str(model) for model in ModelType],  # TODO
-    #                     help='Type of model architecture')
     parser.add_argument('database', type=str,
                         help='Path to database folder containing images')
     parser.add_argument('quadrant', type=int,
@@ -98,20 +99,27 @@ if __name__ == "__main__":
                         help="Batch size for inference")
     parser.add_argument('--device', type=str, default='cpu',
                         help="Device to run PyTorch on")
+    # Add a parameter for local model path
+    parser.add_argument('--local_model', type=str, default=None,
+                        help="Path to a local model file (bypass MLflow)")
     args = parser.parse_args()
-        
-    # Set up MLFlow
-    mlflow.set_tracking_uri(args.mlflow_uri)
-    client = mlflow.MlflowClient(args.mlflow_uri)
-
-    # Fetch the model
-    model = fetch_model(client, args.experiment_name, args.run_name)
-
-    # Run evaluation
-    main(nn, args.database, args.quadrant, args.batch_size, args.device)
-
-
-
-
-
     
+    # Fetch the model (either local or from MLflow)
+    if args.local_model:
+        model = fetch_model_local(args.local_model, device=args.device)
+    else:
+        # Set up MLFlow
+        mlflow.set_tracking_uri(args.mlflow_uri)
+        client = mlflow.MlflowClient(args.mlflow_uri)
+        model = fetch_model_mlflow(client, args.experiment_name, args.run_name, device=args.device)
+    
+    print('Model loaded successfully')
+    
+    # Run evaluation
+    main(model, args.database, args.quadrant, args.batch_size, args.device)
+
+
+
+
+
+
