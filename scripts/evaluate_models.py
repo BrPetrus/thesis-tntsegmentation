@@ -1,6 +1,8 @@
 
 from dataclasses import dataclass
+import mlflow.artifacts
 import mlflow.client
+import mlflow.pytorch
 import mlflow.pytorch
 import torch
 import numpy as np
@@ -10,12 +12,16 @@ import os
 import argparse
 import matplotlib.pyplot as plt
 import mlflow
+import tempfile
 
+from typing import Tuple
 import torch.nn as nn
 from torch.utils.data import Dataset
 
 from config import ModelType
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
+from training_utils import create_neural_network
+from config import Config, ModelType
 
 def evaluate_model(nn: nn.Module, data: Dataset) -> None:
     pass
@@ -23,7 +29,7 @@ def evaluate_model(nn: nn.Module, data: Dataset) -> None:
 def main(model: nn.Module, database_path: str, quadrant_idx: int, batch_size: int, device: str = 'cpu') -> None:
     pass
     
-def fetch_model(client: mlflow.MlflowClient, experiment_name: str, run_name: str, model_path: str = 'model') -> nn.Module:
+def fetch_model(client: mlflow.MlflowClient, experiment_name: str, run_name: str, model_path: str = 'model', device: str = 'cpu') -> Tuple[nn.Module, Config]:
     experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
         raise ValueError(f'Experiment with name "{experiment_name}" not found.')
@@ -36,15 +42,40 @@ def fetch_model(client: mlflow.MlflowClient, experiment_name: str, run_name: str
     if not runs:
         raise ValueError(f'No runs in experiment \'{experiment_name}\' with run name \'{run_name}\'')
     assert len(runs) == 1
+    run = runs[0]
+
+    # Now find the model ID
+    model_id = run.outputs.model_outputs[0].model_id
 
     # Construct the URI
-    run_id = runs[0].info.run_id
-    model_uri = f'runs:/{run_id}/{model_path}'
-    print(f"using model uri: '{model_uri}'")
+    logged_model = client.get_logged_model(model_id=model_id)
 
-    # Fetch and load
-    model = mlflow.pytorch.load_model(model_uri)
-    return model
+    # Initialise the neural network
+    params = run.data.params
+    if "neural_network" not in params.keys():
+        raise ValueError("Run does not contain metadata about model type")
+    neural_network_str = params['neural_network']
+    try:
+        neural_network = ModelType(neural_network_str)
+    except ValueError:
+        raise ValueError(f"Unknown model type with str '{neural_network_str}'")
+    config = Config(
+        **params
+    )
+    model = create_neural_network(config, 1, 1).to(device)
+    
+    # Download weights from MLFlow model registry
+    model_uri = f'{logged_model.model_uri}/artifacts/data/model.pth'
+    print(f"Using {model_uri} path")
+    temp_dir = tempfile.mkdtemp()
+    print(f"Saving to temporary folder '{temp_dir}'")
+    mlflow.artifacts.download_artifacts(artifact_uri=logged_model.model_uri, dst_path=temp_dir)
+
+    # Load weights
+    state_dict = torch.load(os.path.join(neural_network_str, 'data', 'model.pth'), map_location=device)
+    model.load_state_dict(state_dict)
+    model.eval()
+    return model, config
 
 
 if __name__ == "__main__":
