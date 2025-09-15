@@ -172,7 +172,7 @@ def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_
     return train_dataloader, test_dataloader, valid_dataloader
 
 # TODO: think abou treplacing with batchstats from utlities metrics
-def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: torch.nn.Module, epoch: int, prefix: str, output_folder: Path) -> Tuple[int, int, int, int, float]:
+def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: torch.nn.Module, epoch: int, prefix: str, output_folder: Path, save_results: bool = False) -> Tuple[int, int, int, int, float]:
     # Run evaluation on validation set
     with torch.no_grad():
         nn.eval()
@@ -238,7 +238,7 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
         epoch_loss += loss.item()
 
         # Save predictions, inputs, and masks for the first batch of each epoch
-        if batch_idx == 0:
+        if batch_idx == 0 and epoch % 50 == 0:
             predictions = torch.sigmoid(outputs).cpu().detach().numpy()
             inputs_np = inputs.cpu().detach().numpy()
             masks_np = masks.cpu().detach().numpy()
@@ -270,7 +270,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
         nn.train()
         epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder)
             
-        TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
+        TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder, save_results=epoch%50 == 0)
         # Calculate metrics
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
         precision = tntmetrics.precision(TP, FP)
