@@ -225,14 +225,17 @@ if __name__ == "__main__":
                         help="Name of the MLFlow experiment")
     parser.add_argument('--mlflow_uri', type=str, default="http://127.0.0.1:8000",
                         help="MLFlow URI")
-    # parser.add_argument('--batch_size', type=int, default=32,
-    #                     help="Batch size for inference")
-    # parser.add_argument('--device', type=str, default='cpu',
-    #                     help="Device to run PyTorch on")
+    parser.add_argument('--batch_size', type=int, default=32,
+                        help="Batch size for inference")
+    parser.add_argument('--device', type=str, default='cpu',
+                        help="Device to run PyTorch on")
     # Add a parameter for local model path
     parser.add_argument('--local_model', type=str, default=None,
                         help="Path to a local model file (bypass MLflow)")
     args = parser.parse_args()
+
+    config.device = args.device
+    config.batch_size = args.batch_size
     
     # Fetch the model (either local or from MLflow)
     if args.local_model:
