@@ -477,7 +477,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
         _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
 
         # Run testing
-        _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1, test_x, transform_test)
+        _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1, test_x)
 
         # After training, log the final model
         with torch.no_grad():
