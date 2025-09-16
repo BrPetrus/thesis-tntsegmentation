@@ -29,6 +29,7 @@ from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 import tqdm
 
 import monai.transforms as MT
+import tntseg.utilities.metrics.metrics as tntmetrics
 
 @dataclass
 class EvaluationConfig:
@@ -58,15 +59,58 @@ class TiledDataset(Dataset):
 def evaluate_model(nn: nn.Module, data: Dataset) -> None:
     pass
 
+def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, threshold: float = 0.5) -> dict:
+    """
+    Evaluate predictions against ground truth using tntseg metrics.
+    
+    Args:
+        predictions: Raw model predictions (probabilities)
+        ground_truth: Ground truth masks
+        threshold: Threshold for binarizing predictions
+        
+    Returns:
+        Dictionary containing all calculated metrics
+    """
+    # Threshold predictions to binary
+    binary_predictions = (predictions > threshold).astype(np.uint8) * 255
+    binary_ground_truth = (ground_truth > 0.5).astype(np.uint8) * 255
+    
+    # Calculate batch statistics using tntseg metrics
+    TP, FP, FN, TN = tntmetrics.calculate_batch_stats(
+        binary_predictions, 
+        binary_ground_truth, 
+        negative_val=0, 
+        positive_val=255
+    )
+    
+    # Calculate all metrics
+    metrics = {
+        'TP': int(TP),
+        'FP': int(FP), 
+        'FN': int(FN),
+        'TN': int(TN),
+        'jaccard': tntmetrics.jaccard_index(TP, FP, FN),
+        'dice': tntmetrics.dice_coefficient(TP, FP, FN),
+        'accuracy': tntmetrics.accuracy(TP, FP, FN, TN),
+        'precision': tntmetrics.precision(TP, FP),
+        'recall': tntmetrics.recall(TP, FN),
+        'tversky': tntmetrics.tversky_index(TP, FP, FN, alpha=0.5, beta=0.5),
+        'focal_tversky': tntmetrics.focal_tversky_loss(TP, FP, FN, alpha=0.5, beta=0.5, gamma=1.0)
+    }
+    
+    return metrics
+
 def main(model: nn.Module, database_path: str) -> None:
     dataset = create_dataset(database_path)
     print(f"Found {len(dataset)} images.")
 
+    all_metrics = []  # Store metrics for each volume
+    
     # Split the data
-    # volume_tiles = []
-    # mask_tiles = []
     for i in range(len(dataset)):
         data, mask = dataset[i]
+        print(f"\nProcessing volume {i+1}/{len(dataset)}")
+        
         # Split the volume into tiles
         tiles_data, tiles_positions = tile_volume(data[0], config.crop_size, overlap=0)
 
@@ -92,11 +136,6 @@ def main(model: nn.Module, database_path: str) -> None:
             
             # Store predictions and their positions
             all_predictions.extend(predictions)
-            # all_positions.append(batch_positions)
-            # all_positions.extend([(d,r,c) for d,r,c in batch_positions])
-            # depths = [d for d,_,_ in batch_positions]
-            # rows = [r for _, r,_ in batch_positions]
-            # cols = [c for _, _, c in batch_positions]
             depths = batch_positions[0]
             rows = batch_positions[1]
             cols = batch_positions[2]
@@ -113,25 +152,105 @@ def main(model: nn.Module, database_path: str) -> None:
             aggregation_method=AggregationMethod.Mean
         )
 
-        # Threshold
-        thresholded = (reconstructed_volume.numpy() > 0.5).astype(np.uint8) * 255
+        # Apply sigmoid to get probabilities
+        probabilities = torch.sigmoid(reconstructed_volume).numpy()
+        
+        # Threshold for binary predictions
+        thresholded = (probabilities > 0.5).astype(np.uint8) * 255
 
-        # Save
+        # Save predictions
         save_path = Path(f"prediction_{i}.tif")
         print(f"Saving prediction to {save_path.absolute()}")
-        tifffile.imwrite(save_path, reconstructed_volume.numpy())
+        tifffile.imwrite(save_path, probabilities.astype(np.float32))
+        
         save_path = Path(f"threshold_{i}.tif")
         print(f"Saving threshold to {save_path.absolute()}")
         tifffile.imwrite(save_path, thresholded)
 
+        # EVALUATE using tntseg metrics
+        print(f"Evaluating volume {i+1}...")
+        volume_metrics = evaluate_predictions(probabilities, mask[0].numpy())
+        volume_metrics['volume_id'] = i
+        all_metrics.append(volume_metrics)
+        
+        # Print metrics for this volume
+        print(f"Volume {i+1} Metrics:")
+        print(f"  Dice: {volume_metrics['dice']:.4f}")
+        print(f"  Jaccard: {volume_metrics['jaccard']:.4f}")
+        print(f"  Accuracy: {volume_metrics['accuracy']:.4f}")
+        print(f"  Precision: {volume_metrics['precision']:.4f}")
+        print(f"  Recall: {volume_metrics['recall']:.4f}")
+        print(f"  Tversky: {volume_metrics['tversky']:.4f}")
 
-        # Evaluate
-
-
-    # # Evaluate model
-    # evaluate_model(nn, dataloader)
-
+    # Calculate and display aggregate metrics
+    print("\n" + "="*50)
+    print("AGGREGATE METRICS ACROSS ALL VOLUMES")
+    print("="*50)
     
+    # Calculate mean metrics
+    mean_metrics = {}
+    metric_names = ['dice', 'jaccard', 'accuracy', 'precision', 'recall', 'tversky', 'focal_tversky']
+    
+    for metric in metric_names:
+        values = [m[metric] for m in all_metrics]
+        mean_metrics[f'mean_{metric}'] = np.mean(values)
+        mean_metrics[f'std_{metric}'] = np.std(values)
+    
+    # Calculate total TP, FP, FN, TN across all volumes
+    total_TP = sum(m['TP'] for m in all_metrics)
+    total_FP = sum(m['FP'] for m in all_metrics)
+    total_FN = sum(m['FN'] for m in all_metrics)
+    total_TN = sum(m['TN'] for m in all_metrics)
+    
+    # Calculate global metrics using total statistics
+    global_metrics = {
+        'global_dice': tntmetrics.dice_coefficient(total_TP, total_FP, total_FN),
+        'global_jaccard': tntmetrics.jaccard_index(total_TP, total_FP, total_FN),
+        'global_accuracy': tntmetrics.accuracy(total_TP, total_FP, total_FN, total_TN),
+        'global_precision': tntmetrics.precision(total_TP, total_FP),
+        'global_recall': tntmetrics.recall(total_TP, total_FN),
+        'global_tversky': tntmetrics.tversky_index(total_TP, total_FP, total_FN),
+    }
+    
+    # Print results
+    print(f"Mean Dice: {mean_metrics['mean_dice']:.4f} ± {mean_metrics['std_dice']:.4f}")
+    print(f"Mean Jaccard: {mean_metrics['mean_jaccard']:.4f} ± {mean_metrics['std_jaccard']:.4f}")
+    print(f"Mean Accuracy: {mean_metrics['mean_accuracy']:.4f} ± {mean_metrics['std_accuracy']:.4f}")
+    print(f"Mean Precision: {mean_metrics['mean_precision']:.4f} ± {mean_metrics['std_precision']:.4f}")
+    print(f"Mean Recall: {mean_metrics['mean_recall']:.4f} ± {mean_metrics['std_recall']:.4f}")
+    print(f"Mean Tversky: {mean_metrics['mean_tversky']:.4f} ± {mean_metrics['std_tversky']:.4f}")
+    
+    print(f"\nGlobal Dice: {global_metrics['global_dice']:.4f}")
+    print(f"Global Jaccard: {global_metrics['global_jaccard']:.4f}")
+    print(f"Global Accuracy: {global_metrics['global_accuracy']:.4f}")
+    print(f"Global Precision: {global_metrics['global_precision']:.4f}")
+    print(f"Global Recall: {global_metrics['global_recall']:.4f}")
+    print(f"Global Tversky: {global_metrics['global_tversky']:.4f}")
+    
+    # Save metrics to file
+    metrics_file = Path("evaluation_metrics.txt")
+    with open(metrics_file, 'w') as f:
+        f.write("INDIVIDUAL VOLUME METRICS\n")
+        f.write("="*30 + "\n")
+        for i, metrics in enumerate(all_metrics):
+            f.write(f"Volume {i+1}:\n")
+            f.write(f"  Dice: {metrics['dice']:.4f}\n")
+            f.write(f"  Jaccard: {metrics['jaccard']:.4f}\n")
+            f.write(f"  Accuracy: {metrics['accuracy']:.4f}\n")
+            f.write(f"  Precision: {metrics['precision']:.4f}\n")
+            f.write(f"  Recall: {metrics['recall']:.4f}\n")
+            f.write(f"  Tversky: {metrics['tversky']:.4f}\n\n")
+        
+        f.write("AGGREGATE METRICS\n")
+        f.write("="*20 + "\n")
+        for key, value in mean_metrics.items():
+            f.write(f"{key}: {value:.4f}\n")
+        f.write("\nGLOBAL METRICS\n")
+        f.write("="*15 + "\n")
+        for key, value in global_metrics.items():
+            f.write(f"{key}: {value:.4f}\n")
+    
+    print(f"\nMetrics saved to {metrics_file.absolute()}")
     
 
 def create_dataset(database_path: str | Path) -> Dataset: 
@@ -210,7 +329,7 @@ def fetch_model_local(model_path: str, device: str = 'cpu') -> nn.Module:
         raise FileNotFoundError(f"Model not found at '{model_path}'")
     
     print(f"Loading model from '{model_path}'")
-    model = torch.load(model_path, map_location=device)
+    model = torch.load(model_path, map_location=device, weights_only=False)
     model.eval()
     return model
 
