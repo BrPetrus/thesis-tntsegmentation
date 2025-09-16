@@ -200,7 +200,7 @@ def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: t
             assert total == sum([TP, TN, FP, FN])
 
             # Save first batch
-            if batch_idx == 0:
+            if batch_idx == 0 and save_results:
                 predictions = torch.sigmoid(outputs).cpu().detach().numpy()
                 inputs_np = inputs.cpu().detach().numpy()
                 masks_np = masks.cpu().detach().numpy()
@@ -413,8 +413,7 @@ def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config
 
 
 def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config, 
-         output_folder: Path, logger: logging.Logger, epoch: int, test_x: pd.DataFrame,
-         transform_test: A.Compose) -> None:
+         output_folder: Path, logger: logging.Logger, epoch: int) -> None:
     """Run complete testing process."""
     logger.info("Starting test evaluation")
     
