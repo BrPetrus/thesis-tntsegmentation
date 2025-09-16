@@ -100,7 +100,13 @@ def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, thre
     
     return metrics
 
-def main(model: nn.Module, database_path: str) -> None:
+def main(model: nn.Module, database_path: str, output_dir: str | Path) -> None:
+    if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
+        raise ValueError(f"Invalid output_dir. Expected string or Path type")
+    if isinstance(output_dir, str):
+        output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     dataset = create_dataset(database_path)
     print(f"Found {len(dataset)} images.")
 
@@ -158,16 +164,10 @@ def main(model: nn.Module, database_path: str) -> None:
         # Threshold for binary predictions
         thresholded = (probabilities > 0.5).astype(np.uint8) * 255
 
-        # Save predictions
-        save_path = Path(f"prediction_{i}.tif")
-        print(f"Saving prediction to {save_path.absolute()}")
-        tifffile.imwrite(save_path, probabilities.astype(np.float32))
-        
-        save_path = Path(f"threshold_{i}.tif")
-        print(f"Saving threshold to {save_path.absolute()}")
-        tifffile.imwrite(save_path, thresholded)
+        tifffile.imwrite(output_dir / 'prediction_{i}.tif', probabilities)
+        tifffile.imwrite(output_dir / 'threshold_{i}.tif', thresholded)
 
-        # EVALUATE using tntseg metrics
+        # Evaluate
         print(f"Evaluating volume {i+1}...")
         volume_metrics = evaluate_predictions(probabilities, mask[0].numpy())
         volume_metrics['volume_id'] = i
@@ -340,6 +340,8 @@ if __name__ == "__main__":
                         help='MLflow run name')
     parser.add_argument('database', type=str,
                         help='Path to database folder containing images')
+    parser.add_argument('output_dir', type=str,
+                        help='Output directory path')
     parser.add_argument('--experiment_name', type=str, default='Default',
                         help="Name of the MLFlow experiment")
     parser.add_argument('--mlflow_uri', type=str, default="http://127.0.0.1:8000",
@@ -368,7 +370,7 @@ if __name__ == "__main__":
     print('Model loaded successfully')
     
     # Run evaluation
-    main(model, args.database)
+    main(model, args.database, args.output_dir)
 
 
 
