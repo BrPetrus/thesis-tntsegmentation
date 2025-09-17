@@ -160,13 +160,13 @@ def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=config.batch_size,
-        shuffle=config.shuffle,
+        shuffle=False,
         num_workers=config.num_workers,
     )
     valid_dataloader = DataLoader(
         valid_dataset,
         batch_size=config.batch_size,
-        shuffle=config.shuffle,
+        shuffle=False,
         num_workers=config.num_workers,
     )
     return train_dataloader, test_dataloader, valid_dataloader
@@ -571,6 +571,8 @@ if __name__ == "__main__":
         seed=args.seed,
         weight_decay=args.weight_decay,
     )
+
+    print(f'Shuffle: {config.shuffle}')
 
     # Run training
     main(args.input_folder, args.output_folder, logger, config, args.mlflow_address, args.mlflow_port)

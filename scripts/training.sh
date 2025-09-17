@@ -21,8 +21,8 @@ MODEL=anisotropicunet
 SEED=42
 MODEL_DEPTH=5
 WEIGHT_DECAY=0.0001
-HORIZONTAL_KERNEL="3,3,3"
-HORIZONTAL_PADDING="1,1,1"
+HORIZONTAL_KERNEL="1,3,3"
+HORIZONTAL_PADDING="0,1,1"
 
 nice -n 19 python training.py \
     "${INPUT_FOLDER}" \
@@ -37,6 +37,7 @@ nice -n 19 python training.py \
     --model_depth "${MODEL_DEPTH}" \
     --weight_decay "${WEIGHT_DECAY}" \
     --horizontal_kernel "${HORIZONTAL_KERNEL}" \
-    --horizontal_padding "${HORIZONTAL_PADDING}"
+    --horizontal_padding "${HORIZONTAL_PADDING}" \
+    --shuffle
 
 
