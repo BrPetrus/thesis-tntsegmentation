@@ -137,8 +137,23 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
             # Add fake colour channel
             batch_data = batch_data[:, torch.newaxis, ...]
 
-            # Move data to device and keep positions on CPU
+            # Move data to device
             batch_data_dev = batch_data.to(config.device)
+
+            # Permute the z-axis (shuffle slices)
+            z_indices = torch.randperm(batch_data_dev.shape[2])
+            batch_data_shuffled = batch_data_dev[:, :, z_indices, :, :]
+
+            # Run inference on shuffled data
+            shuffled_predictions = model(batch_data_shuffled).detach()
+
+            # Unshuffle the predictions
+            inverse_indices = torch.zeros(len(z_indices), dtype=torch.long)
+            for i, idx in enumerate(z_indices):
+                inverse_indices[idx] = i
+
+            # Apply inverse permutation and move to CPU
+            batch_data_dev = shuffled_predictions[:, :, inverse_indices, :, :].to('cpu')
             
             # Run model
             predictions = model(batch_data_dev).detach().to('cpu')
@@ -262,7 +277,7 @@ if __name__ == "__main__":
                         help="Batch size for inference")
     parser.add_argument('--device', type=str, default='cpu',
                         help="Device to run PyTorch on")
-    parser.add_argument('--save_predictions', type=bool, action="store_true", default=False)
+    parser.add_argument('--save_predictions', action="store_true", default=False)
     # Add a parameter for local model path
     args = parser.parse_args()
 
@@ -276,7 +291,7 @@ if __name__ == "__main__":
     
     # Run evaluation
     with torch.no_grad():
-        main(model, args.database, args.output_dir, args.store_predictions)
+        main(model, args.database, args.output_dir, args.save_predictions)
 
 
 

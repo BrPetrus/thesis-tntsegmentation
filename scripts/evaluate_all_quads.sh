@@ -5,7 +5,7 @@ echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 MODEL_PATH="/home/xpetrus/DP/DP-WIP/scripts/output-training-2025-09-16_16-49-58/model_final.pth"
 DATA_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/evaluations_datasets"
-OUTPUT_FOLDER="./experiment/"
+OUTPUT_FOLDER="./experiment-random-permutation-z-axis/"
 DEVICE="cuda"
 BATCH_SIZE=64
 
