@@ -482,6 +482,11 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
         # After training, log the final model
         with torch.no_grad():
             nn.eval()
+
+            # Also save the model
+            checkpoint_path = output_folder / f"model_final.pth"
+            torch.save(nn.state_dict(), checkpoint_path)
+            logger.info(f"Model checkpoint saved at {checkpoint_path}")
             sample_input = torch.randn(config.batch_size, 1, *config.crop_size).to(config.device)
             sample_output = nn(sample_input)
 
@@ -495,10 +500,6 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
                 )
             )
 
-            # Also save the model
-            checkpoint_path = output_folder / f"model_final.pth"
-            torch.save(nn.state_dict(), checkpoint_path)
-            logger.info(f"Model checkpoint saved at {checkpoint_path}")
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
     """Parse comma-separated string into tuple of integers."""

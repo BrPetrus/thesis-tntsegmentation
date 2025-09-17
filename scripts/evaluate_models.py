@@ -140,23 +140,23 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
             # Move data to device
             batch_data_dev = batch_data.to(config.device)
 
-            # Permute the z-axis (shuffle slices)
-            z_indices = torch.randperm(batch_data_dev.shape[2])
-            batch_data_shuffled = batch_data_dev[:, :, z_indices, :, :].to(config.device)
+            # # Permute the z-axis (shuffle slices)
+            # z_indices = torch.randperm(batch_data_dev.shape[2])
+            # batch_data_shuffled = batch_data_dev[:, :, z_indices, :, :].to(config.device)
 
-            # Run inference on shuffled data
-            shuffled_predictions = model(batch_data_shuffled).detach()
+            # # Run inference on shuffled data
+            # shuffled_predictions = model(batch_data_shuffled).detach()
 
-            # Unshuffle the predictions
-            inverse_indices = torch.zeros(len(z_indices), dtype=torch.long)
-            for i, idx in enumerate(z_indices):
-                inverse_indices[idx] = i
+            # # Unshuffle the predictions
+            # inverse_indices = torch.zeros(len(z_indices), dtype=torch.long)
+            # for i, idx in enumerate(z_indices):
+            #     inverse_indices[idx] = i
 
-            # Apply inverse permutation and move to CPU
-            predictions = shuffled_predictions[:, :, inverse_indices, :, :].to('cpu')
+            # # Apply inverse permutation and move to CPU
+            # predictions = shuffled_predictions[:, :, inverse_indices, :, :].to('cpu')
             
-            # # Run model
-            # predictions = model(batch_data_dev).detach().to('cpu')
+            # Run model
+            predictions = model(batch_data_dev).detach().to('cpu')
             
             # Store predictions and their positions
             all_predictions.extend(predictions)
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     config.device = args.device
     config.batch_size = args.batch_size
 
-    model = AnisotropicUNet3D(1, 1, 4).to(config.device)
+    model = AnisotropicUNet3D(1, 1, 5).to(config.device)
     model.load_state_dict(torch.load(args.local_model, map_location=args.device))
     model.eval()
     print('Model loaded successfully')
