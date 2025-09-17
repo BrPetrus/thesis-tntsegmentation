@@ -13,6 +13,7 @@ import argparse
 import matplotlib.pyplot as plt
 import mlflow
 import tempfile
+import csv
 
 from typing import Tuple
 import torch.nn as nn
@@ -198,22 +199,22 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path) -> None:
         mean_metrics[f'mean_{metric}'] = np.mean(values)
         mean_metrics[f'std_{metric}'] = np.std(values)
     
-    # Calculate total TP, FP, FN, TN across all volumes
-    total_TP = sum(m['TP'] for m in all_metrics)
-    total_FP = sum(m['FP'] for m in all_metrics)
-    total_FN = sum(m['FN'] for m in all_metrics)
-    total_TN = sum(m['TN'] for m in all_metrics)
-    
-    # Calculate global metrics using total statistics
-    global_metrics = {
-        'global_dice': tntmetrics.dice_coefficient(total_TP, total_FP, total_FN),
-        'global_jaccard': tntmetrics.jaccard_index(total_TP, total_FP, total_FN),
-        'global_accuracy': tntmetrics.accuracy(total_TP, total_FP, total_FN, total_TN),
-        'global_precision': tntmetrics.precision(total_TP, total_FP),
-        'global_recall': tntmetrics.recall(total_TP, total_FN),
-        'global_tversky': tntmetrics.tversky_index(total_TP, total_FP, total_FN),
-    }
-    
+    # Save metrics to CSV
+    csv_file_path = output_dir / 'evaluation_metrics.csv'
+    if not csv_file_path.exists():
+        write_header=True
+    else:
+        write_header=False
+    with open(csv_file, 'a') as csv_file:
+        csv_file.write('dice_mean;dice_std;jaccard_mean;jaccard_std;accuracy_mean;accuracy_std;precision_mean;precision_std;recall_mean;recall_std;tversky_mean;tversky_std;focal_tversky_mean;focal_tversky_std\n')
+        csv_file.write(f'{mean_metrics['mean_dice']};{mean_metrics['std_dice']};'
+                       f'{mean_metrics['mean_jaccard']};{mean_metrics['std_jaccard']};'
+                       f'{mean_metrics['mean_accuracy']};{mean_metrics['std_accuracy']};'
+                       f'{mean_metrics['mean_precision']};{mean_metrics['std_precision']};'
+                       f'{mean_metrics['mean_recall']};{mean_metrics['std_recall']};'
+                       f'{mean_metrics['mean_tversky']};{mean_metrics['std_tversky']};'
+                       f'{mean_metrics['mean_focal_tversky']};{mean_metrics['std_focal_tversky']};'
+        )
     # Print results
     print(f"Mean Dice: {mean_metrics['mean_dice']:.4f} ± {mean_metrics['std_dice']:.4f}")
     print(f"Mean Jaccard: {mean_metrics['mean_jaccard']:.4f} ± {mean_metrics['std_jaccard']:.4f}")
@@ -221,38 +222,6 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path) -> None:
     print(f"Mean Precision: {mean_metrics['mean_precision']:.4f} ± {mean_metrics['std_precision']:.4f}")
     print(f"Mean Recall: {mean_metrics['mean_recall']:.4f} ± {mean_metrics['std_recall']:.4f}")
     print(f"Mean Tversky: {mean_metrics['mean_tversky']:.4f} ± {mean_metrics['std_tversky']:.4f}")
-    
-    print(f"\nGlobal Dice: {global_metrics['global_dice']:.4f}")
-    print(f"Global Jaccard: {global_metrics['global_jaccard']:.4f}")
-    print(f"Global Accuracy: {global_metrics['global_accuracy']:.4f}")
-    print(f"Global Precision: {global_metrics['global_precision']:.4f}")
-    print(f"Global Recall: {global_metrics['global_recall']:.4f}")
-    print(f"Global Tversky: {global_metrics['global_tversky']:.4f}")
-    
-    # Save metrics to file
-    metrics_file = Path("evaluation_metrics.txt")
-    with open(metrics_file, 'w') as f:
-        f.write("INDIVIDUAL VOLUME METRICS\n")
-        f.write("="*30 + "\n")
-        for i, metrics in enumerate(all_metrics):
-            f.write(f"Volume {i+1}:\n")
-            f.write(f"  Dice: {metrics['dice']:.4f}\n")
-            f.write(f"  Jaccard: {metrics['jaccard']:.4f}\n")
-            f.write(f"  Accuracy: {metrics['accuracy']:.4f}\n")
-            f.write(f"  Precision: {metrics['precision']:.4f}\n")
-            f.write(f"  Recall: {metrics['recall']:.4f}\n")
-            f.write(f"  Tversky: {metrics['tversky']:.4f}\n\n")
-        
-        f.write("AGGREGATE METRICS\n")
-        f.write("="*20 + "\n")
-        for key, value in mean_metrics.items():
-            f.write(f"{key}: {value:.4f}\n")
-        f.write("\nGLOBAL METRICS\n")
-        f.write("="*15 + "\n")
-        for key, value in global_metrics.items():
-            f.write(f"{key}: {value:.4f}\n")
-    
-    print(f"\nMetrics saved to {metrics_file.absolute()}")
     
 
 def create_dataset(database_path: str | Path) -> Dataset: 
