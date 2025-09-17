@@ -103,7 +103,7 @@ def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, thre
     
     return metrics
 
-def main(model: nn.Module, database_path: str, output_dir: str | Path) -> None:
+def main(model: nn.Module, database_path: str, output_dir: str | Path, store_predictions: bool) -> None:
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
         raise ValueError(f"Invalid output_dir. Expected string or Path type")
     if isinstance(output_dir, str):
@@ -167,8 +167,9 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path) -> None:
         # Threshold for binary predictions
         thresholded = (probabilities > 0.5).astype(np.uint8) * 255
 
-        tifffile.imwrite(output_dir / 'prediction_{i}.tif', probabilities)
-        tifffile.imwrite(output_dir / 'threshold_{i}.tif', thresholded)
+        if store_predictions:
+            tifffile.imwrite(output_dir / f'prediction_{i}.tif', probabilities)
+            tifffile.imwrite(output_dir / f'threshold_{i}.tif', thresholded)
 
         # Evaluate
         print(f"Evaluating volume {i+1}...")
@@ -205,8 +206,9 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path) -> None:
         write_header=True
     else:
         write_header=False
-    with open(csv_file, 'a') as csv_file:
-        csv_file.write('database_path;dice_mean;dice_std;jaccard_mean;jaccard_std;accuracy_mean;accuracy_std;precision_mean;precision_std;recall_mean;recall_std;tversky_mean;tversky_std;focal_tversky_mean;focal_tversky_std\n')
+    with open(csv_file_path, 'a') as csv_file:
+        if write_header:
+            csv_file.write('database_path;dice_mean;dice_std;jaccard_mean;jaccard_std;accuracy_mean;accuracy_std;precision_mean;precision_std;recall_mean;recall_std;tversky_mean;tversky_std;focal_tversky_mean;focal_tversky_std\n')
         csv_file.write(
             f'{database_path};'
             f'{mean_metrics['mean_dice']};{mean_metrics['std_dice']};'
@@ -260,6 +262,7 @@ if __name__ == "__main__":
                         help="Batch size for inference")
     parser.add_argument('--device', type=str, default='cpu',
                         help="Device to run PyTorch on")
+    parser.add_argument('--save_predictions', type=bool, action="store_true", default=False)
     # Add a parameter for local model path
     args = parser.parse_args()
 
@@ -273,7 +276,7 @@ if __name__ == "__main__":
     
     # Run evaluation
     with torch.no_grad():
-        main(model, args.database, args.output_dir)
+        main(model, args.database, args.output_dir, args.store_predictions)
 
 
 
