@@ -142,7 +142,7 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
 
             # Permute the z-axis (shuffle slices)
             z_indices = torch.randperm(batch_data_dev.shape[2])
-            batch_data_shuffled = batch_data_dev[:, :, z_indices, :, :]
+            batch_data_shuffled = batch_data_dev[:, :, z_indices, :, :].to(config.device)
 
             # Run inference on shuffled data
             shuffled_predictions = model(batch_data_shuffled).detach()
@@ -153,10 +153,10 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
                 inverse_indices[idx] = i
 
             # Apply inverse permutation and move to CPU
-            batch_data_dev = shuffled_predictions[:, :, inverse_indices, :, :].to('cpu')
+            predictions = shuffled_predictions[:, :, inverse_indices, :, :].to('cpu')
             
-            # Run model
-            predictions = model(batch_data_dev).detach().to('cpu')
+            # # Run model
+            # predictions = model(batch_data_dev).detach().to('cpu')
             
             # Store predictions and their positions
             all_predictions.extend(predictions)
