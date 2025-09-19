@@ -137,7 +137,7 @@ def bbox_3d(img: NDArray) -> List[Tuple[int, int]]:
 
 def compute_overlap_percentage(mask: NDArray, limits: Dict[str, Tuple[int, int]]) -> float:
     """
-    Compute the percentage of a mask that falls within the specified limits.
+    Compute the percentage of a mask that falls within the specified limits and return the number of pixels in overlap.
     
     Args:
         mask: Binary mask
@@ -161,7 +161,7 @@ def compute_overlap_percentage(mask: NDArray, limits: Dict[str, Tuple[int, int]]
     # Count voxels in both the mask and the region
     overlap_voxels = np.sum(mask & region_mask)
     
-    return overlap_voxels / total_voxels
+    return overlap_voxels / total_voxels, overlap_voxels
 
 def extract_patch_with_padding(
     image: NDArray, 
@@ -346,6 +346,7 @@ def extract_patches(
     min_size: Tuple[int, int, int], 
     train_quad: int,
     overlap_threshold: float = 0.5,
+    overlap_threshold_abs: int = 100,
     num_random_crops: int = 0
 ) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
@@ -390,11 +391,11 @@ def extract_patches(
             tunnel_mask = gt_slice == tunnel_id
             
             # Check overlap with training quadrant
-            overlap = compute_overlap_percentage(tunnel_mask, train_limits)
+            overlap_perc, overlap_size = compute_overlap_percentage(tunnel_mask, train_limits)
             
             # Skip tunnels that are mostly in the training quadrant
-            if overlap > overlap_threshold:
-                logger.info(f"Skipping tunnel {tunnel_id} ({overlap:.1%} in training quadrant)")
+            if overlap_perc > overlap_threshold or overlap_size > overlap_threshold_abs:
+                logger.info(f"Skipping tunnel {tunnel_id} ({overlap_perc:.1%}%/{overlap_size}px in training quadrant)")
                 continue
                 
             # Find bounding box for this tunnel
@@ -466,7 +467,8 @@ def extract_test_patches(
     imgs: NDArray, 
     min_size: Tuple[int, int, int], 
     train_quad: int,
-    overlap_threshold: float = 0.5,
+    overlap_threshold_perc: float = 0.5,
+    overlap_threshold_size: int = 100,
     num_random_crops: int = 0
 ) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
@@ -515,7 +517,7 @@ def extract_test_patches(
             overlap = compute_overlap_percentage(tunnel_mask, test_limits)
             
             # Only include tunnels that are MOSTLY IN the test quadrant
-            if overlap < overlap_threshold:
+            if overlap < overlap_threshold_perc:
                 logger.debug(f"Skipping tunnel {tunnel_id} (only {overlap:.1%} in test quadrant)")
                 continue
                 
