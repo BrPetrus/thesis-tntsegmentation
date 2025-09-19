@@ -408,6 +408,14 @@ def extract_patches(
             # Extract patches with padding to meet minimum size
             gt_patch, gt_coords = extract_patch_with_padding(gt_slice, bbox, min_size)
             img_patch, _ = extract_patch_with_padding(img_slice, bbox, min_size)
+
+            # Check if now it overlaps too much with the testing patch
+            patch_mask = np.zeros_like(gt_slice, dtype=bool)
+            patch_mask[gt_coords[0][0]:gt_coords[0][1], gt_coords[1][0]:gt_coords[1][1], gt_coords[2][0]:gt_coords[2][1]] = True
+            patch_overlap_perc, patch_overlap_px = compute_overlap_percentage(patch_mask, train_limits)
+            if patch_overlap_perc > overlap_threshold or patch_overlap_px > overlap_threshold_abs:
+                logger.warning(f"Padded patch for tunnel {tunnel_id} now has {patch_overlap_perc:.1%}/{patch_overlap_px}px overlap with training quadrant")
+                continue
             
             # Create patch ID from time index and tunnel ID
             patch_id = f"t{t_idx}_id{tunnel_id}"
