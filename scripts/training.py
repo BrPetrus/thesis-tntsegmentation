@@ -1,10 +1,6 @@
 from turtle import forward
-import monai.transforms
 import pandas as pd
-import sklearn
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
-from tntseg.nn.models.unet3d_basic import UNet3d
-from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,7 +10,6 @@ from tqdm import tqdm
 import argparse
 import logging
 import random
-import os
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from dataclasses import dataclass
@@ -26,121 +21,17 @@ import sklearn.metrics as skmetrics
 import tntseg.utilities.metrics.metrics as tntmetrics
 from typing import List, Tuple
 from torch.types import Tensor
-import tntseg.utilities.metrics.metrics_torch as tntloss
 from ast import literal_eval
-# from torchvision.transforms.v2 import ElasticTransform
-import monai
 import monai.transforms as MT
 from monai.utils import set_determinism
 
-
-@dataclass
-class Config:
-    epochs: int
-    lr: float
-    batch_size: int
-    device: str
-    num_workers: int
-    shuffle: bool
-    device: str
-    input_folder: str
-    seed: int = 42
-    dataset_std: float = 0.07579
-    dataset_mean: float = 0.05988
-    test_size: float = 1/3
-    notimprovement_tolerance: int = 30
-    eval_tversky_alpha: float = 0.8
-    eval_tversky_beta: float = 0.2
-    eval_tversky_gamma: float = 2
-    use_cross_entropy: bool = True
-    cross_entropy_loss_weight: float = 0.4
-    ce_use_weights: bool = True
-    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 1. # Negative/positive ratio to penalize
-    # ce_pos_weight: float  = 67845 / 3602171  # Negative/positive ratio to penalize
-    use_dice_loss: bool = True
-    dice_loss_weight: float = 0.6
-    use_focal_tversky_loss: bool = False
-    focal_tversky_loss_weight: float = 1.0
-    train_focal_tversky_alpha: float = 0.8
-    train_focal_tversky_beta: float = 0.2
-    train_focal_tversky_gamma: float = 2
-    neural_network: str = "AnisotropicUNetV0"
-    seed: int = 42
-    weight_decay: float = 0.0001
-    model_depth: int = 3 
-    base_channels: int = 64
-    channel_growth: int = 2
-    horizontal_kernel: Tuple[int, int, int] = (1, 3, 3) 
-    horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
-    crop_size: Tuple[int, int, int] = (7, 64, 64)
-
-def create_loss_criterion(config: Config) -> nn.Module:
-    loss_functions = []
-    weights = []
-
-    if config.use_cross_entropy:
-        if config.ce_use_weights:
-            # Use weights
-            # weight = torch.tensor([1, config.ce_pos_weight, 1, 1, 1])
-            loss_functions.append(nn.BCEWithLogitsLoss(pos_weight=torch.tensor(config.ce_pos_weight)))
-            # loss_functions.append(nn.BCEWithLogitsLoss(pos_weight=weight))
-        else:
-            loss_functions.append(nn.BCEWithLogitsLoss())
-        weights.append(config.cross_entropy_loss_weight)
-    if config.use_dice_loss:
-        loss_functions.append(tntloss.DiceLoss())
-        weights.append(config.dice_loss_weight)
-    if config.use_focal_tversky_loss:
-        loss_functions.append(
-            tntloss.FocalTverskyLoss(
-                alpha=config.train_focal_tversky_alpha,
-                beta=config.train_focal_tversky_beta,
-                gamma=config.train_focal_tversky_gamma
-            ))
-        weights.append(config.focal_tversky_loss_weight)
-    return CombinedLoss(loss_functions, weights)
-
-
-def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
-    match config.neural_network:
-        case 'AnisotropicUNetV0':
-            return AnisotropicUNet3D(
-                in_channels, 
-                out_channels, 
-                depth=config.model_depth, 
-                base_channels=config.base_channels, 
-                channel_growth=config.channel_growth,
-                horizontal_kernel=config.horizontal_kernel,
-                horizontal_padding=config.horizontal_padding
-            )
-        case 'BasicUNetV1':
-            return UNet3d(in_channels, out_channels)
-        case _:
-            raise ValueError(f"Unknown model type '{config.neural_network}'")
-
-
-class CombinedLoss(nn.Module):
-    def __init__(self, loss_functions: List[nn.Module], loss_weights: List[float]):
-        super().__init__()
-        if len(loss_functions) != len(loss_weights):
-            raise ValueError("Number of loss functions must match number of weights")
-        self.loss_functions = nn.ModuleList(loss_functions)
-        self.loss_weights = loss_weights
-    def forward(self, pred: Tensor, mask: Tensor) -> Tensor:
-        total_loss = 0.0
-        for loss_fun, weight in zip(self.loss_functions, self.loss_weights):
-            if isinstance(loss_fun, nn.BCEWithLogitsLoss):
-                loss = loss_fun(pred, mask)
-            else:
-                loss = loss_fun(torch.sigmoid(pred), mask)
-            total_loss += weight*loss
-            logger.debug(f"{type(loss_fun)} - {loss}")
-        return total_loss
-
-# import torch
-# import numpy as np
-# import random
-# from monai.utils import set_determinism
+from scripts.training_utils import ( 
+    create_neural_network,
+    create_loss_criterion,
+    CombinedLoss,
+    visualize_transform_effects
+)
+from config import Config, ModelType
 
 def worker_init_fn(worker_id):
     """
@@ -269,19 +160,19 @@ def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=config.batch_size,
-        shuffle=config.shuffle,
+        shuffle=False,
         num_workers=config.num_workers,
     )
     valid_dataloader = DataLoader(
         valid_dataset,
         batch_size=config.batch_size,
-        shuffle=config.shuffle,
+        shuffle=False,
         num_workers=config.num_workers,
     )
     return train_dataloader, test_dataloader, valid_dataloader
 
 # TODO: think abou treplacing with batchstats from utlities metrics
-def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: torch.nn.Module, epoch: int, prefix: str, output_folder: Path) -> Tuple[int, int, int, int, float]:
+def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: torch.nn.Module, epoch: int, prefix: str, output_folder: Path, save_results: bool = False) -> Tuple[int, int, int, int, float]:
     # Run evaluation on validation set
     with torch.no_grad():
         nn.eval()
@@ -309,7 +200,7 @@ def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: t
             assert total == sum([TP, TN, FP, FN])
 
             # Save first batch
-            if batch_idx == 0:
+            if batch_idx == 0 and save_results:
                 predictions = torch.sigmoid(outputs).cpu().detach().numpy()
                 inputs_np = inputs.cpu().detach().numpy()
                 masks_np = masks.cpu().detach().numpy()
@@ -347,7 +238,7 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
         epoch_loss += loss.item()
 
         # Save predictions, inputs, and masks for the first batch of each epoch
-        if batch_idx == 0:
+        if batch_idx == 0 and epoch % 50 == 0:
             predictions = torch.sigmoid(outputs).cpu().detach().numpy()
             inputs_np = inputs.cpu().detach().numpy()
             masks_np = masks.cpu().detach().numpy()
@@ -369,47 +260,6 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
                 logger.debug(f"Saved mask for epoch {epoch+1}, batch {batch_idx+1}, sample {i+1} at {mask_path}")
     return epoch_loss
 
-def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
-    """Save before/after images to verify transformations are working"""
-    if output_folder:
-        output_path = Path(output_folder)
-        output_path.mkdir(exist_ok=True, parents=True)
-    
-    # Get raw data before transformations
-    dataset = dataloader.dataset
-    transforms_backup = dataset.transforms
-    
-    
-    for i in range(min(num_samples, len(dataset))):
-        # Temporarily disable transforms
-        dataset.transforms = MT.Compose([MT.ToTensord(keys=['volume', 'mask3d'])])
-        # Get original sample without transforms
-        orig_volume, orig_mask = dataset[i]
-        
-        # Restore transforms
-        dataset.transforms = transforms_backup
-        
-        # Get transformed sample
-        trans_volume, trans_mask = dataset[i]
-        
-        # Compare shapes and values
-        print(f"Sample {i}:")
-        print(f"  Original shape: {orig_volume.shape}, Transformed shape: {trans_volume.shape}")
-        print(f"  Original range: {orig_volume.min():.3f}-{orig_volume.max():.3f}, "
-              f"Transformed range: {trans_volume.min():.3f}-{trans_volume.max():.3f}")
-        print(f"  Original mean: {orig_volume.mean():.3f}, std: {orig_volume.std():.3f}"
-              f"Transformed mean: {trans_volume.mean():.3f}, std{trans_volume.std():.3f}")
-              
-        
-        if output_folder:
-            # Save original and transformed as TIFF for comparison
-            tifffile.imwrite(output_path / f"sample_{i}_original.tiff", 
-                           orig_volume.astype(np.float32))
-            tifffile.imwrite(output_path / f"sample_{i}_transformed.tiff", 
-                           trans_volume.detach().cpu().numpy().astype(np.float32))
-    
-    # Restore transforms
-    dataset.transforms = transforms_backup
 
 def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config, output_folder: Path) -> None:
     # Last time that the eval loss improved
@@ -420,7 +270,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
         nn.train()
         epoch_loss = _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoch, output_folder)
             
-        TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder)
+        TP, TN, FP, FN, val_loss = _calculate_metrics(nn, valid_dataloader, criterion, epoch, 'val', output_folder, save_results=epoch%50 == 0)
         # Calculate metrics
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
         precision = tntmetrics.precision(TP, FP)
@@ -561,143 +411,9 @@ def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config
     mlflow.log_metrics(metrics, step=epoch)
     return metrics
 
-def _run_test_quadrant(nn: torch.nn.Module, test_x: pd.DataFrame, transform_test: A.Compose, 
-                      quad_idx: int, config: Config, output_folder: Path, 
-                      logger: logging.Logger, epoch: int) -> dict:
-    """Run inference on a specific quadrant of test images."""
-    quad_name = ["top-left", "top-right", "bottom-left", "bottom-right"][quad_idx]
-    logger.info(f"Processing {quad_name} quadrant (idx: {quad_idx})...")
-    
-    # Create dataset for this quadrant with tiling
-    quad_dataset = TNTDataset(
-        dataframe=test_x,
-        load_masks=True,  # We need masks for metrics
-        transforms=transform_test,
-        quad_mode=True,
-        quad_idx=quad_idx,
-        tile=True,
-        tile_size=(7, 64, 64),
-        overlap=0
-    )
-    
-    quad_dataloader = DataLoader(
-        quad_dataset,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=config.num_workers
-    )
-    
-    # Run inference
-    predictions = []
-    metadata = []
-    all_masks = []
-    
-    nn.eval()  # Ensure model is in eval mode
-    with torch.no_grad():
-        for batch_data in tqdm(quad_dataloader, desc=f"Inference on quad {quad_idx}"):
-            inputs, masks, meta = batch_data  # Unpack (volume, mask, metadata)
-            inputs = inputs.unsqueeze(1).to(config.device)  # Add channel dimension
-            
-            outputs = nn(inputs)
-            probs = torch.sigmoid(outputs).detach().cpu().numpy()
-            
-            # Store predictions, masks, and metadata for stitching
-            for i in range(probs.shape[0]):
-                predictions.append(probs[i, 0])  # Remove channel dimension
-                all_masks.append(masks[i].cpu().numpy())
-                
-                # Handle metadata - convert tensors to Python types if needed
-                if isinstance(meta, dict):
-                    # If meta is a dictionary of lists/tensors
-                    meta_item = {k: v[i].item() if isinstance(v[i], torch.Tensor) else v[i] 
-                                for k, v in meta.items()}
-                else:
-                    # If meta is a list of dictionaries
-                    meta_item = meta[i]
-                
-                metadata.append(meta_item)
-    
-    # Stitch predictions and masks
-    logger.info(f"Stitching quad {quad_idx} predictions...")
-    quad_output_path = output_folder / f"quad_{quad_idx}"
-    quad_output_path.mkdir(exist_ok=True, parents=True)
-    
-    # Stitch predictions
-    stitched_preds = TNTDataset.stitch_predictions(
-        predictions, metadata, output_path=str(quad_output_path / "predictions")
-    )
-    
-    # Stitch masks
-    stitched_masks = TNTDataset.stitch_predictions(
-        all_masks, metadata, output_path=str(quad_output_path / "masks")
-    )
-    
-    # Calculate metrics for this quadrant
-    quad_metrics = {}
-    for img_idx in stitched_preds:
-        if img_idx not in stitched_masks:
-            logger.warning(f"No mask found for image {img_idx} in quadrant {quad_idx}")
-            continue
-        
-        pred = stitched_preds[img_idx]
-        mask = stitched_masks[img_idx]
-        
-        # Binarize prediction
-        binary_pred = (pred > 0.5).astype(np.uint8)
-        binary_mask = (mask > 0.5).astype(np.uint8)
-        
-        # Save binary prediction
-        tifffile.imwrite(
-            str(quad_output_path / f"binary_pred_img_{img_idx}.tif"), 
-            binary_pred * 255
-        )
-        
-        # Calculate stats
-        TP, FP, FN, TN = tntmetrics.calculate_batch_stats(
-            binary_pred * 255, binary_mask * 255, 0, 255
-        )
-        
-        # Calculate metrics
-        metrics_values = {
-            "accuracy": tntmetrics.accuracy(TP, FP, FN, TN),
-            "precision": tntmetrics.precision(TP, FP),
-            "recall": tntmetrics.recall(TP, FN),
-            "jaccard": tntmetrics.jaccard_index(TP, FP, FN),
-            "dice": tntmetrics.dice_coefficient(TP, FP, FN),
-            "tversky": tntmetrics.tversky_index(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta),
-            "focal_tversky": tntmetrics.focal_tversky_loss(TP, FP, FN, config.eval_tversky_alpha, config.eval_tversky_beta, config.eval_tversky_gamma)
-        }
-        
-        quad_metrics[f"img_{img_idx}"] = metrics_values
-        
-        # Log metrics to MLflow
-        for metric_name, value in metrics_values.items():
-            mlflow.log_metric(f"tiled_test/quad_{quad_idx}_img_{img_idx}_{metric_name}", value, step=epoch)
-    
-    # Log average metrics for this quadrant
-    if quad_metrics:
-        avg_metrics = {k: 0.0 for k in next(iter(quad_metrics.values()))}
-        for metrics_dict in quad_metrics.values():
-            for metric_name, value in metrics_dict.items():
-                avg_metrics[metric_name] += value
-        
-        # Average the metrics
-        for metric_name in avg_metrics:
-            avg_metrics[metric_name] /= len(quad_metrics)
-            mlflow.log_metric(f"tiled_test/quad_{quad_idx}_avg_{metric_name}", avg_metrics[metric_name], step=epoch)
-        
-        logger.info(f"Quadrant {quad_idx} testing completed")
-        logger.info(f"Average Dice: {avg_metrics['dice']:.4f}")
-        logger.info(f"Average Jaccard: {avg_metrics['jaccard']:.4f}")
-        
-        return avg_metrics
-    else:
-        logger.warning(f"No metrics calculated for quadrant {quad_idx}")
-        return {}
 
 def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config, 
-         output_folder: Path, logger: logging.Logger, epoch: int, test_x: pd.DataFrame,
-         transform_test: A.Compose, quad_idx: int = None) -> None:
+         output_folder: Path, logger: logging.Logger, epoch: int) -> None:
     """Run complete testing process."""
     logger.info("Starting test evaluation")
     
@@ -707,17 +423,9 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
     metrics = _calculate_test_metrics(inputs, masks, predictions, config, epoch)
     
     logger.info(f"Test set metrics: Dice={metrics['test/dice']:.4f}, Jaccard={metrics['test/jaccard']:.4f}")
-    
-    # Quadrant-based evaluation if specified
-    if quad_idx is not None:
-        quad_metrics = _run_test_quadrant(nn, test_x, transform_test, quad_idx, config, output_folder, logger, epoch)
-        if quad_metrics:
-            logger.info(f"Quadrant {quad_idx} evaluation complete: "
-                       f"Dice={quad_metrics['dice']:.4f}, Jaccard={quad_metrics['jaccard']:.4f}")
 
 
-
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, quad_idx: int = None, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
@@ -752,49 +460,43 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     ])
 
     # Create net
-    # nn = UNet3d(1, 1).to(config.device)
     nn = create_neural_network(config, 1, 1).to(config.device)
     optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = create_loss_criterion(config)
 
     # MLFlow
     with mlflow.start_run() as run:
-        mlflow.set_tag("nn_name", str(config.neural_network))
         mlflow.log_params(config.__dict__)
         mlflow.log_param("model_depth", config.model_depth)
         mlflow.log_param("base_channels", config.base_channels)
         mlflow.log_param("channel_growth", config.channel_growth)
-        # mlflow.set_tag("model_type", f"AnisotropicUNet3D_d{config.model_depth}")
-        mlflow.log_param("model_type", nn.get_signature())
+        mlflow.log_param("model_signature", nn.get_signature())
 
 
         # Run training
         _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
 
         # Run testing
-        _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1, test_x, transform_test, quad_idx)
+        _test(nn, test_dataloader, config, output_folder, logger, config.epochs-1)
 
         # After training, log the final model
         with torch.no_grad():
             nn.eval()
-            sample_input = torch.randn(config.batch_size, 1, *config.crop_size).to(config.device)
-            sample_output = nn(sample_input)
-
-            # mlflow.pytorch.log_model(nn, "model")
-            mlflow.pytorch.log_model(nn,
-                name="model",
-                input_example=sample_input.cpu().numpy(),
-                signature=mlflow.models.infer_signature(
-                    sample_input.cpu().numpy(),
-                    sample_output.cpu().numpy()
-                )
-            )
-
 
             # Also save the model
             checkpoint_path = output_folder / f"model_final.pth"
             torch.save(nn.state_dict(), checkpoint_path)
             logger.info(f"Model checkpoint saved at {checkpoint_path}")
+
+            # NOTE: this can be enabled to also log the model into mlfow, but it takes a long time and
+            #       it is not necesary gfor our purposes.
+            # sample_input = torch.randn(config.batch_size, 1, *config.crop_size).to(config.device)
+            # sample_output = nn(sample_input)
+            # print("saving the model")
+            # # Log the model as a simple artifact - much faster
+            # # mlflow.log_artifact(str(checkpoint_path), "model")
+            # print("done")
+
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
     """Parse comma-separated string into tuple of integers."""
@@ -821,10 +523,8 @@ if __name__ == "__main__":
                         help="IP address of the MLFlow server")
     parser.add_argument("--mlflow_port", type=str, default="8000",
                         help="Port of the MLFlow server")
-    parser.add_argument("--quad_idx", type=int, choices=[0, 1, 2, 3], default=None,
-                      help="Quadrant index for evaluation (0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right)")
-    parser.add_argument("--model", type=str, choices=["AnisotropicUNetV0", "BasicUNetV1"], default="AnisotropicUNetV0",
-                        help="Model architecture to use (AnisotropicUNetV0 or BasicUNetV1)")
+    parser.add_argument("--model", type=str, choices=["anisotropicunet", "basicunet"], default="anisotropicunet", 
+                        help="Model architecture to use (AnisotropicUNet or BasicUNet)")
     parser.add_argument("--model_depth", type=int, default=3,
                   help="Depth of the UNet model (number of down/up sampling blocks)")
     parser.add_argument("--base_channels", type=int, default=64,
@@ -860,7 +560,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         shuffle=args.shuffle,
         input_folder=str(args.input_folder),
-        neural_network=args.model,
+        model_type=ModelType(args.model),
         model_depth=args.model_depth,
         base_channels=args.base_channels,
         channel_growth=args.channel_growth,
@@ -870,8 +570,10 @@ if __name__ == "__main__":
         weight_decay=args.weight_decay,
     )
 
+    print(f'Shuffle: {config.shuffle}')
+
     # Run training
-    main(args.input_folder, args.output_folder, logger, config, args.quad_idx, args.mlflow_address, args.mlflow_port)
+    main(args.input_folder, args.output_folder, logger, config, args.mlflow_address, args.mlflow_port)
 
 
 
