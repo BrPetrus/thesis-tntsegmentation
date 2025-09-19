@@ -315,12 +315,12 @@ def generate_random_crop(
         possible_crop_mask[:, :min_size[2]] = False
         possible_crop_mask[-min_size[1]:, :] = False
 
-        slice_r = slice(max(0, non_training_limits['r'][0] - min_size[1]), non_training_limits['r'][0])
+        slice_r = slice(max(0, non_training_limits['r'][0] - min_size[1]), non_training_limits['r'][0]-1)
         if slice_r.start != slice_r.stop:
-            slice_c = non_training_limits['c']
+            slice_c = non_training_limits['c'][0], non_training_limits['c'][1]-1
             possible_crop_mask[slice_r, slice_c] = False
 
-        slice_r = non_training_limits['r']
+        slice_r = (non_training_limits['r'][0], non_training_limits['r'][1]-1)
         slice_c = slice(non_training_limits['c'][1], min(non_training_limits['c'][1]+min_size[2], image.shape[2]))
         if slice_c.start != slice_c.stop:
             possible_crop_mask[slice_r, slice_c] = False
@@ -514,11 +514,11 @@ def extract_test_patches(
             tunnel_mask = gt_slice == tunnel_id
             
             # Check overlap with training/test quadrant
-            overlap = compute_overlap_percentage(tunnel_mask, test_limits)
+            overlap_perc, overlap_px = compute_overlap_percentage(tunnel_mask, test_limits)
             
             # Only include tunnels that are MOSTLY IN the test quadrant
-            if overlap < overlap_threshold_perc:
-                logger.debug(f"Skipping tunnel {tunnel_id} (only {overlap:.1%} in test quadrant)")
+            if overlap_perc < overlap_threshold_perc and overlap_px < overlap_threshold_size:
+                logger.debug(f"Skipping tunnel {tunnel_id} (only {overlap_perc:.1%} in test quadrant)")
                 continue
                 
             # Find bounding box for this tunnel
@@ -593,6 +593,7 @@ def main(
     num_random_crops_train: int = 0,
     num_random_crops_test: int = 0,
     overlap_threshold: float = 0.5,
+    overlap_threshold_px: int = 100
 ) -> None:
     """
     Main function to extract and save training and testing patches.
@@ -659,6 +660,7 @@ def main(
         min_size=tuple(min_size), 
         train_quad=train_quad,
         overlap_threshold=overlap_threshold,
+        overlap_threshold_abs=overlap_threshold_px,
         num_random_crops=num_random_crops_train
     )
     
@@ -667,7 +669,8 @@ def main(
         gt, imgs,
         min_size=tuple(min_size),
         train_quad=train_quad,
-        overlap_threshold=overlap_threshold,
+        overlap_threshold_perc=overlap_threshold,
+        overlap_threshold_size=overlap_threshold_px,
         num_random_crops=num_random_crops_test
     )
     
@@ -789,6 +792,7 @@ if __name__ == "__main__":
     parser.add_argument("--random_crops_test", type=int, default=0, help="Number of random crops to add to the testing set.")
     parser.add_argument("--overlap_threshold", type=float, default=0.2, 
                         help="Threshold for determining if a tunnel is in the training quadrant.")
+    parser.add_argument("--overlap_threshold_px", type=int, default=100)
     
     args = parser.parse_args()
 
@@ -800,5 +804,6 @@ if __name__ == "__main__":
         args.overwrite, 
         args.random_crops_train,
         args.random_crops_test,
-        args.overlap_threshold
+        args.overlap_threshold,
+        args.overlap_threshold_px
     )
