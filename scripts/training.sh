@@ -10,7 +10,8 @@ ulimit -t $TIME
 # INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/splitannotations90v2/" 
 # INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21"
 # INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-08-21-quad2/"
-INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad1-norandomtest"
+# INPUT_FOLDER="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-08-21-quad1-norandomtest"
+INPUT_FOLDER="/home/xpetrus/DP/Datasets/TNT_data/annotations/2025-09-19/quad4/"
 OUTPUT_FOLDER="./output-training-$(date +%Y-%m-%d_%H-%M-%S)"
 EPOCHS=1000
 WORKERS=4
