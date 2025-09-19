@@ -22,8 +22,7 @@ MODEL_DEPTH=5
 WEIGHT_DECAY=0.001
 HORIZONTAL_KERNEL="3,3,3"
 HORIZONTAL_PADDING="1,1,1"
-# QUADS=(quad1 quad2 quad3 quad4)
-QUADS=(quad1)
+QUADS=(quad1 quad2 quad3 quad4)
 RESULTS_CSV="${OUTPUT_BASE}/all_results_${TIMESTAMP}.csv"
 
 # Initialize csvs
