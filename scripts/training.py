@@ -487,18 +487,15 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
             checkpoint_path = output_folder / f"model_final.pth"
             torch.save(nn.state_dict(), checkpoint_path)
             logger.info(f"Model checkpoint saved at {checkpoint_path}")
-            sample_input = torch.randn(config.batch_size, 1, *config.crop_size).to(config.device)
-            sample_output = nn(sample_input)
 
-            # mlflow.pytorch.log_model(nn, "model")
-            mlflow.pytorch.log_model(nn,
-                name="model",
-                input_example=sample_input.cpu().numpy(),
-                signature=mlflow.models.infer_signature(
-                    sample_input.cpu().numpy(),
-                    sample_output.cpu().numpy()
-                )
-            )
+            # NOTE: this can be enabled to also log the model into mlfow, but it takes a long time and
+            #       it is not necesary gfor our purposes.
+            # sample_input = torch.randn(config.batch_size, 1, *config.crop_size).to(config.device)
+            # sample_output = nn(sample_input)
+            # print("saving the model")
+            # # Log the model as a simple artifact - much faster
+            # # mlflow.log_artifact(str(checkpoint_path), "model")
+            # print("done")
 
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:

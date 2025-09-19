@@ -284,7 +284,11 @@ if __name__ == "__main__":
     config.device = args.device
     config.batch_size = args.batch_size
 
-    model = AnisotropicUNet3D(1, 1, 5).to(config.device)
+    model = AnisotropicUNet3D(
+        1, 1, depth=5,
+        horizontal_kernel=(3,3,3),
+        horizontal_padding=(1,1,1)
+    ).to(config.device)
     model.load_state_dict(torch.load(args.local_model, map_location=args.device))
     model.eval()
     print('Model loaded successfully')
