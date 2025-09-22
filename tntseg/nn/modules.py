@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Tuple, List, Optional
+from torchvision.ops import SqueezeExcitation
 
 class HorizontalBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel: int | List[int] = 3, padding: int | List[int] = 1, stride: int | List[int] = 1):
@@ -20,6 +21,8 @@ class HorizontalBlock(nn.Module):
             nn.ReLU(inplace=True),
             # nn.Dropout3d(p=0.2)
         )
+        self.in_channels = in_channels
+        self.out_channels = out_channels
     
     def forward(self, x):
         return self.block(x)
