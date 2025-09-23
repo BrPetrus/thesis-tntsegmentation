@@ -31,7 +31,7 @@ from scripts.training_utils import (
     CombinedLoss,
     visualize_transform_effects
 )
-from config import Config, ModelType
+from config import BaseConfig, ModelType
 
 def worker_init_fn(worker_id):
     """
@@ -53,7 +53,7 @@ def worker_init_fn(worker_id):
     # Setting it here ensures consistency with the other seeds.
     set_determinism(seed=worker_seed)
 
-def _prepare_datasets(input_folder: Path, seed: int, config: Config, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
+def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
     # Load metadata
     input_folder_train = input_folder / "train"
     if not input_folder_train.exists():
@@ -261,7 +261,7 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
     return epoch_loss
 
 
-def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, valid_dataloader: DataLoader, config: Config, output_folder: Path) -> None:
+def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.Module, train_dataloader: DataLoader, valid_dataloader: DataLoader, config: BaseConfig, output_folder: Path) -> None:
     # Last time that the eval loss improved
     epochs_since_last_improvement = 0
     last_better_eval_loss = np.inf
@@ -313,7 +313,7 @@ def _train(nn: torch.nn.Module, optimizer: torch.optim.Optimizer, criterion: nn.
         logger.info("Loaded best model weights from training.")
     mlflow.log_metric("epochs_trained", epoch-epochs_since_last_improvement)
 
-def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: Config) -> Tuple[List, List, List]:
+def _run_test_inference(nn: torch.nn.Module, dataloader: DataLoader, config: BaseConfig) -> Tuple[List, List, List]:
     """Run inference on the test set and collect inputs, masks, and predictions."""
     nn.eval()
     inputs = []
@@ -353,7 +353,7 @@ def _save_test_outputs(inputs: List, masks: List, predictions: List, output_fold
             tifffile.imwrite(mask_path, mask[0, ...].astype(np.float32))
             logger.debug(f"Saved test mask for batch {batch_idx+1}, sample {i+1} at {mask_path}")
 
-def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config: Config, epoch: int) -> dict:
+def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config: BaseConfig, epoch: int) -> dict:
     """Calculate and log test metrics."""
     # Flatten arrays for metric calculation
     flat_inputs = np.concatenate(inputs, axis=0).flatten()
@@ -412,7 +412,7 @@ def _calculate_test_metrics(inputs: List, masks: List, predictions: List, config
     return metrics
 
 
-def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config, 
+def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: BaseConfig, 
          output_folder: Path, logger: logging.Logger, epoch: int) -> None:
     """Run complete testing process."""
     logger.info("Starting test evaluation")
@@ -425,7 +425,7 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: Config,
     logger.info(f"Test set metrics: Dice={metrics['test/dice']:.4f}, Jaccard={metrics['test/jaccard']:.4f}")
 
 
-def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: Config, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: BaseConfig, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
@@ -552,7 +552,7 @@ if __name__ == "__main__":
     logger.info(f"Arguments: {args}")
 
     # Config
-    config = Config(
+    config = BaseConfig(
         epochs=args.epochs,
         lr=args.lr,
         batch_size=args.batch_size,

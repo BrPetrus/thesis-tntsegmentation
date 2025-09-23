@@ -1,5 +1,5 @@
 from torch import nn
-from config import Config
+from config import BaseConfig, AnisotropicUNetConfig, AnisotropicUNetSEConfig
 import torch
 import logging
 import tifffile
@@ -12,15 +12,19 @@ from typing import List, Tuple
 import tntseg.utilities.metrics.metrics_torch as tntloss
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.models.unet3d_basic import UNet3d
+from tntseg.nn.models.anisounet3d_csnet import AnisotropicUNet3DCSAM
+from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
 from config import ModelType
 
 import monai.transforms as MT
 
 logger = logging.getLogger()
 
-def create_neural_network(config: Config, in_channels: int, out_channels: int) -> nn.Module:
+def create_neural_network(config: BaseConfig, in_channels: int, out_channels: int) -> nn.Module:
     match config.model_type:
         case ModelType.AnisotropicUNet:
+            if not isinstance(config, AnisotropicUNetConfig):
+                raise ValueError(f"Wrong config provided. Expected AnisotropicUNetConfig, got {type(config)}")
             return AnisotropicUNet3D(
                 in_channels, 
                 out_channels, 
@@ -30,18 +34,39 @@ def create_neural_network(config: Config, in_channels: int, out_channels: int) -
                 horizontal_kernel=config.horizontal_kernel,
                 horizontal_padding=config.horizontal_padding
             )
+        case ModelType.AnisotropicUNetCSAM:
+            if not isinstance(config, AnisotropicUNetConfig):
+                raise ValueError(f"Wrong config provided. Expected AnisotropicUNetConfig, got {type(config)}")
+            return AnisotropicUNet3DCSAM(
+                in_channels, 
+                out_channels, 
+                depth=config.model_depth, 
+                base_channels=config.base_channels, 
+                channel_growth=config.channel_growth,
+                horizontal_kernel=config.horizontal_kernel,
+                horizontal_padding=config.horizontal_padding
+            )
         case ModelType.UNet3D:
+            if not isinstance(config, BaseConfig):
+                raise ValueError(f"Wrong config provided. Expected BaseConfig, got {type(config)}")
             return UNet3d(in_channels, out_channels)
-        case ModelType.CSNet2D:
-            raise NotImplementedError
-        case ModelType.AttentionUNet:
-            raise NotImplementedError
-        case ModelType.UNetSEBlok:
-            raise NotImplementedError
+        case ModelType.AnisotropicUNetSE:
+            if not isinstance(config, AnisotropicUNetSEConfig):
+                raise ValueError(f"Wrong config provided. Expected AnisotropicUNetSEConfig, got {type(config)}")
+            return AnisotropicUNet3DSE(
+                in_channels, 
+                out_channels, 
+                depth=config.model_depth, 
+                base_channels=config.base_channels, 
+                channel_growth=config.channel_growth,
+                horizontal_kernel=config.horizontal_kernel,
+                horizontal_padding=config.horizontal_padding,
+                squeeze_factor=config.reduction_factor
+            )
         case _:
             raise ValueError(f"Unknown model type '{config.model_type}'")
 
-def create_loss_criterion(config: Config) -> nn.Module:
+def create_loss_criterion(config: BaseConfig) -> nn.Module:
     loss_functions = []
     weights = []
 

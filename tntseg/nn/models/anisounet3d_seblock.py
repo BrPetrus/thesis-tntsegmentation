@@ -49,6 +49,7 @@ class AnisotropicUNet3DSE(AnisotropicUNet3D):
             upscale_stride
         )
 
+        self.squeeze_factor = squeeze_factor
         self.se_module = SqueezeExcitation3D(self.neck.out_channels, reduction_factor=squeeze_factor)
 
 
@@ -74,6 +75,9 @@ class AnisotropicUNet3DSE(AnisotropicUNet3D):
             x = hor_block(x)
             
         return self.final_conv(x)
+    
+    def get_signature(self):
+        return f"{super().get_signature()}_sf{self.squeeze_factor}"
 
  
 if __name__ == "__main__":

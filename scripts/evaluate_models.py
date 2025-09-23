@@ -24,7 +24,7 @@ from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from config import ModelType
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
 from training_utils import create_neural_network
-from config import Config, ModelType
+from config import BaseConfig, ModelType
 
 from torch.utils.data import DataLoader
 

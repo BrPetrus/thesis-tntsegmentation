@@ -8,7 +8,7 @@ from tntseg.nn.modules import DownscaleBlock, HorizontalBlock, UpscaleBlock, Hor
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.csnet_affinity_modules import SpatialAttentionBlock3d, AffinityAttention3d
 
-class AnisotropicUNet3DCSNet(AnisotropicUNet3D):
+class AnisotropicUNet3DCSAM(AnisotropicUNet3D):
     def __init__(self, n_channels_in=1, n_classes_out=1, 
                  depth=3, base_channels=64, channel_growth=2,
                  horizontal_kernel=(1, 3, 3), 
@@ -74,17 +74,20 @@ class AnisotropicUNet3DCSNet(AnisotropicUNet3D):
             x = hor_block(x)
             
         return self.final_conv(x)
+    
+    def get_signature(self):
+        return f"{super().get_signature()}-CSAM"
 
  
 if __name__ == "__main__":
     from torchsummary import summary
     
     # Test the original network configuration
-    net = AnisotropicUNet3DCSNet(1, 1)
+    net = AnisotropicUNet3DCSAM(1, 1)
     print("Original Network:")
     summary(net, (1, 7, 64, 64))
 
-    deeper_net = AnisotropicUNet3DCSNet(
+    deeper_net = AnisotropicUNet3DCSAM(
         1, 1, depth=5
     )
     print("\nDeeper Network:")
