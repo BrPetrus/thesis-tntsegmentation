@@ -286,8 +286,8 @@ if __name__ == "__main__":
 
     model = AnisotropicUNet3D(
         1, 1, depth=5,
-        horizontal_kernel=(3,3,3),
-        horizontal_padding=(1,1,1)
+        horizontal_kernel=(1,3,3),
+        horizontal_padding=(0,1,1)
     ).to(config.device)
     model.load_state_dict(torch.load(args.local_model, map_location=args.device))
     model.eval()
