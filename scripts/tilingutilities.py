@@ -9,7 +9,6 @@ from torch.types import Tensor
 
 T = TypeVar('T', bound=np.generic)
 
-                # overlap: int = 0) -> List[Tuple[NDArray[T], int, int, int]]:
 def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
                 overlap: int = 0) -> Tuple[NDArray[T], List[Tuple[int, int, int]]]:
     if volume.ndim != 3:
@@ -23,20 +22,14 @@ def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
     for d in range(0, depth, d_size - overlap):
         for r in range(0, rows, r_size - overlap):
             for c in range(0, cols, c_size - overlap):
-                # Calculate end points with overlap
-                d_end = min(d + d_size, depth)
-                r_end = min(r + r_size, rows)
-                c_end = min(c + c_size, cols)
-                
-                # Adjust start points if at the end
-                d_start = max(d_end - d_size, 0)
-                r_start = max(r_end - r_size, 0)
-                c_start = max(c_end - c_size, 0)
+                d_end = d + d_size
+                r_end = r + r_size
+                c_end = c + c_size
                 
                 # Extract tile and store with its position
-                tile = volume[d_start:d_end, r_start:r_end, c_start:c_end]
+                tile = volume[d:d_end, r:r_end, c:c_end]
                 tiles.append(tile)
-                tiles_position.append((d_start, r_start, c_start))
+                tiles_position.append((d, r, c))
     
     return tiles, tiles_position
 

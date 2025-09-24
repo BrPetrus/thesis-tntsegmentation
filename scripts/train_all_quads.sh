@@ -99,6 +99,10 @@ for i in "${!QUADS[@]}"; do
             --save_predictions \
             --device cuda \
             --batch_size ${BATCH}
+            --model ${MODEL} \
+            --model_depth ${MODEL_DEPTH} \
+            --horizontal_kernel ${HORIZONTAL_KERNEL} \
+            --horizontal_padding ${HORIZONTAL_PADDING} \
         
         # Check for evaluation success
         if [ $? -ne 0 ]; then
