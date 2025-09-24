@@ -31,7 +31,7 @@ from scripts.training_utils import (
     CombinedLoss,
     visualize_transform_effects
 )
-from config import BaseConfig, ModelType
+from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, ModelType
 
 def worker_init_fn(worker_id):
     """
@@ -523,8 +523,10 @@ if __name__ == "__main__":
                         help="IP address of the MLFlow server")
     parser.add_argument("--mlflow_port", type=str, default="8000",
                         help="Port of the MLFlow server")
-    parser.add_argument("--model", type=str, choices=["anisotropicunet", "basicunet"], default="anisotropicunet", 
-                        help="Model architecture to use (AnisotropicUNet or BasicUNet)")
+    parser.add_argument("--model", type=str, 
+                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "basicunet"], 
+                        default="anisotropicunet", 
+                        help="Model architecture to use")
     parser.add_argument("--model_depth", type=int, default=3,
                   help="Depth of the UNet model (number of down/up sampling blocks)")
     parser.add_argument("--base_channels", type=int, default=64,
@@ -537,6 +539,8 @@ if __name__ == "__main__":
                   help="Horizontal kernel size as comma-separated values (depth,height,width). Default: '1,3,3'")
     parser.add_argument("--horizontal_padding", type=str, default="0,1,1", 
                   help="Horizontal padding as comma-separated values (depth,height,width). Default: '0,1,1'")
+    parser.add_argument("--reduction_factor", type=int, default=16,
+                      help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16")
 
     args = parser.parse_args()
     
@@ -551,24 +555,65 @@ if __name__ == "__main__":
     # Log the arguments
     logger.info(f"Arguments: {args}")
 
-    # Config
-    config = BaseConfig(
-        epochs=args.epochs,
-        lr=args.lr,
-        batch_size=args.batch_size,
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        num_workers=args.num_workers,
-        shuffle=args.shuffle,
-        input_folder=str(args.input_folder),
-        model_type=ModelType(args.model),
-        model_depth=args.model_depth,
-        base_channels=args.base_channels,
-        channel_growth=args.channel_growth,
-        horizontal_kernel=horizontal_kernel,  # Add this
-        horizontal_padding=horizontal_padding,  # Add this
-        seed=args.seed,
-        weight_decay=args.weight_decay,
-    )
+    # Map string model types to enum
+    model_type_map = {
+        "anisotropicunet": ModelType.AnisotropicUNet,
+        "anisotropicunet_se": ModelType.AnisotropicUNetSE,
+        "anisotropicunet_csam": ModelType.AnisotropicUNetCSAM,
+        "basicunet": ModelType.UNet3D
+    }
+
+    # Create appropriate config based on model type
+    if args.model == "anisotropicunet_se":
+        config = AnisotropicUNetSEConfig(
+            epochs=args.epochs,
+            lr=args.lr,
+            batch_size=args.batch_size,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            num_workers=args.num_workers,
+            shuffle=args.shuffle,
+            input_folder=str(args.input_folder),
+            model_type=model_type_map[args.model],
+            model_depth=args.model_depth,
+            base_channels=args.base_channels,
+            channel_growth=args.channel_growth,
+            horizontal_kernel=horizontal_kernel,
+            horizontal_padding=horizontal_padding,
+            seed=args.seed,
+            weight_decay=args.weight_decay,
+            reduction_factor=args.reduction_factor
+        )
+    elif args.model in ["anisotropicunet", "anisotropicunet_csam"]:
+        config = AnisotropicUNetConfig(
+            epochs=args.epochs,
+            lr=args.lr,
+            batch_size=args.batch_size,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            num_workers=args.num_workers,
+            shuffle=args.shuffle,
+            input_folder=str(args.input_folder),
+            model_type=model_type_map[args.model],
+            model_depth=args.model_depth,
+            base_channels=args.base_channels,
+            channel_growth=args.channel_growth,
+            horizontal_kernel=horizontal_kernel,
+            horizontal_padding=horizontal_padding,
+            seed=args.seed,
+            weight_decay=args.weight_decay
+        )
+    else:  # basicunet
+        config = BaseConfig(
+            epochs=args.epochs,
+            lr=args.lr,
+            batch_size=args.batch_size,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+            num_workers=args.num_workers,
+            shuffle=args.shuffle,
+            input_folder=str(args.input_folder),
+            model_type=model_type_map[args.model],
+            seed=args.seed,
+            weight_decay=args.weight_decay
+        )
 
     print(f'Shuffle: {config.shuffle}')
 

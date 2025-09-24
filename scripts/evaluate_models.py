@@ -20,8 +20,11 @@ import torch.nn as nn
 from torch.utils.data import Dataset, TensorDataset
 
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
+from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
+from tntseg.nn.models.anisounet3d_csnet import AnisotropicUNet3DCSAM
+from tntseg.nn.models.unet3d_basic import UNet3d
 
-from config import ModelType
+from config import ModelType, BaseConfig, AnisotropicUNetConfig, AnisotropicUNetSEConfig
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
 from training_utils import create_neural_network
 from config import BaseConfig, ModelType
@@ -59,8 +62,47 @@ class TiledDataset(Dataset):
     def __getitem__(self, idx):
         return self.tiles_data[idx], self.tiles_positions[idx]
 
-def evaluate_model(nn: nn.Module, data: Dataset) -> None:
-    pass
+def create_model_from_args(model_type: str, model_depth: int, base_channels: int, 
+                          channel_growth: int, horizontal_kernel: Tuple[int, int, int], 
+                          horizontal_padding: Tuple[int, int, int], 
+                          reduction_factor: int = 16) -> nn.Module:
+    """Create a model based on command line arguments."""
+    
+    if model_type == "anisotropicunet":
+        return AnisotropicUNet3D(
+            n_channels_in=1,
+            n_classes_out=1,
+            depth=model_depth,
+            base_channels=base_channels,
+            channel_growth=channel_growth,
+            horizontal_kernel=horizontal_kernel,
+            horizontal_padding=horizontal_padding
+        )
+    elif model_type == "anisotropicunet_se":
+        return AnisotropicUNet3DSE(
+            n_channels_in=1,
+            n_classes_out=1,
+            depth=model_depth,
+            base_channels=base_channels,
+            channel_growth=channel_growth,
+            horizontal_kernel=horizontal_kernel,
+            horizontal_padding=horizontal_padding,
+            squeeze_factor=reduction_factor
+        )
+    elif model_type == "anisotropicunet_csam":
+        return AnisotropicUNet3DCSAM(
+            n_channels_in=1,
+            n_classes_out=1,
+            depth=model_depth,
+            base_channels=base_channels,
+            channel_growth=channel_growth,
+            horizontal_kernel=horizontal_kernel,
+            horizontal_padding=horizontal_padding
+        )
+    elif model_type == "basicunet":
+        return UNet3d(in_channels=1, out_channels=1)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
 
 def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, threshold: float = 0.5) -> dict:
     """
@@ -265,10 +307,20 @@ def create_dataset(database_path: str | Path) -> Dataset:
     dataset = TNTDataset(df, load_masks=True, transforms=transforms)
     return dataset
 
+def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
+    """Parse comma-separated string into tuple of integers."""
+    try:
+        values = [int(x.strip()) for x in arg_string.split(',')]
+        if len(values) != 3:
+            raise ValueError(f"{arg_name} must have exactly 3 values")
+        return tuple(values)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"Invalid {arg_name}: {arg_string}. {str(e)}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate deep learning models')
-    parser.add_argument('local_model', type=str, default=None,
-                        help="Path to a local model file (bypass MLflow)")
+    parser.add_argument('local_model', type=str, 
+                        help="Path to a local model file")
     parser.add_argument('database', type=str,
                         help='Path to database folder containing images')
     parser.add_argument('output_dir', type=str,
@@ -277,21 +329,49 @@ if __name__ == "__main__":
                         help="Batch size for inference")
     parser.add_argument('--device', type=str, default='cpu',
                         help="Device to run PyTorch on")
-    parser.add_argument('--save_predictions', action="store_true", default=False)
-    # Add a parameter for local model path
+    parser.add_argument('--save_predictions', action="store_true", default=False,
+                        help="Save prediction outputs")
+    parser.add_argument('--model_type', type=str, 
+                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "basicunet"],
+                        default="anisotropicunet",
+                        help="Model architecture type")
+    parser.add_argument('--model_depth', type=int, default=5,
+                        help="Depth of the UNet model")
+    parser.add_argument('--base_channels', type=int, default=64,
+                        help="Number of channels in the first layer")
+    parser.add_argument('--channel_growth', type=int, default=2,
+                        help="Factor to multiply channels by at each depth")
+    parser.add_argument('--horizontal_kernel', type=str, default="1,3,3",
+                        help="Horizontal kernel size as comma-separated values")
+    parser.add_argument('--horizontal_padding', type=str, default="0,1,1",
+                        help="Horizontal padding as comma-separated values")
+    parser.add_argument('--reduction_factor', type=int, default=16,
+                        help="Reduction factor for SE blocks (only used with anisotropicunet_se)")
+    
     args = parser.parse_args()
+
+    # Parse tuple arguments
+    horizontal_kernel = parse_tuple_arg(args.horizontal_kernel, "horizontal_kernel")
+    horizontal_padding = parse_tuple_arg(args.horizontal_padding, "horizontal_padding")
 
     config.device = args.device
     config.batch_size = args.batch_size
 
-    model = AnisotropicUNet3D(
-        1, 1, depth=5,
-        horizontal_kernel=(1,3,3),
-        horizontal_padding=(0,1,1)
+    # Create model based on arguments
+    model = create_model_from_args(
+        model_type=args.model_type,
+        model_depth=args.model_depth,
+        base_channels=args.base_channels,
+        channel_growth=args.channel_growth,
+        horizontal_kernel=horizontal_kernel,
+        horizontal_padding=horizontal_padding,
+        reduction_factor=args.reduction_factor
     ).to(config.device)
+    
+    # Load model weights
     model.load_state_dict(torch.load(args.local_model, map_location=args.device))
     model.eval()
-    print('Model loaded successfully')
+    print(f'Model ({args.model_type}) loaded successfully')
     
     # Run evaluation
     with torch.no_grad():
