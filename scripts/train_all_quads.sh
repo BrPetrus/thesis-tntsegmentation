@@ -11,7 +11,7 @@ INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-09-19"
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
-EPOCHS=1000
+EPOCHS=1
 WORKERS=4
 BATCH=32
 MLFLOW_SERVER_PORT=8800
@@ -132,6 +132,6 @@ for i in "${!QUADS[@]}"; do
 done
 
 echo "All training and evaluation completed!"
-echo "Results saved to: ${RESULT_CSV}"
+echo "Results saved to: ${RESULTS_CSV}"
 
 export -p >> "$ENV_VAR"

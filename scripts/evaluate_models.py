@@ -100,7 +100,7 @@ def create_model_from_args(model_type: str, model_depth: int, base_channels: int
             horizontal_padding=horizontal_padding
         )
     elif model_type == "basicunet":
-        return UNet3d(in_channels=1, out_channels=1)
+        return UNet3d(n_in_channels=1, n_classes_out=1)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
