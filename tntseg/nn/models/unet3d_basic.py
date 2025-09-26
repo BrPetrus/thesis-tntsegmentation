@@ -74,6 +74,9 @@ class UNet3d(nn.Module):
         x = self.up1(x_d2, x_d1)
         x = self.up2(x, x_in)
         return self.out(x)
+    
+    def get_signature(self) -> str:
+        return "basicunet"
 
 if __name__ == "__main__":
     from torchsummary import summary
