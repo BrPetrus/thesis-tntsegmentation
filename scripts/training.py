@@ -467,9 +467,9 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     # MLFlow
     with mlflow.start_run() as run:
         mlflow.log_params(config.__dict__)
-        mlflow.log_param("model_depth", config.model_depth)
-        mlflow.log_param("base_channels", config.base_channels)
-        mlflow.log_param("channel_growth", config.channel_growth)
+        # mlflow.log_param("model_depth", config.model_depth)
+        # mlflow.log_param("base_channels", config.base_channels)
+        # mlflow.log_param("channel_growth", config.channel_growth)
         mlflow.log_param("model_signature", nn.get_signature())
 
 
