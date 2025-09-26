@@ -599,7 +599,7 @@ if __name__ == "__main__":
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
             seed=args.seed,
-            weight_decay=args.weight_decay
+            weight_decay=args.weight_decay,
         )
     else:  # basicunet
         config = BaseConfig(
