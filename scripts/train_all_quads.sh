@@ -25,6 +25,7 @@ HORIZONTAL_PADDING="1,1,1"
 QUADS=(quad1 quad2 quad3 quad4)
 RESULTS_CSV="${OUTPUT_BASE}/all_results_${TIMESTAMP}.csv"
 ENV_VAR="${OUTPUT_BASE}/env.txt"
+TILE_OVERLAP=20
 
 # Initialize csvs
 mkdir -p "${OUTPUT_BASE}"
