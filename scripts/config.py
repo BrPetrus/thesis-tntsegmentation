@@ -16,7 +16,6 @@ class BaseConfig:
     epochs: int
     lr: float
     batch_size: int
-    device: str
     num_workers: int
     shuffle: bool
     device: str
@@ -40,10 +39,10 @@ class BaseConfig:
     train_focal_tversky_alpha: float = 0.8
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
-    seed: int = 42
     weight_decay: float = 0.0001
     model_type: ModelType = ModelType.Unkwnown
 
+@dataclass
 class AnisotropicUNetConfig(BaseConfig):
     model_depth: int = 3 
     base_channels: int = 64
@@ -52,5 +51,6 @@ class AnisotropicUNetConfig(BaseConfig):
     horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
     crop_size: Tuple[int, int, int] = (7, 64, 64)
 
+@dataclass
 class AnisotropicUNetSEConfig(AnisotropicUNetConfig):
     reduction_factor: int = 16
