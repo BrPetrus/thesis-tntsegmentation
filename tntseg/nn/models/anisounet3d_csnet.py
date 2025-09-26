@@ -4,9 +4,8 @@ from torchvision.ops import SqueezeExcitation
 import torch.nn as nn
 import torch.nn.functional as F
 
-from tntseg.nn.modules import DownscaleBlock, HorizontalBlock, UpscaleBlock, HorizontalSEBlock
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
-from tntseg.nn.csnet_affinity_modules import SpatialAttentionBlock3d, AffinityAttention3d
+from tntseg.nn.csnet_affinity_modules import AffinityAttention3d
 
 class AnisotropicUNet3DCSAM(AnisotropicUNet3D):
     def __init__(self, n_channels_in=1, n_classes_out=1, 

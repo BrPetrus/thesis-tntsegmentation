@@ -9,7 +9,6 @@ from torch.types import Tensor
 
 T = TypeVar('T', bound=np.generic)
 
-                # overlap: int = 0) -> List[Tuple[NDArray[T], int, int, int]]:
 def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
                 overlap: int = 0) -> Tuple[NDArray[T], List[Tuple[int, int, int]]]:
     if volume.ndim != 3:
@@ -20,23 +19,28 @@ def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
     tiles = []
     tiles_position = []
     
-    for d in range(0, depth, d_size - overlap):
+    for d in range(0, depth, d_size):
         for r in range(0, rows, r_size - overlap):
             for c in range(0, cols, c_size - overlap):
-                # Calculate end points with overlap
-                d_end = min(d + d_size, depth)
-                r_end = min(r + r_size, rows)
-                c_end = min(c + c_size, cols)
-                
-                # Adjust start points if at the end
-                d_start = max(d_end - d_size, 0)
-                r_start = max(r_end - r_size, 0)
-                c_start = max(c_end - c_size, 0)
+                d_end = d + d_size
+                r_end = r + r_size
+                c_end = c + c_size
                 
                 # Extract tile and store with its position
-                tile = volume[d_start:d_end, r_start:r_end, c_start:c_end]
+                tile = volume[d:d_end, r:r_end, c:c_end]
+
+                # Pad the corners with 0s
+                if tile.shape[1] != r_size:
+                    to_pad = r_size - tile.shape[1]
+                    tile = torch.nn.functional.pad(tile, (0, 0, 0, to_pad))
+                if tile.shape[2] != c_size:
+                    to_pad = c_size - tile.shape[2]
+                    tile = torch.nn.functional.pad(tile, (0, to_pad, 0,0))
+
+                assert tile.shape == tile_size, f"{tile.shape} != {tile_size} for d,r,c = {d},{r},{c}"
+
                 tiles.append(tile)
-                tiles_position.append((d_start, r_start, c_start))
+                tiles_position.append((d, r, c))
     
     return tiles, tiles_position
 
@@ -57,12 +61,29 @@ def stitch_volume(tiles: List[torch.Tensor],
     # Process each tile
     for idx, (d_start, r_start, c_start) in enumerate(positions):
         tile = tiles[idx].squeeze(dim=0)
+        tile_depth, tile_rows, tile_cols = tile.shape
 
-        d_end = d_start + tile.shape[0]
-        r_end = r_start + tile.shape[1]
-        c_end = c_start + tile.shape[2]
+        d_ideal_end = d_start + tile_depth
+        r_ideal_end = r_start + tile_rows
+        c_ideal_end = c_start + tile_cols
+
+        d_end = min(d_ideal_end, depth)
+        r_end = min(r_ideal_end, rows)
+        c_end = min(c_ideal_end, cols)
+
+        tile_d_end = tile_depth - (d_ideal_end - d_end)
+        tile_r_end = tile_rows - (r_ideal_end - r_end)
+        tile_c_end = tile_cols - (c_ideal_end - c_end)
+
+        # tile = tile[d_start:d_end, r_start:r_end, c_start:c_end]  # Overlaping might produce extra padding on the borders
+        tile = tile[:tile_d_end, :tile_r_end, :tile_c_end]
+
+        assert d_ideal_end - d_end == tile_depth - tile.shape[0]
+        assert r_ideal_end - r_end == tile_rows - tile.shape[1]
+        assert c_ideal_end - c_end == tile_cols - tile.shape[2]
         
         if aggregation_method == AggregationMethod.Mean:
+            assert tile.shape == result[d_start:d_end, r_start:r_end, c_start:c_end].shape, f"{tile.shape}; {result[d_start:d_end,r_start:r_end, c_start:c_end].shape}"
             result[d_start:d_end, r_start:r_end, c_start:c_end] += tile
             counts[d_start:d_end, r_start:r_end, c_start:c_end] += 1
         elif aggregation_method == AggregationMethod.Max:

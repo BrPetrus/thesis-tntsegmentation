@@ -145,7 +145,7 @@ def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, thre
     
     return metrics
 
-def main(model: nn.Module, database_path: str, output_dir: str | Path, store_predictions: bool) -> None:
+def main(model: nn.Module, database_path: str, output_dir: str | Path, store_predictions: bool, tile_overlap: int) -> None:
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
         raise ValueError(f"Invalid output_dir. Expected string or Path type")
     if isinstance(output_dir, str):
@@ -163,7 +163,7 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
         print(f"\nProcessing volume {i+1}/{len(dataset)}")
         
         # Split the volume into tiles
-        tiles_data, tiles_positions = tile_volume(data[0], config.crop_size, overlap=0)
+        tiles_data, tiles_positions = tile_volume(data[0], config.crop_size, overlap=tile_overlap)
 
         tiles_dataset = TiledDataset(tiles_data, tiles_positions)
         tiles_dataloader = DataLoader(
@@ -347,6 +347,8 @@ if __name__ == "__main__":
                         help="Horizontal padding as comma-separated values")
     parser.add_argument('--reduction_factor', type=int, default=16,
                         help="Reduction factor for SE blocks (only used with anisotropicunet_se)")
+    parser.add_argument('--tile_overlap', type=int, default=0,
+                        help="How much (px) of overlap in tiling and stitching")
     
     args = parser.parse_args()
 
@@ -375,7 +377,7 @@ if __name__ == "__main__":
     
     # Run evaluation
     with torch.no_grad():
-        main(model, args.database, args.output_dir, args.save_predictions)
+        main(model, args.database, args.output_dir, args.save_predictions, args.tile_overlap)
 
 
 

@@ -24,6 +24,7 @@ HORIZONTAL_KERNEL="1,3,3"
 HORIZONTAL_PADDING="0,1,1"
 QUADS=(quad1 quad2 quad3 quad4)
 RESULTS_CSV="${OUTPUT_BASE}/all_results_${TIMESTAMP}.csv"
+ENV_VAR="${OUTPUT_BASE}/env.txt"
 
 # Initialize csvs
 mkdir -p "${OUTPUT_BASE}"
@@ -98,7 +99,12 @@ for i in "${!QUADS[@]}"; do
             "${EVAL_OUTPUT}" \
             --save_predictions \
             --device cuda \
-            --batch_size ${BATCH}
+            --batch_size ${BATCH} \
+            --model_type ${MODEL} \
+            --model_depth ${MODEL_DEPTH} \
+            --horizontal_kernel ${HORIZONTAL_KERNEL} \
+            --horizontal_padding ${HORIZONTAL_PADDING} \
+            --tile_overlap ${TILE_OVERLAP}
         
         # Check for evaluation success
         if [ $? -ne 0 ]; then
@@ -126,3 +132,5 @@ done
 
 echo "All training and evaluation completed!"
 echo "Results saved to: ${RESULT_CSV}"
+
+export -p >> "$ENV_VAR"
