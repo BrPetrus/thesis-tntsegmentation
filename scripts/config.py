@@ -41,6 +41,7 @@ class BaseConfig:
     train_focal_tversky_gamma: float = 2
     weight_decay: float = 0.0001
     model_type: ModelType = ModelType.Unkwnown
+    crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 @dataclass
 class AnisotropicUNetConfig(BaseConfig):
@@ -49,7 +50,6 @@ class AnisotropicUNetConfig(BaseConfig):
     channel_growth: int = 2
     horizontal_kernel: Tuple[int, int, int] = (1, 3, 3) 
     horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
-    crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 @dataclass
 class AnisotropicUNetSEConfig(AnisotropicUNetConfig):
