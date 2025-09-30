@@ -1,4 +1,3 @@
-from turtle import forward
 import pandas as pd
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 import numpy as np
@@ -25,6 +24,7 @@ from ast import literal_eval
 import monai.transforms as MT
 from monai.utils import set_determinism
 import json
+from dataclasses import asdict
 
 from scripts.training_utils import ( 
     create_neural_network,
@@ -507,7 +507,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
         
         # Dump the config into .json file
         with open(output_folder / "config.json", 'w') as jsonfile:
-            json.dump(config, jsonfile)
+            json.dump(asdict(config), jsonfile, indent=2, default=str)
 
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
