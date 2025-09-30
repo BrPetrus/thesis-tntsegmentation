@@ -24,6 +24,7 @@ from torch.types import Tensor
 from ast import literal_eval
 import monai.transforms as MT
 from monai.utils import set_determinism
+import json
 
 from scripts.training_utils import ( 
     create_neural_network,
@@ -501,6 +502,10 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
             # # Log the model as a simple artifact - much faster
             # # mlflow.log_artifact(str(checkpoint_path), "model")
             # print("done")
+        
+        # Dump the config into .json file
+        with open(output_folder / "config.json", 'w') as jsonfile:
+            json.dump(config, jsonfile)
 
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
