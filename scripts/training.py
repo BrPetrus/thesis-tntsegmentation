@@ -244,7 +244,7 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
         epoch_loss += loss.item()
 
         # Save predictions, inputs, and masks for the first batch of each epoch
-        if batch_idx == 0 and epoch % 1 == 0:  # TODO: change
+        if batch_idx == 0 and epoch % 100 == 0:
             predictions = torch.sigmoid(outputs).cpu().detach().numpy()
             inputs_np = inputs.cpu().detach().numpy()
             masks_np = masks.cpu().detach().numpy()
