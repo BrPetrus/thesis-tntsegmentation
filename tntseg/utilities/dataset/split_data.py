@@ -525,7 +525,7 @@ def extract_test_patches(
             overlap_perc, overlap_px = compute_overlap_percentage(tunnel_mask, test_limits)
             
             # Only include tunnels that are MOSTLY IN the test quadrant
-            if overlap_perc < overlap_threshold_perc and overlap_px < overlap_threshold_size:
+            if overlap_perc < overlap_threshold_perc:
                 logger.debug(f"Skipping tunnel {tunnel_id} (only {overlap_perc:.1%} in test quadrant)")
                 continue
                 
@@ -729,7 +729,7 @@ def main(
                 tunnel_id = int(patch_id.split('_id')[1])
                 # Remove this tunnel ID from the GT visualization
                 vis_gt[gt[t_idx] == tunnel_id] = 128
-        
+
         for _, _, patch_id, _, coords in test_patches:
             if patch_id.startswith(f't{t_idx}_'):  # Match time index
                 z_coords, r_coords, c_coords = coords
