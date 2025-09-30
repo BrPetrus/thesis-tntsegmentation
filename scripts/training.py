@@ -33,24 +33,23 @@ from scripts.training_utils import (
 )
 from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, ModelType
 
-def worker_init_fn(worker_id):
-    """
-    Ensures each data loading worker process has a unique random seed.
+def set_all_seeds(seed: int):
+    """Set seeds for all random number generators"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    set_determinism(seed)
+    torch.use_deterministic_algorithms(True, warn_only=True)
 
-    Args:
-        worker_id: An integer representing the worker's ID.
-    """
-    # Use PyTorch's `initial_seed()` as a base, as it's unique per DataLoader run
-    # and combines with the worker ID to ensure each worker is seeded differently.
+def worker_init_fn(worker_id):
+    """Initialise worker with different seed"""
     worker_seed = torch.initial_seed() % (2**32) + worker_id
 
     # Set seeds for all relevant libraries
     random.seed(worker_seed)
     np.random.seed(worker_seed)
     torch.manual_seed(worker_seed)
-    
-    # MONAI's `set_determinism` handles its own internal RNGs.
-    # Setting it here ensures consistency with the other seeds.
     set_determinism(seed=worker_seed)
 
 def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
@@ -155,19 +154,23 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
         batch_size=config.batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers,
-        worker_init_fn=worker_init_fn
+        worker_init_fn=worker_init_fn,
+        generator=torch.Generator.manual_seed(seed),  # For reproducibility
+        persistent_workers=True,
     )
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=config.num_workers,
+        persistent_workers=True,
     )
     valid_dataloader = DataLoader(
         valid_dataset,
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=config.num_workers,
+        persistent_workers=True,
     )
     return train_dataloader, test_dataloader, valid_dataloader
 
@@ -426,6 +429,8 @@ def _test(nn: torch.nn.Module, test_dataloader: DataLoader, config: BaseConfig,
 
 
 def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config: BaseConfig, mlflow_address: str = "localhost", mlflow_port: str = "800") -> None:
+    set_all_seeds(config.seed)
+
     output_folder_path = Path(output_folder)
     output_folder_path.mkdir(exist_ok=True, parents=True)
 
