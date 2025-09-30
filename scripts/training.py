@@ -150,13 +150,15 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
     valid_dataset = TNTDataset(valid_x, transforms=transform_test)
 
     # Create dataloaders
+    generator = torch.Generator()
+    generator.manual_seed(seed)
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers,
         worker_init_fn=worker_init_fn,
-        generator=torch.Generator.manual_seed(seed),  # For reproducibility
+        generator=generator,  # For reproducibility
         persistent_workers=True,
     )
     test_dataloader = DataLoader(
@@ -242,7 +244,7 @@ def _train_single_epoch(nn, optimizer, criterion, train_dataloader, config, epoc
         epoch_loss += loss.item()
 
         # Save predictions, inputs, and masks for the first batch of each epoch
-        if batch_idx == 0 and epoch % 100 == 0:
+        if batch_idx == 0 and epoch % 1 == 0:  # TODO: change
             predictions = torch.sigmoid(outputs).cpu().detach().numpy()
             inputs_np = inputs.cpu().detach().numpy()
             masks_np = masks.cpu().detach().numpy()
