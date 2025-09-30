@@ -39,7 +39,7 @@ nice -n 19 python training.py \
     --model_depth "${MODEL_DEPTH}" \
     --weight_decay "${WEIGHT_DECAY}" \
     --horizontal_kernel "${HORIZONTAL_KERNEL}" \
-    --horizontal_padding "${HORIZONTAL_PADDING}"
-    # --shuffle
+    --horizontal_padding "${HORIZONTAL_PADDING}" \
+    --shuffle
 
 
