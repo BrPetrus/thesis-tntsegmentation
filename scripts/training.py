@@ -507,7 +507,10 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
         
         # Dump the config into .json file
         with open(output_folder / "config.json", 'w') as jsonfile:
-            json.dump(asdict(config), jsonfile, indent=2, default=str)
+            config_dict = asdict(config)
+            config_dict['mlflow_run_name'] = run.info.run_name
+            config_dict['mlflow_run_id'] = run.info.run_id
+            json.dump(config_dict, jsonfile, indent=2, default=str)
 
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
