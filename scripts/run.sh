@@ -24,8 +24,8 @@ MODEL=anisotropicunet_csam
 SEED=42
 MODEL_DEPTH=5
 WEIGHT_DECAY=0.0001
-HORIZONTAL_KERNEL="1,3,3"
-HORIZONTAL_PADDING="0,1,1"
+HORIZONTAL_KERNEL="3,3,3"
+HORIZONTAL_PADDING="1,1,1"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
