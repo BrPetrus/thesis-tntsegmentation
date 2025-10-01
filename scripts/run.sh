@@ -12,7 +12,7 @@ echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 MODE="both"  # Options: train, eval, both
 
 # Training options
-INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-09-19"
+INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-09-30"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
 EPOCHS=1000
