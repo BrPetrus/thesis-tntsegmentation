@@ -9,6 +9,13 @@ from torch.types import Tensor
 
 T = TypeVar('T', bound=np.generic)
 
+def _draw_diagonal_in_square(volume: NDArray, val=(0, 0, 0)):
+    rows, cols, _ = volume.shape
+    assert rows == cols, "Just squares are supported"
+    for i in range(rows):
+        volume[i, i] = val
+        volume[rows-i-1, i] = val
+
 def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
                 overlap: int = 0) -> Tuple[NDArray[T], List[Tuple[int, int, int]]]:
     if volume.ndim != 3:
@@ -19,28 +26,38 @@ def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
     tiles = []
     tiles_position = []
     
-    for d in range(0, depth, d_size):
-        for r in range(0, rows, r_size - overlap):
-            for c in range(0, cols, c_size - overlap):
-                d_end = d + d_size
-                r_end = r + r_size
-                c_end = c + c_size
+    for d_start in range(0, depth, d_size):
+        for r_start in range(0, rows, r_size - overlap):
+            for c_start in range(0, cols, c_size - overlap):
+                d_end = d_start + d_size
+                r_end = r_start + r_size
+                c_end = c_start + c_size
+
+                d_end_allowed = min(depth, d_end)
+                r_end_allowed = min(rows, r_end)
+                c_end_allowed = min(cols, c_end)
+
+                assert d_end == d_end_allowed, "Unsupported depth"  # NOTE: we are supporting just our data right now
                 
-                # Extract tile and store with its position
-                tile = volume[d:d_end, r:r_end, c:c_end]
+                if r_end_allowed != r_end:
+                    diff = r_end - r_end_allowed
 
-                # Pad the corners with 0s
-                if tile.shape[1] != r_size:
-                    to_pad = r_size - tile.shape[1]
-                    tile = torch.nn.functional.pad(tile, (0, 0, 0, to_pad))
-                if tile.shape[2] != c_size:
-                    to_pad = c_size - tile.shape[2]
-                    tile = torch.nn.functional.pad(tile, (0, to_pad, 0,0))
+                    # Shift the tile
+                    r_start -= diff
+                    r_end -= diff
+                if c_end_allowed != c_end:
+                    diff = c_end - c_end_allowed
 
-                assert tile.shape == tile_size, f"{tile.shape} != {tile_size} for d,r,c = {d},{r},{c}"
+                    # Shift the tile
+                    c_start -= diff
+                    c_end -= diff
+
+                tile = volume[d_start:d_end, r_start:r_end, c_start:c_end]
+
+                assert tile.shape == tile_size, f"{tile.shape} != {tile_size} for d,r,c = {d_start},{r_start},{c_start}"
 
                 tiles.append(tile)
-                tiles_position.append((d, r, c))
+                tiles_position.append((d_start, r_start, c_start))
     
     return tiles, tiles_position
 
@@ -52,11 +69,16 @@ class AggregationMethod(StrEnum):
 def stitch_volume(tiles: List[torch.Tensor],
                   positions: List[Tuple[int, int, int]], 
                   original_shape: Tuple[int, int, int], 
-                  aggregation_method: AggregationMethod = AggregationMethod.Mean) -> NDArray[T]:
+                  aggregation_method: AggregationMethod = AggregationMethod.Mean,
+                  visualise_lines: bool = False) -> NDArray[T] | Tuple[NDArray[T], NDArray[np.uint8]]:
     # Initialize output volume and count matrix for averaging
     depth, rows, cols = original_shape
     result = torch.zeros(original_shape, dtype=tiles[0].dtype)
     counts = torch.zeros(original_shape, dtype=torch.int32)
+
+    if visualise_lines:
+        visualisation = np.zeros((rows, cols, 3), dtype=np.uint8)
+        visualisation[:, :] = (255, 255, 255)
 
     # Process each tile
     for idx, (d_start, r_start, c_start) in enumerate(positions):
@@ -94,10 +116,20 @@ def stitch_volume(tiles: List[torch.Tensor],
             mask = (current == 0) | (tile < current)
             result[d_start:d_end, r_start:r_end, c_start:c_end][mask] = tile[mask]
 
+        if visualise_lines:
+            val = (255, 0, 0) if idx % 2 == 0 else (0, 0, 255)
+            visualisation[r_start:r_end, c_start] = val  # left line
+            visualisation[r_end-1, c_start:c_end] = val  # bottom line
+            visualisation[r_start, c_start:c_end] = val  # top line
+            visualisation[r_start:r_end, c_end-1] = val  # right line
+            _draw_diagonal_in_square(visualisation[r_start:r_end, c_start:c_end], val=val)  # Diagonals
+
     # Compute final result based on aggregation method
     if aggregation_method == AggregationMethod.Mean:
         # Avoid division by zero
         counts[counts == 0] = 1
         result = result / counts
 
+    if visualise_lines:
+        return result, visualisation
     return result

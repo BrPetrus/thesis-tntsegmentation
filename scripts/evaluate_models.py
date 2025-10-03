@@ -145,7 +145,7 @@ def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, thre
     
     return metrics
 
-def main(model: nn.Module, database_path: str, output_dir: str | Path, store_predictions: bool, tile_overlap: int) -> None:
+def main(model: nn.Module, database_path: str, output_dir: str | Path, store_predictions: bool, tile_overlap: int, visualise_tiling_lines: bool = False) -> None:
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
         raise ValueError(f"Invalid output_dir. Expected string or Path type")
     if isinstance(output_dir, str):
@@ -211,12 +211,21 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
         all_predictions_tensor = torch.stack(all_predictions)
         
         # Stitch the predictions back together using positions
-        reconstructed_volume = stitch_volume(
+        # reconstructed_volume = stitch_volume(
+        out = stitch_volume(
             all_predictions_tensor, 
             all_positions,
             original_shape=data.shape[1:],
-            aggregation_method=AggregationMethod.Mean
+            aggregation_method=AggregationMethod.Mean,
+            visualise_lines=visualise_tiling_lines
         )
+        if visualise_tiling_lines:
+            reconstructed_volume, stitch_lines_vis = out
+            tifffile.imwrite(output_dir / "visualised_tiling_lines.tif", stitch_lines_vis)
+        else:
+            reconstructed_volume = out
+        
+
 
         # Apply sigmoid to get probabilities
         probabilities = torch.sigmoid(reconstructed_volume).numpy()
@@ -349,6 +358,8 @@ if __name__ == "__main__":
                         help="Reduction factor for SE blocks (only used with anisotropicunet_se)")
     parser.add_argument('--tile_overlap', type=int, default=0,
                         help="How much (px) of overlap in tiling and stitching")
+    parser.add_argument('--visualise_tiling', action="store_true", default=False,
+                        help="Visualise tiling and stitching lines")
     
     args = parser.parse_args()
 
@@ -377,7 +388,7 @@ if __name__ == "__main__":
     
     # Run evaluation
     with torch.no_grad():
-        main(model, args.database, args.output_dir, args.save_predictions, args.tile_overlap)
+        main(model, args.database, args.output_dir, args.save_predictions, args.tile_overlap, args.visualise_tiling)
 
 
 
