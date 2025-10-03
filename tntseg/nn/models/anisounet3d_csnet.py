@@ -64,7 +64,8 @@ class AnisotropicUNet3DCSAM(AnisotropicUNet3D):
         x = self.neck(x)
 
         # Apply the Spatial Attention from CSNet paper
-        x = self.affinity_attention(x)
+        attention = self.affinity_attention(x)
+        x = x + attention
 
         # Expansive path
         for i in range(len(self.upsampling_layers)):
