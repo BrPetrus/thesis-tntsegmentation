@@ -55,16 +55,16 @@ class UNet3d(nn.Module):
         self.n_classes_out = n_classes_out
     
         # Encoded part
-        self.in_conv = HorizontalBlock(n_channels_in, 32)
-        self.down1 = DownscaleBlock(32, 64)
-        self.down2 = DownscaleBlock(64, 128)
+        self.in_conv = HorizontalBlock(n_channels_in, 64)
+        self.down1 = DownscaleBlock(64, 128)
+        self.down2 = DownscaleBlock(128, 256)
 
         # Decoder part
-        self.up1 = UpscaleBlock(128, 64)
-        self.up2 = UpscaleBlock(64, 32)
+        self.up1 = UpscaleBlock(256, 128)
+        self.up2 = UpscaleBlock(128, 64)
 
         # Out
-        self.out = nn.Conv3d(32, n_classes_out, 1)  # Dim. reduction
+        self.out = nn.Conv3d(64, n_classes_out, 1)  # Dim. reduction
     
     def forward(self, x):
         # in: [7, 32, 32]
