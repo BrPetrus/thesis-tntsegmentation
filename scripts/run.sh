@@ -26,6 +26,7 @@ MODEL_DEPTH=4
 WEIGHT_DECAY=0.0001
 HORIZONTAL_KERNEL="1,3,3"
 HORIZONTAL_PADDING="0,1,1"
+BASE_CHANNELS=32
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
@@ -120,6 +121,7 @@ run_training() {
             --weight_decay ${WEIGHT_DECAY} \
             --horizontal_kernel ${HORIZONTAL_KERNEL} \
             --horizontal_padding ${HORIZONTAL_PADDING} \
+            --base_channels ${BASE_CHANNELS} \
             --shuffle
 
         # Check for training success
