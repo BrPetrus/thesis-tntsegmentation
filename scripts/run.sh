@@ -188,7 +188,8 @@ run_evaluation() {
                 --model_depth ${MODEL_DEPTH} \
                 --horizontal_kernel ${HORIZONTAL_KERNEL} \
                 --horizontal_padding ${HORIZONTAL_PADDING} \
-                --tile_overlap ${TILE_OVERLAP}
+                --tile_overlap ${TILE_OVERLAP} \
+                --base_channels ${BASE_CHANNELS}
             
             # Check for evaluation success
             if [ $? -ne 0 ]; then
