@@ -132,6 +132,33 @@ def detect_tunnels(predictions: NDArray[np.bool], labels: NDArray[np.uint8], ima
                 if contains > best_yet_overlap:
                     mapping[label_id] = (segment_label_id, contains)
     
+    # === DUPLICATE DETECTION ===
+    # Check for prediction labels that are mapped to multiple GT tunnels
+    pred_to_gt_mapping = {}  # prediction_label -> list of (gt_label, overlap_score)
+    for gt_label, (pred_label, overlap_score) in mapping.items():
+        if pred_label not in pred_to_gt_mapping:
+            pred_to_gt_mapping[pred_label] = []
+        pred_to_gt_mapping[pred_label].append((gt_label, overlap_score))
+    
+    # Find duplicates
+    duplicate_predictions = {}
+    for pred_label, gt_matches in pred_to_gt_mapping.items():
+        if len(gt_matches) > 1:
+            duplicate_predictions[pred_label] = gt_matches
+    
+    # Report duplicates
+    if duplicate_predictions:
+        print(f"\n*** DUPLICATE MAPPINGS DETECTED ***")
+        print(f"Found {len(duplicate_predictions)} prediction regions mapped to multiple GT tunnels:")
+        for pred_label, gt_matches in duplicate_predictions.items():
+            print(f"  Prediction {pred_label} matches:")
+            for gt_label, overlap_score in gt_matches:
+                gt_size = np.sum(labels == gt_label)
+                pred_size = np.sum(labeled_prediction == pred_label)
+                print(f"    -> GT {gt_label}: {overlap_score:.2f} overlap (GT size: {gt_size}, Pred size: {pred_size})")
+    else:
+        print("No duplicate mappings found - each prediction maps to at most one GT tunnel")
+    
     # Find unmatched labels
     unmatched_labels = []
     for label_id in np.unique(labels):
@@ -277,10 +304,88 @@ def detect_tunnels(predictions: NDArray[np.bool], labels: NDArray[np.uint8], ima
     
     tifffile.imwrite(str(output_folder / 'overview_matching_overlay.tif'), overview_vis)
 
-    # 5. Save original background for reference
+    # 5. NEW: Duplicate mappings visualization
+    if duplicate_predictions:
+        duplicate_vis = background_rgb.copy()
+        
+        # Use bright, distinctive colors for duplicates
+        duplicate_colors = [
+            (255, 0, 255),    # Magenta
+            (0, 255, 255),    # Cyan  
+            (255, 165, 0),    # Orange
+            (255, 20, 147),   # Deep pink
+            (50, 205, 50),    # Lime green
+            (255, 69, 0),     # Red orange
+        ]
+        
+        for i, (pred_label, gt_matches) in enumerate(duplicate_predictions.items()):
+            color = np.array(duplicate_colors[i % len(duplicate_colors)])
+            
+            # Highlight the prediction region in the chosen color
+            pred_mask = labeled_prediction == pred_label
+            duplicate_vis[pred_mask] = (0.8 * color + 0.2 * duplicate_vis[pred_mask]).astype(np.uint8)
+            
+            # Highlight each GT region it matches with a slightly different shade
+            for j, (gt_label, overlap_score) in enumerate(gt_matches):
+                gt_mask = labels == gt_label
+                # Use progressively darker shades for multiple GT matches
+                shade_factor = 0.8 - (j * 0.2)  # 0.8, 0.6, 0.4, etc.
+                gt_color = color * shade_factor
+                duplicate_vis[gt_mask] = (0.6 * gt_color + 0.4 * duplicate_vis[gt_mask]).astype(np.uint8)
+        
+        tifffile.imwrite(str(output_folder / 'duplicate_mappings_overlay.tif'), duplicate_vis)
+    
+    # 6. Enhanced overview with duplicate highlighting
+    overview_vis = background_rgb.copy()
+    
+    # # Regular matched GT in green (semi-transparent)
+    # matched_gt_color = np.array([0, 255, 0])
+    # regular_matches = {gt_label: pred_data for gt_label, pred_data in mapping.items() 
+    #                   if pred_data[0] not in duplicate_predictions}
+    
+    # for gt_label, _ in regular_matches.items():
+    #     gt_mask = labels == gt_label
+    #     overview_vis[gt_mask] = (0.5 * matched_gt_color + 0.5 * overview_vis[gt_mask]).astype(np.uint8)
+    
+    # Duplicate matches in blue
+    duplicate_gt_color = np.array([0, 0, 255])
+    for gt_label, pred_data in mapping.items():
+        if pred_data[0] in duplicate_predictions:
+            gt_mask = labels == gt_label
+            overview_vis[gt_mask] = (0.7 * duplicate_gt_color + 0.3 * overview_vis[gt_mask]).astype(np.uint8)
+    
+    # # Regular matched predictions in yellow
+    # matched_pred_color = np.array([255, 255, 0])
+    # for _, (pred_label, _) in regular_matches.items():
+    #     pred_mask = labeled_prediction == pred_label
+    #     current_color = overview_vis[pred_mask].astype(float)
+    #     blended_color = 0.4 * matched_pred_color + 0.6 * current_color
+    #     overview_vis[pred_mask] = np.clip(blended_color, 0, 255).astype(np.uint8)
+    
+    # Duplicate predictions in bright red
+    duplicate_pred_color = np.array([255, 100, 100])
+    for pred_label in duplicate_predictions.keys():
+        pred_mask = labeled_prediction == pred_label
+        overview_vis[pred_mask] = (0.8 * duplicate_pred_color + 0.2 * overview_vis[pred_mask]).astype(np.uint8)
+    
+    # # Unmatched GT in magenta
+    # unmatched_gt_color = np.array([255, 100, 255])
+    # for gt_label in unmatched_labels:
+    #     gt_mask = labels == gt_label
+    #     overview_vis[gt_mask] = (0.7 * unmatched_gt_color + 0.3 * overview_vis[gt_mask]).astype(np.uint8)
+    
+    # # Unmatched predictions in blue
+    # unmatched_pred_color = np.array([0, 0, 255])
+    # for pred_label in unmatched_predictions:
+    #     pred_mask = labeled_prediction == pred_label
+    #     overview_vis[pred_mask] = (0.7 * unmatched_pred_color + 0.3 * overview_vis[pred_mask]).astype(np.uint8)
+    
+    tifffile.imwrite(str(output_folder / 'enhanced_overview_overlay.tif'), overview_vis)
+
+    # Original background for reference
     tifffile.imwrite(str(output_folder / 'original_image.tif'), background_rgb)
 
-    # 6. Generate matching report (same as before)
+    # === ENHANCED MATCHING REPORT WITH DUPLICATES ===
     with open(output_folder / 'matching_report.txt', 'w') as f:
         f.write("Tunnel Matching Report\n")
         f.write("=" * 50 + "\n\n")
@@ -289,15 +394,29 @@ def detect_tunnels(predictions: NDArray[np.bool], labels: NDArray[np.uint8], ima
         f.write(f"Matched tunnels: {len(mapping)}\n")
         f.write(f"Unmatched GT tunnels: {len(unmatched_labels)}\n")
         f.write(f"Unmatched predictions: {len(unmatched_predictions)}\n")
+        f.write(f"Duplicate predictions: {len(duplicate_predictions)}\n")
         f.write(f"Match rate: {len(mapping) / (len(mapping)+len(unmatched_labels))*100:.1f}%\n\n")
         
-        f.write("Detailed Matches:\n")
+        if duplicate_predictions:
+            f.write("*** DUPLICATE MAPPINGS ***\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"Found {len(duplicate_predictions)} prediction regions mapped to multiple GT tunnels:\n\n")
+            for pred_label, gt_matches in duplicate_predictions.items():
+                pred_size = np.sum(labeled_prediction == pred_label)
+                f.write(f"Prediction {pred_label} (size: {pred_size}) matches:\n")
+                for gt_label, overlap_score in gt_matches:
+                    gt_size = np.sum(labels == gt_label)
+                    f.write(f"  -> GT {gt_label}: {overlap_score:.2f} overlap (size: {gt_size})\n")
+                f.write("\n")
+        
+        f.write("Regular Matches:\n")
         f.write("-" * 30 + "\n")
         for gt_label, (pred_label, overlap_score) in mapping.items():
-            gt_size = np.sum(labels == gt_label)
-            pred_size = np.sum(labeled_prediction == pred_label)
-            f.write(f"GT {gt_label} -> Pred {pred_label}: {overlap_score:.2f} overlap "
-                   f"(GT size: {gt_size}, Pred size: {pred_size})\n")
+            if pred_label not in duplicate_predictions:
+                gt_size = np.sum(labels == gt_label)
+                pred_size = np.sum(labeled_prediction == pred_label)
+                f.write(f"GT {gt_label} -> Pred {pred_label}: {overlap_score:.2f} overlap "
+                       f"(GT size: {gt_size}, Pred size: {pred_size})\n")
         
         f.write(f"\nUnmatched GT tunnels: {unmatched_labels}\n")
         f.write(f"Unmatched predictions: {unmatched_predictions}\n")
@@ -307,8 +426,10 @@ def detect_tunnels(predictions: NDArray[np.bool], labels: NDArray[np.uint8], ima
     print("  - original_image.tif: Original image reference")
     print("  - basic_confusion_matrix_overlay.tif: TP/FP/FN over original image")
     print("  - matched_tunnels_overlay.tif: Matched pairs over original image")
-    print("  - unmatched_regions_overlay.tif: Unmatched regions over original image")  
-    print("  - overview_matching_overlay.tif: Complete matching overview over original image")
+    print("  - unmatched_regions_overlay.tif: Unmatched regions over original image")
+    if duplicate_predictions:
+        print("  - duplicate_mappings_overlay.tif: Duplicate mapping visualization")
+    print("  - enhanced_overview_overlay.tif: Complete overview with duplicates highlighted")
     print("  - matching_report.txt: Detailed matching statistics")
 
     return TunnelDetectionResult(
@@ -316,7 +437,6 @@ def detect_tunnels(predictions: NDArray[np.bool], labels: NDArray[np.uint8], ima
         fp=FP, 
         tn=TN,
         fn=FN,
-        # spec=tntmetrics.specificity(TN, FP),
         spec=0,  # TODO: fix
         sens=recall,
         f1=f1,
