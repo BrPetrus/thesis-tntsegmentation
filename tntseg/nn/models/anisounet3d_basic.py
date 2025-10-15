@@ -99,9 +99,9 @@ class AnisotropicUNet3D(nn.Module):
                     HorizontalBlock(
                         in_channels=in_chann,
                         out_channels=out_chann,
-                        kernel=(3,3,3),
+                        kernel=horizontal_kernel,
                         stride=horizontal_stride,
-                        padding=(1,1,1)
+                        padding=horizontal_padding
                     )
                 ])
             )
@@ -153,13 +153,14 @@ def create_anisotropic_unet3d(config):
         depth=config.get('depth', 3),
         base_channels=config.get('base_channels', 64),
         channel_growth=config.get('channel_growth', 2),
-        horizontal_kernel=config.get('horizontal_kernel', (1, 3, 3)),
-        horizontal_padding=config.get('horizontal_padding', (0, 1, 1)),
+        # TODO: change all back
+        horizontal_kernel=config.get('horizontal_kernel', (3, 3, 3)),
+        horizontal_padding=config.get('horizontal_padding', (1, 1, 1)),
         horizontal_stride=config.get('horizontal_stride', (1, 1, 1)),
-        downscale_kernel=config.get('downscale_kernel', (1, 2, 2)),
-        downscale_stride=config.get('downscale_stride', (1, 2, 2)),
-        upscale_kernel=config.get('upscale_kernel', (1, 2, 2)),
-        upscale_stride=config.get('upscale_stride', (1, 2, 2))
+        downscale_kernel=config.get('downscale_kernel', (2, 2, 2)),
+        downscale_stride=config.get('downscale_stride', (2, 2, 2)),
+        upscale_kernel=config.get('upscale_kernel', (2, 2, 2)),
+        upscale_stride=config.get('upscale_stride', (2, 2, 2))
     )
 
 
@@ -167,35 +168,35 @@ if __name__ == "__main__":
     from torchsummary import summary
     
     # Test the original network configuration
-    net = AnisotropicUNet3D(1, 1)
+    net = AnisotropicUNet3D(1, 1, depth=2, base_channels=32, horizontal_kernel=(3,3,3), horizontal_padding=(1,1,1), downscale_kernel=(2,2,2), downscale_stride=(2,2,2), upscale_kernel=(2,2,2), upscale_stride=(2,2,2))
     print("Original Network:")
     summary(net, (1, 7, 64, 64))
     
-    # Test with different depths
-    config = {
-        'n_channels_in': 1,
-        'n_classes_out': 1,
-        'depth': 4,  # Deeper network
-        'base_channels': 64,
-        'channel_growth': 2
-    }
+    # # Test with different depths
+    # config = {
+    #     'n_channels_in': 1,
+    #     'n_classes_out': 1,
+    #     'depth': 4,  # Deeper network
+    #     'base_channels': 64,
+    #     'channel_growth': 2
+    # }
     
-    deeper_net = create_anisotropic_unet3d(config)
-    print("\nDeeper Network:")
-    summary(deeper_net, (1, 7, 64, 64))
+    # deeper_net = create_anisotropic_unet3d(config)
+    # print("\nDeeper Network:")
+    # summary(deeper_net, (1, 7, 64, 64))
     
-    # Test with a shallower network
-    config['depth'] = 2
-    shallow_net = create_anisotropic_unet3d(config)
-    print("\nShallower Network:")
-    summary(shallow_net, (1, 7, 64, 64))
+    # # Test with a shallower network
+    # config['depth'] = 2
+    # shallow_net = create_anisotropic_unet3d(config)
+    # print("\nShallower Network:")
+    # summary(shallow_net, (1, 7, 64, 64))
 
-    # Truly 3D version
-    config['horizontal_kernel'] = (3, 3, 3)
-    config['horizontal_padding'] = (1, 1, 1)
-    config['horizontal_stride'] = (1, 1, 1)
-    config['depth'] = 4
-    deep_3d_net = create_anisotropic_unet3d(config)
-    print("\nDeep truly 3D network")
-    summary(deep_3d_net, (1, 7, 64, 64))
-    print(deep_3d_net.get_signature())
+    # # Truly 3D version
+    # config['horizontal_kernel'] = (3, 3, 3)
+    # config['horizontal_padding'] = (1, 1, 1)
+    # config['horizontal_stride'] = (1, 1, 1)
+    # config['depth'] = 4
+    # deep_3d_net = create_anisotropic_unet3d(config)
+    # print("\nDeep truly 3D network")
+    # summary(deep_3d_net, (1, 7, 64, 64))
+    # print(deep_3d_net.get_signature())

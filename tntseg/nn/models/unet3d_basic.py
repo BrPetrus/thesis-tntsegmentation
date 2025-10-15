@@ -83,4 +83,4 @@ if __name__ == "__main__":
     # Init
     net = UNet3d(1, 1)
 
-    summary(net, (1, 7, 32, 32))
+    summary(net, (1, 7, 64, 64))
