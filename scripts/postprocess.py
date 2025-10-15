@@ -123,6 +123,21 @@ def detect_tunnels(binary_prediction: NDArray[np.bool], gt_labeled: NDArray[np.u
                 gt_size = np.sum(gt_labeled == gt_label)
                 pred_size = np.sum(labeled_prediction == pred_label)
                 print(f"    -> GT {gt_label}: {overlap_score:.2f} overlap (GT size: {gt_size}, Pred size: {pred_size})")
+    
+    # === FILTER TO GET CLEAN 1-1 MAPPINGS ===
+    clean_mapping = filter_clean_mappings(mapping, duplicate_predictions)
+    
+    # === CALCULATE METRICS ON CLEAN MAPPINGS ===
+    matched_metrics = calculate_matched_metrics(gt_labeled, labeled_prediction, clean_mapping)
+    individual_metrics = calculate_individual_tunnel_metrics(gt_labeled, labeled_prediction, clean_mapping)
+    
+    print(f"\n=== METRICS FOR 1-1 MATCHED TUNNELS ONLY ===")
+    print(f"Clean 1-1 matches: {matched_metrics['num_clean_matches']}/{len(mapping)} total matches")
+    print(f"Matched Dice: {matched_metrics['matched_dice']:.4f}")
+    print(f"Matched Jaccard: {matched_metrics['matched_jaccard']:.4f}")
+    print(f"Matched Precision: {matched_metrics['matched_precision']:.4f}")
+    print(f"Matched Recall: {matched_metrics['matched_recall']:.4f}")
+    print(f"TP: {matched_metrics['TP_matched']}, FP: {matched_metrics['FP_matched']}, FN: {matched_metrics['FN_matched']}")
 
     print(f"Matched GT {len(mapping)} tunnels ({len(mapping) / (len(mapping)+len(unmatched_labels))*100:.1f}%)")
     print(f"Unmatched ground truth tunnels: {len(unmatched_labels)}")
@@ -380,6 +395,103 @@ def visualise_matching(gt_labeled, image, output_folder, labeled_prediction, bin
         print("  - duplicate_mappings_overlay.tif: Duplicate mapping visualization")
     print("  - enhanced_overview_overlay.tif: Complete overview with duplicates highlighted")
     print("  - matching_report.txt: Detailed matching statistics")
+
+def filter_clean_mappings(mapping: Dict[int, Tuple[int, float]], 
+                         duplicate_predictions: Dict[int, List[Tuple[int, float]]]) -> Dict[int, Tuple[int, float]]:
+    """Filter out mappings that involve duplicate predictions to get clean 1-1 mappings only."""
+    clean_mapping = {gt_label: pred_data for gt_label, pred_data in mapping.items() 
+                    if pred_data[0] not in duplicate_predictions}
+    return clean_mapping
+
+def calculate_matched_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], 
+                            clean_mapping: Dict[int, Tuple[int, float]]) -> Dict[str, float]:
+    """Calculate Dice and Jaccard scores only for clean 1-1 matched tunnels."""
+    
+    if not clean_mapping:
+        print("No clean 1-1 mappings found for metric calculation")
+        return {
+            'matched_dice': 0.0,
+            'matched_jaccard': 0.0,
+            'matched_precision': 0.0,
+            'matched_recall': 0.0,
+            'num_clean_matches': 0,
+            'TP_matched': 0,
+            'FP_matched': 0,
+            'FN_matched': 0
+        }
+    
+    # Create binary masks for only the matched regions
+    matched_gt_mask = np.zeros_like(gt_labeled, dtype=bool)
+    matched_pred_mask = np.zeros_like(labeled_prediction, dtype=bool)
+    
+    # Accumulate masks for all clean matches
+    for gt_label, (pred_label, overlap_score) in clean_mapping.items():
+        matched_gt_mask |= (gt_labeled == gt_label)
+        matched_pred_mask |= (labeled_prediction == pred_label)
+    
+    # Calculate confusion matrix for matched regions only
+    TP_matched = np.sum(matched_gt_mask & matched_pred_mask)
+    FP_matched = np.sum(matched_pred_mask & ~matched_gt_mask)
+    FN_matched = np.sum(matched_gt_mask & ~matched_pred_mask)
+    
+    # Calculate metrics
+    dice_matched = tntmetrics.dice_coefficient(TP_matched, FP_matched, FN_matched)
+    jaccard_matched = tntmetrics.jaccard_index(TP_matched, FP_matched, FN_matched)
+    precision_matched = tntmetrics.precision(TP_matched, FP_matched)
+    recall_matched = tntmetrics.recall(TP_matched, FN_matched)
+    
+    return {
+        'matched_dice': dice_matched,
+        'matched_jaccard': jaccard_matched,
+        'matched_precision': precision_matched,
+        'matched_recall': recall_matched,
+        'num_clean_matches': len(clean_mapping),
+        'TP_matched': TP_matched,
+        'FP_matched': FP_matched,
+        'FN_matched': FN_matched
+    }
+
+def calculate_individual_tunnel_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], 
+                                       clean_mapping: Dict[int, Tuple[int, float]]) -> List[Dict]:
+    """Calculate metrics for each individual matched tunnel pair."""
+    
+    individual_metrics = []
+    
+    for gt_label, (pred_label, overlap_score) in clean_mapping.items():
+        # Get masks for this specific tunnel pair
+        gt_mask = (gt_labeled == gt_label)
+        pred_mask = (labeled_prediction == pred_label)
+        
+        # Calculate confusion matrix for this pair
+        TP = np.sum(gt_mask & pred_mask)
+        FP = np.sum(pred_mask & ~gt_mask)
+        FN = np.sum(gt_mask & ~pred_mask)
+        
+        # Calculate metrics
+        dice = tntmetrics.dice_coefficient(TP, FP, FN)
+        jaccard = tntmetrics.jaccard_index(TP, FP, FN)
+        precision = tntmetrics.precision(TP, FP)
+        recall = tntmetrics.recall(TP, FN)
+        
+        gt_size = np.sum(gt_mask)
+        pred_size = np.sum(pred_mask)
+        
+        individual_metrics.append({
+            'gt_label': gt_label,
+            'pred_label': pred_label,
+            'dice': dice,
+            'jaccard': jaccard,
+            'precision': precision,
+            'recall': recall,
+            'overlap_score': overlap_score,
+            'gt_size': gt_size,
+            'pred_size': pred_size,
+            'TP': TP,
+            'FP': FP,
+            'FN': FN
+        })
+    
+    return individual_metrics
 
 def find_unmatched_and_duplicates(gt_labeled, labeled_prediction, mapping, pred_to_gt_mapping):
     duplicate_predictions = {}
