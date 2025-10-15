@@ -33,7 +33,11 @@ def create_neural_network(config: BaseConfig, in_channels: int, out_channels: in
                 base_channels=config.base_channels, 
                 channel_growth=config.channel_growth,
                 horizontal_kernel=config.horizontal_kernel,
-                horizontal_padding=config.horizontal_padding
+                horizontal_padding=config.horizontal_padding,
+                upscale_kernel=config.upscale_kernel,
+                upscale_stride=config.upscale_stride,
+                downscale_kernel=config.downscale_kernel,
+                downscale_stride=config.downscale_stride
             )
         case ModelType.AnisotropicUNetCSAM:
             if not isinstance(config, AnisotropicUNetConfig):
@@ -45,7 +49,11 @@ def create_neural_network(config: BaseConfig, in_channels: int, out_channels: in
                 base_channels=config.base_channels, 
                 channel_growth=config.channel_growth,
                 horizontal_kernel=config.horizontal_kernel,
-                horizontal_padding=config.horizontal_padding
+                horizontal_padding=config.horizontal_padding,
+                upscale_kernel=config.upscale_kernel,
+                upscale_stride=config.upscale_stride,
+                downscale_kernel=config.downscale_kernel,
+                downscale_stride=config.downscale_stride
             )
         case ModelType.UNet3D:
             if not isinstance(config, BaseConfig):
@@ -62,7 +70,11 @@ def create_neural_network(config: BaseConfig, in_channels: int, out_channels: in
                 channel_growth=config.channel_growth,
                 horizontal_kernel=config.horizontal_kernel,
                 horizontal_padding=config.horizontal_padding,
-                squeeze_factor=config.reduction_factor
+                squeeze_factor=config.reduction_factor,
+                upscale_kernel=config.upscale_kernel,
+                upscale_stride=config.upscale_stride,
+                downscale_kernel=config.downscale_kernel,
+                downscale_stride=config.downscale_stride
             )
         case ModelType.AnisotropicUNetUSENet:
             if not isinstance(config, AnisotropicUNetConfig):
@@ -75,7 +87,11 @@ def create_neural_network(config: BaseConfig, in_channels: int, out_channels: in
                 channel_growth=config.channel_growth,
                 horizontal_kernel=config.horizontal_kernel,
                 horizontal_padding=config.horizontal_padding,
-                squeeze_factor=config.reduction_factor
+                squeeze_factor=config.reduction_factor,
+                upscale_kernel=config.upscale_kernel,
+                upscale_stride=config.upscale_stride,
+                downscale_kernel=config.downscale_kernel,
+                downscale_stride=config.downscale_stride
             )
         case _:
             raise ValueError(f"Unknown model type '{config.model_type}'")

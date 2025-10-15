@@ -555,6 +555,14 @@ if __name__ == "__main__":
                   help="Horizontal kernel size as comma-separated values (depth,height,width). Default: '1,3,3'")
     parser.add_argument("--horizontal_padding", type=str, default="0,1,1", 
                   help="Horizontal padding as comma-separated values (depth,height,width). Default: '0,1,1'")
+    parser.add_argument("--downscale_kernel", type=str, default="1,2,2",
+                  help="Downscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
+    parser.add_argument("--downscale_stride", type=str, default="1,1,1", 
+                  help="Downscale stride as comma-separated values (depth,height,width). Default: '1,1,1'")
+    parser.add_argument("--upscale_kernel", type=str, default="1,2,2",
+                  help="Upscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
+    parser.add_argument("--upscale_stride", type=str, default="1,2,2", 
+                  help="Upscale padding as comma-separated values (depth,height,width). Default: '1,2,2'")
     parser.add_argument("--reduction_factor", type=int, default=16,
                       help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16")
 
@@ -563,6 +571,10 @@ if __name__ == "__main__":
     # Parse the tuple arguments
     horizontal_kernel = parse_tuple_arg(args.horizontal_kernel, "horizontal_kernel")
     horizontal_padding = parse_tuple_arg(args.horizontal_padding, "horizontal_padding")
+    downscale_kernel = parse_tuple_arg(args.downscale_kernel, 'downscale_kernel')
+    downscale_stride = parse_tuple_arg(args.downscale_stride, 'downscale_stride')
+    upscale_kernel = parse_tuple_arg(args.upscale_kernel, 'upscale_kernel')
+    upscale_stride = parse_tuple_arg(args.upscale_stride, 'upscale_stride')
 
     # Set up logging
     logging.basicConfig(level=logging.INFO)
@@ -600,6 +612,10 @@ if __name__ == "__main__":
             channel_growth=args.channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
             seed=args.seed,
             weight_decay=args.weight_decay,
             reduction_factor=args.reduction_factor
@@ -619,6 +635,10 @@ if __name__ == "__main__":
             channel_growth=args.channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
             seed=args.seed,
             weight_decay=args.weight_decay,
         )

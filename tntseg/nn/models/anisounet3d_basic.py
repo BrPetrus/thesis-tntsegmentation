@@ -36,6 +36,7 @@ class AnisotropicUNet3D(nn.Module):
         self.n_classes_out = n_classes_out
         self.depth = depth
         self.horizontal_kernel = horizontal_kernel
+        self.downsampling_kernel = downscale_kernel
         print(f"Using depth={self.depth}")
 
         # Generate channel configurations
@@ -131,7 +132,7 @@ class AnisotropicUNet3D(nn.Module):
         return self.final_conv(x)
     
     def get_signature(self) -> str:
-        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}"
+        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}-dk{self.downsampling_kernel}"
 
 
 def create_anisotropic_unet3d(config):

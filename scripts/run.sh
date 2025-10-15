@@ -26,10 +26,14 @@ MODEL_DEPTH=2
 WEIGHT_DECAY=0.0001
 HORIZONTAL_KERNEL="3,3,3"
 HORIZONTAL_PADDING="1,1,1"
+DOWNSCALE_KERNEL="2,2,2"
+DOWNSCALE_STRIDE="2,2,2"
+UPSCALE_STRIDE="2,2,2"
+UPSCALE_KERNEL="2,2,2"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
-TILE_OVERLAP=20
+TILE_OVERLAP=0
 MODEL_DIR=""  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
@@ -120,6 +124,10 @@ run_training() {
             --weight_decay ${WEIGHT_DECAY} \
             --horizontal_kernel ${HORIZONTAL_KERNEL} \
             --horizontal_padding ${HORIZONTAL_PADDING} \
+            --downscale_kernel ${DOWNSCALE_KERNEL} \
+            --downscale_stride ${DOWNSCALE_STRIDE} \
+            --upscale_kernel ${UPSCALE_KERNEL} \
+            --upscale_stride ${UPSCALE_STRIDE} \
             --shuffle
 
         # Check for training success
@@ -186,6 +194,10 @@ run_evaluation() {
                 --model_depth ${MODEL_DEPTH} \
                 --horizontal_kernel ${HORIZONTAL_KERNEL} \
                 --horizontal_padding ${HORIZONTAL_PADDING} \
+                --downscale_kernel ${DOWNSCALE_KERNEL} \
+                --downscale_stride ${DOWNSCALE_STRIDE} \
+                --upscale_kernel ${UPSCALE_KERNEL} \
+                --upscale_stride ${UPSCALE_STRIDE} \
                 --tile_overlap ${TILE_OVERLAP}
             
             # Check for evaluation success

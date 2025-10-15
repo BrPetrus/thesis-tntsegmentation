@@ -65,8 +65,8 @@ class TiledDataset(Dataset):
 
 def create_model_from_args(model_type: str, model_depth: int, base_channels: int, 
                           channel_growth: int, horizontal_kernel: Tuple[int, int, int], 
-                          horizontal_padding: Tuple[int, int, int], 
-                          reduction_factor: int = 16) -> nn.Module:
+                          horizontal_padding: Tuple[int, int, int], downscale_kernel, downscale_stride, upscale_kernel, upscale_stride, 
+                          reduction_factor: int = 16,) -> nn.Module:
     """Create a model based on command line arguments."""
     
     if model_type == "anisotropicunet":
@@ -77,7 +77,11 @@ def create_model_from_args(model_type: str, model_depth: int, base_channels: int
             base_channels=base_channels,
             channel_growth=channel_growth,
             horizontal_kernel=horizontal_kernel,
-            horizontal_padding=horizontal_padding
+            horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
         )
     elif model_type == "anisotropicunet_se":
         return AnisotropicUNet3DSE(
@@ -88,7 +92,11 @@ def create_model_from_args(model_type: str, model_depth: int, base_channels: int
             channel_growth=channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
-            squeeze_factor=reduction_factor
+            squeeze_factor=reduction_factor,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
         )
     elif model_type == "anisotropicunet_csam":
         return AnisotropicUNet3DCSAM(
@@ -98,7 +106,11 @@ def create_model_from_args(model_type: str, model_depth: int, base_channels: int
             base_channels=base_channels,
             channel_growth=channel_growth,
             horizontal_kernel=horizontal_kernel,
-            horizontal_padding=horizontal_padding
+            horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
         )
     elif model_type == "anisotropicunet_usenet":
         return AnisotropicUSENet(
@@ -109,6 +121,10 @@ def create_model_from_args(model_type: str, model_depth: int, base_channels: int
             channel_growth=channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
             squeeze_factor=reduction_factor
         )
     elif model_type == "basicunet":
@@ -372,12 +388,24 @@ if __name__ == "__main__":
                         help="How much (px) of overlap in tiling and stitching")
     parser.add_argument('--visualise_tiling', action="store_true", default=False,
                         help="Visualise tiling and stitching lines")
+    parser.add_argument("--downscale_kernel", type=str, default="1,2,2",
+                  help="Downscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
+    parser.add_argument("--downscale_stride", type=str, default="1,1,1", 
+                  help="Downscale stride as comma-separated values (depth,height,width). Default: '1,1,1'")
+    parser.add_argument("--upscale_kernel", type=str, default="1,2,2",
+                  help="Upscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
+    parser.add_argument("--upscale_stride", type=str, default="1,2,2", 
+                  help="Upscale padding as comma-separated values (depth,height,width). Default: '1,2,2'")
     
     args = parser.parse_args()
 
     # Parse tuple arguments
     horizontal_kernel = parse_tuple_arg(args.horizontal_kernel, "horizontal_kernel")
     horizontal_padding = parse_tuple_arg(args.horizontal_padding, "horizontal_padding")
+    downscale_kernel = parse_tuple_arg(args.downscale_kernel, 'downscale_kernel')
+    downscale_stride = parse_tuple_arg(args.downscale_stride, 'downscale_stride')
+    upscale_kernel = parse_tuple_arg(args.upscale_kernel, 'upscale_kernel')
+    upscale_stride = parse_tuple_arg(args.upscale_stride, 'upscale_stride')
 
     config.device = args.device
     config.batch_size = args.batch_size
