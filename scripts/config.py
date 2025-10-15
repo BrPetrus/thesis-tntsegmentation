@@ -51,6 +51,10 @@ class AnisotropicUNetConfig(BaseConfig):
     channel_growth: int = 2
     horizontal_kernel: Tuple[int, int, int] = (1, 3, 3) 
     horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
+    downscale_kernel : Tuple[int, int, int] = (1, 2, 2)
+    downscale_stride: Tuple[int, int, int] = (1, 2, 2)
+    upscale_kernel: Tuple[int, int, int] = (1, 2, 2)
+    upscale_stride: Tuple[int, int, int] = (1, 2, 2)
 
 @dataclass
 class AnisotropicUNetSEConfig(AnisotropicUNetConfig):

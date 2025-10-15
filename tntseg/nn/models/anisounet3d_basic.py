@@ -99,9 +99,9 @@ class AnisotropicUNet3D(nn.Module):
                     HorizontalBlock(
                         in_channels=in_chann,
                         out_channels=out_chann,
-                        kernel=(3,3,3),
+                        kernel=horizontal_kernel,
                         stride=horizontal_stride,
-                        padding=(1,1,1)
+                        padding=horizontal_padding
                     )
                 ])
             )
@@ -153,8 +153,8 @@ def create_anisotropic_unet3d(config):
         depth=config.get('depth', 3),
         base_channels=config.get('base_channels', 64),
         channel_growth=config.get('channel_growth', 2),
-        horizontal_kernel=config.get('horizontal_kernel', (1, 3, 3)),
-        horizontal_padding=config.get('horizontal_padding', (0, 1, 1)),
+        horizontal_kernel=config.get('horizontal_kernel', (3, 3, 3)),
+        horizontal_padding=config.get('horizontal_padding', (1, 1, 1)),
         horizontal_stride=config.get('horizontal_stride', (1, 1, 1)),
         downscale_kernel=config.get('downscale_kernel', (1, 2, 2)),
         downscale_stride=config.get('downscale_stride', (1, 2, 2)),
