@@ -51,11 +51,11 @@ class AnisotropicUNet3D(nn.Module):
         neck_out_channels = neck_in_channels * channel_growth
         
         # Generate upsampling channel configuration
-        up_channels = []
+        self.up_channels = []
         in_ch = neck_out_channels
         for i in range(depth):
             out_ch = down_channels[depth-i-1][1]
-            up_channels.append((in_ch, out_ch))
+            self.up_channels.append((in_ch, out_ch))
             in_ch = out_ch
 
         # Contracting path
@@ -87,7 +87,7 @@ class AnisotropicUNet3D(nn.Module):
 
         # Expansive path
         self.upsampling_layers = nn.ModuleList()
-        for in_chann, out_chann in up_channels:
+        for in_chann, out_chann in self.up_channels:
             self.upsampling_layers.append(
                 nn.ModuleList([
                     UpscaleBlock(
@@ -107,7 +107,7 @@ class AnisotropicUNet3D(nn.Module):
             )
         
         # Out
-        self.final_conv = nn.Conv3d(up_channels[-1][1], self.n_classes_out, 1)
+        self.final_conv = nn.Conv3d(self.up_channels[-1][1], self.n_classes_out, 1)
 
     def forward(self, x):
         x_values = []        
