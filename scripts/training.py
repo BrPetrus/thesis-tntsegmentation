@@ -454,19 +454,19 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     visualize_transform_effects(train_dataloader, num_samples=5, output_folder=output_folder_path / "transform_check")
     
-    # Get test_x and transform_test for quadrant testing
-    input_folder_test = input_folder / "test"
-    test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
-    transform_test = A.Compose([
-        A.Normalize(
-            mean=config.dataset_mean,
-            std=config.dataset_std,
-            max_pixel_value=1.0,
-            p=1.0
-        ),
-        A.CenterCrop3D(size=config.crop_size),
-        A.ToTensor3D()
-    ])
+    # # Get test_x and transform_test for quadrant testing
+    # input_folder_test = input_folder / "test"
+    # test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
+    # transform_test = A.Compose([
+    #     A.Normalize(
+    #         mean=config.dataset_mean,
+    #         std=config.dataset_std,
+    #         max_pixel_value=1.0,
+    #         p=1.0
+    #     ),
+    #     A.CenterCrop3D(size=config.crop_size),
+    #     A.ToTensor3D()
+    # ])
 
     # Create net
     nn = create_neural_network(config, 1, 1).to(config.device)
@@ -579,9 +579,13 @@ if __name__ == "__main__":
         "anisotropicunet_usenet": ModelType.AnisotropicUNetUSENet,
         "basicunet": ModelType.UNet3D
     }
+    if args.model not in model_type_map:
+        raise ValueError(f"Unknown model type provided. Legal values are: {model_type_map.keys()}")
+    model_type = model_type_map[args.model]
+    logging.info(f"Got {model_type} model")
 
     # Create appropriate config based on model type
-    if args.model in ["anisotropicunet_se", "anisotropicunet_usenet"]:
+    if model_type == ModelType.AnisotropicUNetSE or model_type == ModelType.AnisotropicUNetUSENet:
         config = AnisotropicUNetSEConfig(
             epochs=args.epochs,
             lr=args.lr,
@@ -590,7 +594,7 @@ if __name__ == "__main__":
             num_workers=args.num_workers,
             shuffle=args.shuffle,
             input_folder=str(args.input_folder),
-            model_type=model_type_map[args.model],
+            model_type=model_type,
             model_depth=args.model_depth,
             base_channels=args.base_channels,
             channel_growth=args.channel_growth,
@@ -600,7 +604,7 @@ if __name__ == "__main__":
             weight_decay=args.weight_decay,
             reduction_factor=args.reduction_factor
         )
-    elif args.model in ["anisotropicunet", "anisotropicunet_csam"]:
+    elif model_type == ModelType.AnisotropicUNet or model_type == ModelType.AnisotropicUNetCSAM:
         config = AnisotropicUNetConfig(
             epochs=args.epochs,
             lr=args.lr,
@@ -609,7 +613,7 @@ if __name__ == "__main__":
             num_workers=args.num_workers,
             shuffle=args.shuffle,
             input_folder=str(args.input_folder),
-            model_type=model_type_map[args.model],
+            model_type=model_type,
             model_depth=args.model_depth,
             base_channels=args.base_channels,
             channel_growth=args.channel_growth,
@@ -618,7 +622,7 @@ if __name__ == "__main__":
             seed=args.seed,
             weight_decay=args.weight_decay,
         )
-    else:  # basicunet
+    elif model_type == ModelType.UNet3D:
         config = BaseConfig(
             epochs=args.epochs,
             lr=args.lr,
@@ -631,6 +635,9 @@ if __name__ == "__main__":
             seed=args.seed,
             weight_decay=args.weight_decay
         )
+    else:
+        # NOTE: this should never happen
+        assert "Unknown model type"
 
     print(f'Shuffle: {config.shuffle}')
 

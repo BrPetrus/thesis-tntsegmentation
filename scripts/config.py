@@ -10,6 +10,7 @@ class ModelType(StrEnum):
     AnisotropicUNetSE = "anisotropicunet_se"
     AnisotropicUNetCSAM = "anisotropicunet_csam"
     AnisotropicUNetUSENet = "anisotropicunet_usenet"
+    Unknown = "unknown"
 
 @dataclass
 class BaseConfig:
@@ -40,7 +41,7 @@ class BaseConfig:
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
     weight_decay: float = 0.0001
-    model_type: ModelType = ModelType.Unkwnown
+    model_type: ModelType = ModelType.Unknown
     crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 @dataclass
