@@ -23,6 +23,7 @@ from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
 from tntseg.nn.models.anisounet3d_csnet import AnisotropicUNet3DCSAM
 from tntseg.nn.models.unet3d_basic import UNet3d
+from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
 
 from config import ModelType, BaseConfig, AnisotropicUNetConfig, AnisotropicUNetSEConfig
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
@@ -98,6 +99,17 @@ def create_model_from_args(model_type: str, model_depth: int, base_channels: int
             channel_growth=channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding
+        )
+    elif model_type == "anisotropicunet_usenet":
+        return AnisotropicUSENet(
+            n_channels_in=1,
+            n_classes_out=1,
+            depth=model_depth,
+            base_channels=base_channels,
+            channel_growth=channel_growth,
+            horizontal_kernel=horizontal_kernel,
+            horizontal_padding=horizontal_padding,
+            squeeze_factor=reduction_factor
         )
     elif model_type == "basicunet":
         return UNet3d(n_channels_in=1, n_classes_out=1)
@@ -341,7 +353,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_predictions', action="store_true", default=False,
                         help="Save prediction outputs")
     parser.add_argument('--model_type', type=str, 
-                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "basicunet"],
+                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "anisotropicunet_usenet", "basicunet"],
                         default="anisotropicunet",
                         help="Model architecture type")
     parser.add_argument('--model_depth', type=int, default=5,

@@ -5,11 +5,11 @@ from logging import basicConfig
 from typing import Tuple
 
 class ModelType(StrEnum):
-    AnisotropicUNet = auto()
-    UNet3D = auto()
-    AnisotropicUNetSE = auto()
-    AnisotropicUNetCSAM = auto()
-    Unkwnown = auto()
+    UNet3D = "unet3d"
+    AnisotropicUNet = "anisotropicunet"
+    AnisotropicUNetSE = "anisotropicunet_se"
+    AnisotropicUNetCSAM = "anisotropicunet_csam"
+    AnisotropicUNetUSENet = "anisotropicunet_usenet"
 
 @dataclass
 class BaseConfig:

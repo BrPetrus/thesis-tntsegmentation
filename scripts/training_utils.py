@@ -15,6 +15,7 @@ from tntseg.nn.models.unet3d_basic import UNet3d
 from tntseg.nn.models.anisounet3d_csnet import AnisotropicUNet3DCSAM
 from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
 from config import ModelType
+from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
 
 import monai.transforms as MT
 
@@ -54,6 +55,19 @@ def create_neural_network(config: BaseConfig, in_channels: int, out_channels: in
             if not isinstance(config, AnisotropicUNetSEConfig):
                 raise ValueError(f"Wrong config provided. Expected AnisotropicUNetSEConfig, got {type(config)}")
             return AnisotropicUNet3DSE(
+                in_channels, 
+                out_channels, 
+                depth=config.model_depth, 
+                base_channels=config.base_channels, 
+                channel_growth=config.channel_growth,
+                horizontal_kernel=config.horizontal_kernel,
+                horizontal_padding=config.horizontal_padding,
+                squeeze_factor=config.reduction_factor
+            )
+        case ModelType.AnisotropicUNetUSENet:
+            if not isinstance(config, AnisotropicUNetConfig):
+                raise ValueError(f"Wrong config provided. Expected AnisotropicUNetConfig, got {type(config)}")
+            return AnisotropicUSENet(
                 in_channels, 
                 out_channels, 
                 depth=config.model_depth, 

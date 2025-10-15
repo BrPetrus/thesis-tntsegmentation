@@ -33,6 +33,7 @@ from scripts.training_utils import (
     visualize_transform_effects
 )
 from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, ModelType
+from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
 
 def set_all_seeds(seed: int):
     """Set seeds for all random number generators"""
@@ -539,7 +540,7 @@ if __name__ == "__main__":
     parser.add_argument("--mlflow_port", type=str, default="8000",
                         help="Port of the MLFlow server")
     parser.add_argument("--model", type=str, 
-                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "basicunet"], 
+                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "anisotropicunet_usenet", "basicunet"], 
                         default="anisotropicunet", 
                         help="Model architecture to use")
     parser.add_argument("--model_depth", type=int, default=3,
@@ -575,11 +576,12 @@ if __name__ == "__main__":
         "anisotropicunet": ModelType.AnisotropicUNet,
         "anisotropicunet_se": ModelType.AnisotropicUNetSE,
         "anisotropicunet_csam": ModelType.AnisotropicUNetCSAM,
+        "anisotropicunet_usenet": ModelType.AnisotropicUNetUSENet,
         "basicunet": ModelType.UNet3D
     }
 
     # Create appropriate config based on model type
-    if args.model == "anisotropicunet_se":
+    if args.model in ["anisotropicunet_se", "anisotropicunet_usenet"]:
         config = AnisotropicUNetSEConfig(
             epochs=args.epochs,
             lr=args.lr,
