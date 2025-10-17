@@ -67,7 +67,7 @@ def _analyze_dataset_stats(input_folder: Path) -> Tuple[float, float]:
     all_images = []
     for idx, row in tqdm(df_train.iterrows(), total=len(df_train), desc="Loading training images"):
         # NOTE: no normalisation is used
-        img = tifffile.imread(row['volume_path']).astpye(np.float32)
+        img = tifffile.imread(row['img_path']).astpye(np.float32)
         all_images.append(img)
     
     # Estimate statistitcs
