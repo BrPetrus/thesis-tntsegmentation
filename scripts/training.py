@@ -135,13 +135,13 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
         # ),
 
         # Random zoom
-        MT.RandZoomd(
-            keys=['volume', 'mask3d'],
-            prob=0.5,
-            min_zoom=0.5,
-            max_zoom=2,
-            spatial_axis=[1,2]  # Skip Z (depth)
-        ),
+        # MT.RandZoomd(
+        #     keys=['volume', 'mask3d'],
+        #     prob=0.5,
+        #     min_zoom=0.5,
+        #     max_zoom=2,
+        #     spatial_axis=[1,2]  # Skip Z (depth)
+        # ),
 
         # # Elastic deformations
         # MT.Rand3DElasticd(
