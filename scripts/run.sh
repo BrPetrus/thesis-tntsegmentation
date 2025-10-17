@@ -121,7 +121,7 @@ run_training() {
             --mlflow_port ${MLFLOW_SERVER_PORT} \
             --lr ${LR} \
             --model ${MODEL} \
-            --seed ${SEED} \
+            --seed ${SEED_THIS} \
             --model_depth ${MODEL_DEPTH} \
             --weight_decay ${WEIGHT_DECAY} \
             --horizontal_kernel ${HORIZONTAL_KERNEL} \

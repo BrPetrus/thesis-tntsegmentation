@@ -110,6 +110,13 @@ class TNTDataset(Dataset):
 
         data = self.data[idx]
 
+        # Use a combination of the current time and the sample index to ensure uniqueness
+        seed = int(time.time() * 1000) % (2**32) + idx
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        set_determinism(seed=seed)
+        self.transforms.set_random_state(seed)
+
         # MONAI compatible dictionary
         sample = {
             'volume': torch.tensor(data[np.newaxis, ...], dtype=torch.float32)
