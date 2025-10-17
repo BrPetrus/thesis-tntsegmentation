@@ -85,18 +85,30 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
         ),
 
         # Random noise
-        MT.RandGaussianNoised(keys=['volume'], prob=0.2, mean=0, std=0.01),
+        MT.RandGaussianNoised(keys=['volume'], prob=0.5, mean=0, std=0.03),
 
         # Random flips
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=0),
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
-        # # Random rotations
-        # MT.RandRotated(keys=['volume', 'mask3d'], prob=0.5, range_x=0, range_y=0, range_z=np.pi/2),
+        # Random rotations - ONLY in X,Y plane (around Z-axis)
+        MT.RandRotated(
+            keys=['volume', 'mask3d'], 
+            prob=0.5, 
+            range_x=0,           # No rotation around X-axis (keeps Z intact)
+            range_y=0,           # No rotation around Y-axis (keeps Z intact)  
+            range_z=np.pi/2      # Rotation around Z-axis (rotates in X,Y plane)
+        ),
 
         # Random zoom
-        MT.RandZoomd(keys=['volume', 'mask3d'], prob=0.5, min_zoom=0.8, max_zoom=1.5),
+        MT.RandZoomd(
+            keys=['volume', 'mask3d'],
+            prob=0.5,
+            min_zoom=0.8,
+            max_zoom=1.5,
+            spatial_axis=[1,2]  # Skip Z (depth)
+        ),
 
         # # Elastic deformations
         # MT.Rand3DElasticd(
@@ -451,22 +463,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     # Prepare dataloaders
     train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(input_folder, config.seed, config) 
-
     visualize_transform_effects(train_dataloader, num_samples=5, output_folder=output_folder_path / "transform_check")
-    
-    # # Get test_x and transform_test for quadrant testing
-    # input_folder_test = input_folder / "test"
-    # test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
-    # transform_test = A.Compose([
-    #     A.Normalize(
-    #         mean=config.dataset_mean,
-    #         std=config.dataset_std,
-    #         max_pixel_value=1.0,
-    #         p=1.0
-    #     ),
-    #     A.CenterCrop3D(size=config.crop_size),
-    #     A.ToTensor3D()
-    # ])
 
     # Create net
     nn = create_neural_network(config, 1, 1).to(config.device)
@@ -476,11 +473,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
     # MLFlow
     with mlflow.start_run() as run:
         mlflow.log_params(config.__dict__)
-        # mlflow.log_param("model_depth", config.model_depth)
-        # mlflow.log_param("base_channels", config.base_channels)
-        # mlflow.log_param("channel_growth", config.channel_growth)
         mlflow.log_param("model_signature", nn.get_signature())
-
 
         # Run training
         _train(nn, optimizer, criterion, train_dataloader, valid_dataloader, config, output_folder)
