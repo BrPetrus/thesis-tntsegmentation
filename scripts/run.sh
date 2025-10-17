@@ -20,7 +20,7 @@ WORKERS=4
 BATCH=32
 MLFLOW_SERVER_PORT=8800
 LR=0.0001
-MODEL=basicunet
+MODEL=anisotropicunet
 SEED=42
 MODEL_DEPTH=4
 WEIGHT_DECAY=0.0001
@@ -108,6 +108,8 @@ run_training() {
         echo "Input: ${INPUT_FOLDER}"
         echo "Output: ${OUTPUT_FOLDER}"
         mkdir -p "${OUTPUT_FOLDER}"
+
+        SEED_THIS=$((SEED + i))
 
         # Run training script
         python training.py \
