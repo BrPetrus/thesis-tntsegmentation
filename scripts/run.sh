@@ -190,15 +190,7 @@ run_evaluation() {
                 --save_predictions \
                 --device cuda \
                 --batch_size ${BATCH} \
-                --model_type ${MODEL} \
-                --model_depth ${MODEL_DEPTH} \
-                --horizontal_kernel ${HORIZONTAL_KERNEL} \
-                --horizontal_padding ${HORIZONTAL_PADDING} \
-                --downscale_kernel ${DOWNSCALE_KERNEL} \
-                --downscale_stride ${DOWNSCALE_STRIDE} \
-                --upscale_kernel ${UPSCALE_KERNEL} \
-                --upscale_stride ${UPSCALE_STRIDE} \
-                --tile_overlap ${TILE_OVERLAP}
+                --tile_overlap ${TILE_OVERLAP} \
             
             # Check for evaluation success
             if [ $? -ne 0 ]; then

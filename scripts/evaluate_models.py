@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 import mlflow.artifacts
 import mlflow.client
 import mlflow.pytorch
@@ -43,8 +44,8 @@ class EvaluationConfig:
     device: str = 'cpu'
     crop_size: Tuple[int, int, int] = (7, 64, 64)
     batch_size: int = 2
-    dataset_std: float = 0.07579
-    dataset_mean: float = 0.05988
+    dataset_std: float = 0
+    dataset_mean: float = 0
     shuffle: bool = False
 
 # Create a config instance
@@ -209,21 +210,6 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
 
             # Move data to device
             batch_data_dev = batch_data.to(config.device)
-
-            # # Permute the z-axis (shuffle slices)
-            # z_indices = torch.randperm(batch_data_dev.shape[2])
-            # batch_data_shuffled = batch_data_dev[:, :, z_indices, :, :].to(config.device)
-
-            # # Run inference on shuffled data
-            # shuffled_predictions = model(batch_data_shuffled).detach()
-
-            # # Unshuffle the predictions
-            # inverse_indices = torch.zeros(len(z_indices), dtype=torch.long)
-            # for i, idx in enumerate(z_indices):
-            #     inverse_indices[idx] = i
-
-            # # Apply inverse permutation and move to CPU
-            # predictions = shuffled_predictions[:, :, inverse_indices, :, :].to('cpu')
             
             # Run model
             predictions = model(batch_data_dev).detach().to('cpu')
@@ -239,7 +225,6 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
         all_predictions_tensor = torch.stack(all_predictions)
         
         # Stitch the predictions back together using positions
-        # reconstructed_volume = stitch_volume(
         out = stitch_volume(
             all_predictions_tensor, 
             all_positions,
@@ -322,6 +307,25 @@ def main(model: nn.Module, database_path: str, output_dir: str | Path, store_pre
     print(f"Mean Tversky: {mean_metrics['mean_tversky']:.4f} ± {mean_metrics['std_tversky']:.4f}")
     
 
+def load_training_config(model_path: str) -> dict:
+    """Load training configuration to get dataset statistics and model parameters."""
+    model_dir = Path(model_path).parent
+    config_path = model_dir / "config.json"
+    
+    if not config_path.exists():
+        print(f"Warning: no config found at {config_path}")
+        return {}
+    
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    
+    print(f"Loaded configuration from {config_path}")
+    print(f"Dataset statistics - Mean: {config.get('dataset_mean', 'N/A')}, Std: {config.get('dataset_std', 'N/A')}")
+    print(f"Model type: {config.get('model_type', 'N/A')}")
+    
+    return config
+
+
 def create_dataset(database_path: str | Path) -> Dataset: 
     if isinstance(database_path, str):
         database_path = Path(database_path)
@@ -354,77 +358,156 @@ def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
     except ValueError as e:
         raise argparse.ArgumentTypeError(f"Invalid {arg_name}: {arg_string}. {str(e)}")
 
+def create_model_from_config(config: dict) -> nn.Module:
+    """Create a model based on loaded configuration."""
+    try:
+        model_type = config['model_type']
+        
+        if model_type == "anisotropicunet":
+            return AnisotropicUNet3D(
+                n_channels_in=1,
+                n_classes_out=1,
+                depth=config['model_depth'],
+                base_channels=config['base_channels'],
+                channel_growth=config['channel_growth'],
+                horizontal_kernel=tuple(config['horizontal_kernel']),
+                horizontal_padding=tuple(config['horizontal_padding']),
+                upscale_kernel=tuple(config['upscale_kernel']),
+                upscale_stride=tuple(config['upscale_stride']),
+                downscale_kernel=tuple(config['downscale_kernel']),
+                downscale_stride=tuple(config['downscale_stride']),
+            )
+        elif model_type == "anisotropicunet_se":
+            return AnisotropicUNet3DSE(
+                n_channels_in=1,
+                n_classes_out=1,
+                depth=config['model_depth'],
+                base_channels=config['base_channels'],
+                channel_growth=config['channel_growth'],
+                horizontal_kernel=tuple(config['horizontal_kernel']),
+                horizontal_padding=tuple(config['horizontal_padding']),
+                squeeze_factor=config['reduction_factor'],
+                upscale_kernel=tuple(config['upscale_kernel']),
+                upscale_stride=tuple(config['upscale_stride']),
+                downscale_kernel=tuple(config['downscale_kernel']),
+                downscale_stride=tuple(config['downscale_stride']),
+            )
+        elif model_type == "anisotropicunet_csam":
+            return AnisotropicUNet3DCSAM(
+                n_channels_in=1,
+                n_classes_out=1,
+                depth=config['model_depth'],
+                base_channels=config['base_channels'],
+                channel_growth=config['channel_growth'],
+                horizontal_kernel=tuple(config['horizontal_kernel']),
+                horizontal_padding=tuple(config['horizontal_padding']),
+                upscale_kernel=tuple(config['upscale_kernel']),
+                upscale_stride=tuple(config['upscale_stride']),
+                downscale_kernel=tuple(config['downscale_kernel']),
+                downscale_stride=tuple(config['downscale_stride']),
+            )
+        elif model_type == "anisotropicunet_usenet":
+            return AnisotropicUSENet(
+                n_channels_in=1,
+                n_classes_out=1,
+                depth=config['model_depth'],
+                base_channels=config['base_channels'],
+                channel_growth=config['channel_growth'],
+                horizontal_kernel=tuple(config['horizontal_kernel']),
+                horizontal_padding=tuple(config['horizontal_padding']),
+                upscale_kernel=tuple(config['upscale_kernel']),
+                upscale_stride=tuple(config['upscale_stride']),
+                downscale_kernel=tuple(config['downscale_kernel']),
+                downscale_stride=tuple(config['downscale_stride']),
+                squeeze_factor=config['reduction_factor']
+            )
+        elif model_type == "basicunet":
+            return UNet3d(n_channels_in=1, n_classes_out=1)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+            
+    except Exception as e:
+        print(f"Error creating model from config: {e}")
+        return None
+
+# Update the main execution section
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluate deep learning models')
+    
+    # Essential arguments
     parser.add_argument('local_model', type=str, 
-                        help="Path to a local model file")
+                        help="Path to a local model file (config.json should be in same directory)")
     parser.add_argument('database', type=str,
                         help='Path to database folder containing images')
     parser.add_argument('output_dir', type=str,
                         help='Output directory path')
-    parser.add_argument('--batch_size', type=int, default=32,
-                        help="Batch size for inference")
-    parser.add_argument('--device', type=str, default='cpu',
-                        help="Device to run PyTorch on")
+    
+    # Runtime arguments
+    parser.add_argument('--batch_size', type=int, default=None,
+                        help="Batch size for inference (overrides config)")
+    parser.add_argument('--device', type=str, default=None,
+                        help="Device to run PyTorch on (overrides config)")
     parser.add_argument('--save_predictions', action="store_true", default=False,
                         help="Save prediction outputs")
-    parser.add_argument('--model_type', type=str, 
-                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "anisotropicunet_usenet", "basicunet"],
-                        default="anisotropicunet",
-                        help="Model architecture type")
-    parser.add_argument('--model_depth', type=int, default=5,
-                        help="Depth of the UNet model")
-    parser.add_argument('--base_channels', type=int, default=64,
-                        help="Number of channels in the first layer")
-    parser.add_argument('--channel_growth', type=int, default=2,
-                        help="Factor to multiply channels by at each depth")
-    parser.add_argument('--horizontal_kernel', type=str, default="1,3,3",
-                        help="Horizontal kernel size as comma-separated values")
-    parser.add_argument('--horizontal_padding', type=str, default="0,1,1",
-                        help="Horizontal padding as comma-separated values")
-    parser.add_argument('--reduction_factor', type=int, default=16,
-                        help="Reduction factor for SE blocks (only used with anisotropicunet_se)")
     parser.add_argument('--tile_overlap', type=int, default=0,
                         help="How much (px) of overlap in tiling and stitching")
     parser.add_argument('--visualise_tiling', action="store_true", default=False,
                         help="Visualise tiling and stitching lines")
-    parser.add_argument("--downscale_kernel", type=str, default="1,2,2",
-                  help="Downscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
-    parser.add_argument("--downscale_stride", type=str, default="1,1,1", 
-                  help="Downscale stride as comma-separated values (depth,height,width). Default: '1,1,1'")
-    parser.add_argument("--upscale_kernel", type=str, default="1,2,2",
-                  help="Upscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
-    parser.add_argument("--upscale_stride", type=str, default="1,2,2", 
-                  help="Upscale padding as comma-separated values (depth,height,width). Default: '1,2,2'")
+    
+    # Optional overrides (only needed if you want to override config values)
+    parser.add_argument('--override_model_type', type=str, 
+                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "anisotropicunet_usenet", "basicunet"],
+                        help="Override model type from config")
+    parser.add_argument('--override_dataset_mean', type=float,
+                        help="Override dataset mean from config")
+    parser.add_argument('--override_dataset_std', type=float,
+                        help="Override dataset std from config")
     
     args = parser.parse_args()
 
-    # Parse tuple arguments
-    horizontal_kernel = parse_tuple_arg(args.horizontal_kernel, "horizontal_kernel")
-    horizontal_padding = parse_tuple_arg(args.horizontal_padding, "horizontal_padding")
-    downscale_kernel = parse_tuple_arg(args.downscale_kernel, 'downscale_kernel')
-    downscale_stride = parse_tuple_arg(args.downscale_stride, 'downscale_stride')
-    upscale_kernel = parse_tuple_arg(args.upscale_kernel, 'upscale_kernel')
-    upscale_stride = parse_tuple_arg(args.upscale_stride, 'upscale_stride')
+    # Load training configuration
+    training_config = load_training_config(args.local_model)
+    
+    if not training_config:
+        print("Error: Could not load training configuration!")
+        exit(1)
 
-    config.device = args.device
-    config.batch_size = args.batch_size
+    # Update global config with loaded values
+    try:
+        config.dataset_mean = args.override_dataset_mean if args.override_dataset_mean is not None else training_config['dataset_mean']
+        config.dataset_std = args.override_dataset_std if args.override_dataset_std is not None else training_config['dataset_std']
+        config.device = args.device if args.device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
+        config.batch_size = args.batch_size if args.batch_size is not None else training_config.get('batch_size', 32)
+    except Exception as e:
+        print(f"Error loading config values: {e}")
+        exit(1)
 
-    # Create model based on arguments
-    model = create_model_from_args(
-        model_type=args.model_type,
-        model_depth=args.model_depth,
-        base_channels=args.base_channels,
-        channel_growth=args.channel_growth,
-        horizontal_kernel=horizontal_kernel,
-        horizontal_padding=horizontal_padding,
-        reduction_factor=args.reduction_factor
-    ).to(config.device)
+    print(f"Using configuration:")
+    print(f"  Dataset mean: {config.dataset_mean:.6f}")
+    print(f"  Dataset std: {config.dataset_std:.6f}")
+    print(f"  Device: {config.device}")
+    print(f"  Batch size: {config.batch_size}")
+
+    # Create model from config
+    model_config = training_config.copy()
+    if args.override_model_type:
+        model_config['model_type'] = args.override_model_type
+        
+    model = create_model_from_config(model_config)
+    if model is None:
+        print("Failed to create model from configuration.")
+        exit(1)
+        
+    model = model.to(config.device)
     
     # Load model weights
-    model.load_state_dict(torch.load(args.local_model, map_location=args.device))
-    model.eval()
-    print(f'Model ({args.model_type}) loaded successfully')
+    try:
+        model.load_state_dict(torch.load(args.local_model, map_location=config.device))
+        model.eval()
+        print(f"Model ({model_config.get('model_type', 'unknown')}) loaded successfully")
+    except Exception as e:
+        print(f"Error loading model weights: {e}")
+        exit(1)
     
     # Run evaluation
     with torch.no_grad():
