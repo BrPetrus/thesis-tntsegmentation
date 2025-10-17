@@ -117,15 +117,16 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
             divisor=config.dataset_std
         ),
 
-        # # Random noise
-        # MT.RandGaussianNoised(keys=['volume'], prob=0.5, mean=0, std=0.2),
+        # Random noise
+        MT.RandGaussianNoised(keys=['volume'], prob=0.5, mean=0, std=0.2),
 
-        # # Random flips
-        # MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=0),
-        # MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
-        # MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
+        # Random flips
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=0),
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
+        MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
-        # Random rotations - ONLY in X,Y plane (around Z-axis)
+        # Random rotations
+        # TODO: remove wrong comments
         MT.RandRotated(
             keys=['volume', 'mask3d'], 
             prob=0.5, 
@@ -135,13 +136,13 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
         ),
 
         # Random zoom
-        # MT.RandZoomd(
-        #     keys=['volume', 'mask3d'],
-        #     prob=0.5,
-        #     min_zoom=0.5,
-        #     max_zoom=2,
-        #     spatial_axis=[1,2]  # Skip Z (depth)
-        # ),
+        MT.RandZoomd(
+            keys=['volume', 'mask3d'],
+            prob=0.5,
+            min_zoom=0.5,
+            max_zoom=2,
+            spatial_axis=[]  # Skip Z (depth)
+        ),
 
         # # Elastic deformations
         # MT.Rand3DElasticd(
