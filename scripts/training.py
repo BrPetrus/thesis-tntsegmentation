@@ -68,10 +68,10 @@ def _analyze_dataset_stats(input_folder: Path) -> Tuple[float, float]:
     for idx, row in tqdm(df_train.iterrows(), total=len(df_train), desc="Loading training images"):
         # NOTE: no normalisation is used
         img = tifffile.imread(row['img_path']).astype(np.float32)
-        all_images.append(img)
+        all_images.append(img.flatten())
     
-    # Estimate statistitcs
-    all_images = np.stack(all_images)
+    # Estimate statisti
+    all_images = np.concatenate(all_images)
     dataset_mean = float(np.mean(all_images))
     dataset_std = float(np.std(all_images))
     logging.info(
