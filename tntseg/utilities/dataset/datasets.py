@@ -85,10 +85,6 @@ class TNTDataset(Dataset):
         """Load full images"""
         for idx, row in self.dataframe.iterrows():
             img = tifffile.imread(row['img_path'])
-            if img.dtype != np.uint16:
-                img = img.astype(np.float32)
-            else:
-                img = img.astype(np.float32)
             self.data.append(img)
 
             if self.load_masks:
@@ -100,7 +96,7 @@ class TNTDataset(Dataset):
                 if mask.dtype == np.uint8 and not set(np.unique(mask)).issubset(set([0,255])):
                     raise RuntimeError(f"Expected just 0 and 255 in file at {row['mask_path']}, got {np.unique(mask)}")
                 elif mask.dtype == np.uint8:
-                    mask = mask / 255.0
+                    mask = mask.astype(np.float32) / 255.0
 
                 mask = mask.astype(np.float32)
                 self.mask_data.append(mask)
@@ -112,15 +108,7 @@ class TNTDataset(Dataset):
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")
 
-        # Use a combination of the current time and the sample index to ensure uniqueness
-        seed = int(time.time() * 1000) % (2**32) + idx
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        set_determinism(seed=seed)
-        self.transforms.set_random_state(seed)
-        
         data = self.data[idx]
-        data = (data - data.min()) / (data.max() - data.min())
 
         # MONAI compatible dictionary
         sample = {

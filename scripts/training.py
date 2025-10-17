@@ -29,7 +29,6 @@ from dataclasses import asdict
 from scripts.training_utils import ( 
     create_neural_network,
     create_loss_criterion,
-    CombinedLoss,
     visualize_transform_effects
 )
 from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, ModelType
@@ -54,6 +53,34 @@ def worker_init_fn(worker_id):
     torch.manual_seed(worker_seed)
     set_determinism(seed=worker_seed)
 
+
+def _analyze_dataset_stats(input_folder: Path) -> Tuple[float, float]:
+    """Analyze dataset to calculate mean and std"""
+    logging.info("Analyzing dataset")
+
+    # Load only training data
+    input_folder_train = input_folder / 'train'
+    if not input_folder_train.exists():
+        raise ValueError(f"Missing train subfolder at '{input_folder_train}'")
+    df_train = load_dataset_metadata(input_folder_train / "IMG")
+    logging.info(f"Loading {len(df_train)} training samples for analysis...")
+    all_images = []
+    for idx, row in tqdm(df_train.iterrows(), total=len(df_train), desc="Loading training images"):
+        # NOTE: no normalisation is used
+        img = tifffile.imread(row['volume_path']).astpye(np.float32)
+        all_images.append(img)
+    
+    # Estimate statistitcs
+    all_images = np.stack(all_images)
+    dataset_mean = float(np.mean(all_images))
+    dataset_std = float(np.std(all_images))
+    logging.info(
+        f"Training datatset ({len(df_train)} samples) statistics: \n" \
+        f"   Mean: {dataset_mean}\n" \
+        f"   std: {dataset_std}"
+    )
+    return dataset_mean, dataset_std
+
 def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validation_ratio = 1/3.) -> Tuple[DataLoader, DataLoader, DataLoader]:
     # Load metadata
     input_folder_train = input_folder / "train"
@@ -62,7 +89,13 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
     input_folder_test = input_folder / "test"
     if not input_folder_test.exists():
         raise RuntimeError(f"Missing testing subfolder at '{input_folder_test}'")
+
+    # Analyse for mean and std
+    calculated_mean, calculated_std = _analyze_dataset_stats(input_folder)
+    config.dataset_mean = calculated_mean
+    config.dataset_std = calculated_std
     
+    # Load datset properly
     df_train = load_dataset_metadata(input_folder_train / "IMG", input_folder_train / "GT_MERGED_LABELS") 
     test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
 
