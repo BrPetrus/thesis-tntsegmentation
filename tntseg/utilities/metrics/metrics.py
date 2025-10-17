@@ -85,7 +85,7 @@ def recall(tp: int, fn: int) -> float:
     return tp / (tp+fn) if tp+fn > 0 else 0.
 
 
-def calculate_batch_stats(prediction_batch: NDArray[np.uint8], label_batch: NDArray[np.uint8], negative_val: int = 0, positive_val: int = 255) -> Stats:
+def calculate_batch_stats(prediction_batch: NDArray[np.uint8 | np.bool], label_batch: NDArray[np.uint8 | np.bool], negative_val: int = 0, positive_val: int = 255) -> Stats:
     """
     Calculate batch statistics for binary classification metrics.
 
@@ -117,10 +117,14 @@ def calculate_batch_stats(prediction_batch: NDArray[np.uint8], label_batch: NDAr
           of elements in the input arrays.
 
     """
-    if prediction_batch.dtype != np.uint8:
-        raise ValueError(f"Expected unsigned 8bit integer type (np.uint8), got {prediction_batch.dtype} for the prediction")
-    if label_batch.dtype != np.uint8:
-        raise ValueError(f"Expected unsigned 8bit integer type, got {label_batch.dtype} for the label_batch")
+    if prediction_batch.dtype != np.uint8 and prediction_batch.dtype != np.bool:
+        raise ValueError(f"Expected unsigned 8bit integer type (np.uint8) or boolean, got {prediction_batch.dtype} for the prediction")
+    if label_batch.dtype != np.uint8 and label_batch.dtype != np.bool:
+        raise ValueError(f"Expected unsigned 8bit integer type or boolean, got {label_batch.dtype} for the label_batch")
+    if prediction_batch.dtype != label_batch.dtype:
+        raise ValueError(f"Prediction {prediction_batch.dtype} and label {label_batch.dtype} have different types.")
+
+    # TODO: make it for binary imgs
 
     prediction = prediction_batch.flatten()
     label = label_batch.flatten()

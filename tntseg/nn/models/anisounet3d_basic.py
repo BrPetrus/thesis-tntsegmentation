@@ -36,6 +36,7 @@ class AnisotropicUNet3D(nn.Module):
         self.n_classes_out = n_classes_out
         self.depth = depth
         self.horizontal_kernel = horizontal_kernel
+        self.downsampling_kernel = downscale_kernel
         print(f"Using depth={self.depth}")
 
         # Generate channel configurations
@@ -51,11 +52,11 @@ class AnisotropicUNet3D(nn.Module):
         neck_out_channels = neck_in_channels * channel_growth
         
         # Generate upsampling channel configuration
-        up_channels = []
+        self.up_channels = []
         in_ch = neck_out_channels
         for i in range(depth):
             out_ch = down_channels[depth-i-1][1]
-            up_channels.append((in_ch, out_ch))
+            self.up_channels.append((in_ch, out_ch))
             in_ch = out_ch
 
         # Contracting path
@@ -87,7 +88,7 @@ class AnisotropicUNet3D(nn.Module):
 
         # Expansive path
         self.upsampling_layers = nn.ModuleList()
-        for in_chann, out_chann in up_channels:
+        for in_chann, out_chann in self.up_channels:
             self.upsampling_layers.append(
                 nn.ModuleList([
                     UpscaleBlock(
@@ -99,15 +100,15 @@ class AnisotropicUNet3D(nn.Module):
                     HorizontalBlock(
                         in_channels=in_chann,
                         out_channels=out_chann,
-                        kernel=(3,3,3),
+                        kernel=horizontal_kernel,
                         stride=horizontal_stride,
-                        padding=(1,1,1)
+                        padding=horizontal_padding
                     )
                 ])
             )
         
         # Out
-        self.final_conv = nn.Conv3d(up_channels[-1][1], self.n_classes_out, 1)
+        self.final_conv = nn.Conv3d(self.up_channels[-1][1], self.n_classes_out, 1)
 
     def forward(self, x):
         x_values = []        
@@ -131,7 +132,7 @@ class AnisotropicUNet3D(nn.Module):
         return self.final_conv(x)
     
     def get_signature(self) -> str:
-        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}"
+        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}-dk{self.downsampling_kernel}"
 
 
 def create_anisotropic_unet3d(config):
@@ -153,8 +154,8 @@ def create_anisotropic_unet3d(config):
         depth=config.get('depth', 3),
         base_channels=config.get('base_channels', 64),
         channel_growth=config.get('channel_growth', 2),
-        horizontal_kernel=config.get('horizontal_kernel', (1, 3, 3)),
-        horizontal_padding=config.get('horizontal_padding', (0, 1, 1)),
+        horizontal_kernel=config.get('horizontal_kernel', (3, 3, 3)),
+        horizontal_padding=config.get('horizontal_padding', (1, 1, 1)),
         horizontal_stride=config.get('horizontal_stride', (1, 1, 1)),
         downscale_kernel=config.get('downscale_kernel', (1, 2, 2)),
         downscale_stride=config.get('downscale_stride', (1, 2, 2)),
