@@ -125,14 +125,14 @@ def _prepare_datasets(input_folder: Path, seed: int, config: BaseConfig, validat
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=1),
         MT.RandFlipd(keys=['volume', 'mask3d'], prob=0.5, spatial_axis=2),
 
-        # Random rotations - ONLY in X,Y plane (around Z-axis)
-        MT.RandRotated(
-            keys=['volume', 'mask3d'], 
-            prob=0.5, 
-            range_x=0,           # No rotation around X-axis (keeps Z intact)
-            range_y=0,           # No rotation around Y-axis (keeps Z intact)  
-            range_z=np.pi/2      # Rotation around Z-axis (rotates in X,Y plane)
-        ),
+        # # Random rotations - ONLY in X,Y plane (around Z-axis)
+        # MT.RandRotated(
+        #     keys=['volume', 'mask3d'], 
+        #     prob=0.5, 
+        #     range_x=0,           # No rotation around X-axis (keeps Z intact)
+        #     range_y=0,           # No rotation around Y-axis (keeps Z intact)  
+        #     range_z=np.pi/2      # Rotation around Z-axis (rotates in X,Y plane)
+        # ),
 
         # Random zoom
         MT.RandZoomd(
