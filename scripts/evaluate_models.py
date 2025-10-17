@@ -358,6 +358,7 @@ def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
     except ValueError as e:
         raise argparse.ArgumentTypeError(f"Invalid {arg_name}: {arg_string}. {str(e)}")
 
+# TODO: reuse code from training utils
 def create_model_from_config(config: dict) -> nn.Module:
     """Create a model based on loaded configuration."""
     try:
@@ -421,7 +422,7 @@ def create_model_from_config(config: dict) -> nn.Module:
                 downscale_stride=tuple(config['downscale_stride']),
                 squeeze_factor=config['reduction_factor']
             )
-        elif model_type == "basicunet":
+        elif model_type == "unet3d":
             return UNet3d(n_channels_in=1, n_classes_out=1)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
