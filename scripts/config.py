@@ -5,11 +5,12 @@ from logging import basicConfig
 from typing import Tuple
 
 class ModelType(StrEnum):
-    AnisotropicUNet = auto()
-    UNet3D = auto()
-    AnisotropicUNetSE = auto()
-    AnisotropicUNetCSAM = auto()
-    Unkwnown = auto()
+    UNet3D = "unet3d"
+    AnisotropicUNet = "anisotropicunet"
+    AnisotropicUNetSE = "anisotropicunet_se"
+    AnisotropicUNetCSAM = "anisotropicunet_csam"
+    AnisotropicUNetUSENet = "anisotropicunet_usenet"
+    Unknown = "unknown"
 
 @dataclass
 class BaseConfig:
@@ -40,7 +41,7 @@ class BaseConfig:
     train_focal_tversky_beta: float = 0.2
     train_focal_tversky_gamma: float = 2
     weight_decay: float = 0.0001
-    model_type: ModelType = ModelType.Unkwnown
+    model_type: ModelType = ModelType.Unknown
     crop_size: Tuple[int, int, int] = (7, 64, 64)
 
 @dataclass
@@ -50,6 +51,10 @@ class AnisotropicUNetConfig(BaseConfig):
     channel_growth: int = 2
     horizontal_kernel: Tuple[int, int, int] = (1, 3, 3) 
     horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
+    downscale_kernel : Tuple[int, int, int] = (1, 2, 2)
+    downscale_stride: Tuple[int, int, int] = (1, 2, 2)
+    upscale_kernel: Tuple[int, int, int] = (1, 2, 2)
+    upscale_stride: Tuple[int, int, int] = (1, 2, 2)
 
 @dataclass
 class AnisotropicUNetSEConfig(AnisotropicUNetConfig):

@@ -33,6 +33,7 @@ from scripts.training_utils import (
     visualize_transform_effects
 )
 from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, ModelType
+from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
 
 def set_all_seeds(seed: int):
     """Set seeds for all random number generators"""
@@ -453,19 +454,19 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     visualize_transform_effects(train_dataloader, num_samples=5, output_folder=output_folder_path / "transform_check")
     
-    # Get test_x and transform_test for quadrant testing
-    input_folder_test = input_folder / "test"
-    test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
-    transform_test = A.Compose([
-        A.Normalize(
-            mean=config.dataset_mean,
-            std=config.dataset_std,
-            max_pixel_value=1.0,
-            p=1.0
-        ),
-        A.CenterCrop3D(size=config.crop_size),
-        A.ToTensor3D()
-    ])
+    # # Get test_x and transform_test for quadrant testing
+    # input_folder_test = input_folder / "test"
+    # test_x = load_dataset_metadata(input_folder_test / "IMG", input_folder_test / "GT_MERGED_LABELS")
+    # transform_test = A.Compose([
+    #     A.Normalize(
+    #         mean=config.dataset_mean,
+    #         std=config.dataset_std,
+    #         max_pixel_value=1.0,
+    #         p=1.0
+    #     ),
+    #     A.CenterCrop3D(size=config.crop_size),
+    #     A.ToTensor3D()
+    # ])
 
     # Create net
     nn = create_neural_network(config, 1, 1).to(config.device)
@@ -539,7 +540,7 @@ if __name__ == "__main__":
     parser.add_argument("--mlflow_port", type=str, default="8000",
                         help="Port of the MLFlow server")
     parser.add_argument("--model", type=str, 
-                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "basicunet"], 
+                        choices=["anisotropicunet", "anisotropicunet_se", "anisotropicunet_csam", "anisotropicunet_usenet", "basicunet"], 
                         default="anisotropicunet", 
                         help="Model architecture to use")
     parser.add_argument("--model_depth", type=int, default=3,
@@ -554,6 +555,14 @@ if __name__ == "__main__":
                   help="Horizontal kernel size as comma-separated values (depth,height,width). Default: '1,3,3'")
     parser.add_argument("--horizontal_padding", type=str, default="0,1,1", 
                   help="Horizontal padding as comma-separated values (depth,height,width). Default: '0,1,1'")
+    parser.add_argument("--downscale_kernel", type=str, default="1,2,2",
+                  help="Downscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
+    parser.add_argument("--downscale_stride", type=str, default="1,1,1", 
+                  help="Downscale stride as comma-separated values (depth,height,width). Default: '1,1,1'")
+    parser.add_argument("--upscale_kernel", type=str, default="1,2,2",
+                  help="Upscale kernel size as comma-separated values (depth,height,width). Default: '1,2,2'")
+    parser.add_argument("--upscale_stride", type=str, default="1,2,2", 
+                  help="Upscale padding as comma-separated values (depth,height,width). Default: '1,2,2'")
     parser.add_argument("--reduction_factor", type=int, default=16,
                       help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16")
 
@@ -562,6 +571,10 @@ if __name__ == "__main__":
     # Parse the tuple arguments
     horizontal_kernel = parse_tuple_arg(args.horizontal_kernel, "horizontal_kernel")
     horizontal_padding = parse_tuple_arg(args.horizontal_padding, "horizontal_padding")
+    downscale_kernel = parse_tuple_arg(args.downscale_kernel, 'downscale_kernel')
+    downscale_stride = parse_tuple_arg(args.downscale_stride, 'downscale_stride')
+    upscale_kernel = parse_tuple_arg(args.upscale_kernel, 'upscale_kernel')
+    upscale_stride = parse_tuple_arg(args.upscale_stride, 'upscale_stride')
 
     # Set up logging
     logging.basicConfig(level=logging.INFO)
@@ -575,11 +588,16 @@ if __name__ == "__main__":
         "anisotropicunet": ModelType.AnisotropicUNet,
         "anisotropicunet_se": ModelType.AnisotropicUNetSE,
         "anisotropicunet_csam": ModelType.AnisotropicUNetCSAM,
+        "anisotropicunet_usenet": ModelType.AnisotropicUNetUSENet,
         "basicunet": ModelType.UNet3D
     }
+    if args.model not in model_type_map:
+        raise ValueError(f"Unknown model type provided. Legal values are: {model_type_map.keys()}")
+    model_type = model_type_map[args.model]
+    logging.info(f"Got {model_type} model")
 
     # Create appropriate config based on model type
-    if args.model == "anisotropicunet_se":
+    if model_type == ModelType.AnisotropicUNetSE or model_type == ModelType.AnisotropicUNetUSENet:
         config = AnisotropicUNetSEConfig(
             epochs=args.epochs,
             lr=args.lr,
@@ -588,17 +606,21 @@ if __name__ == "__main__":
             num_workers=args.num_workers,
             shuffle=args.shuffle,
             input_folder=str(args.input_folder),
-            model_type=model_type_map[args.model],
+            model_type=model_type,
             model_depth=args.model_depth,
             base_channels=args.base_channels,
             channel_growth=args.channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
             seed=args.seed,
             weight_decay=args.weight_decay,
             reduction_factor=args.reduction_factor
         )
-    elif args.model in ["anisotropicunet", "anisotropicunet_csam"]:
+    elif model_type == ModelType.AnisotropicUNet or model_type == ModelType.AnisotropicUNetCSAM:
         config = AnisotropicUNetConfig(
             epochs=args.epochs,
             lr=args.lr,
@@ -607,16 +629,20 @@ if __name__ == "__main__":
             num_workers=args.num_workers,
             shuffle=args.shuffle,
             input_folder=str(args.input_folder),
-            model_type=model_type_map[args.model],
+            model_type=model_type,
             model_depth=args.model_depth,
             base_channels=args.base_channels,
             channel_growth=args.channel_growth,
             horizontal_kernel=horizontal_kernel,
             horizontal_padding=horizontal_padding,
+            upscale_kernel=upscale_kernel,
+            upscale_stride=upscale_stride,
+            downscale_kernel=downscale_kernel,
+            downscale_stride=downscale_stride,
             seed=args.seed,
             weight_decay=args.weight_decay,
         )
-    else:  # basicunet
+    elif model_type == ModelType.UNet3D:
         config = BaseConfig(
             epochs=args.epochs,
             lr=args.lr,
@@ -629,6 +655,9 @@ if __name__ == "__main__":
             seed=args.seed,
             weight_decay=args.weight_decay
         )
+    else:
+        # NOTE: this should never happen
+        assert "Unknown model type"
 
     print(f'Shuffle: {config.shuffle}')
 

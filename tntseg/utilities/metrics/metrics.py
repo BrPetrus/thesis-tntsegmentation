@@ -117,9 +117,9 @@ def calculate_batch_stats(prediction_batch: NDArray[np.uint8 | np.bool], label_b
           of elements in the input arrays.
 
     """
-    if prediction_batch.dtype != np.uint8 or prediction_batch.dtype != np.bool:
+    if prediction_batch.dtype != np.uint8 and prediction_batch.dtype != np.bool:
         raise ValueError(f"Expected unsigned 8bit integer type (np.uint8) or boolean, got {prediction_batch.dtype} for the prediction")
-    if label_batch.dtype != np.uint8 or label_batch.dtype != np.bool:
+    if label_batch.dtype != np.uint8 and label_batch.dtype != np.bool:
         raise ValueError(f"Expected unsigned 8bit integer type or boolean, got {label_batch.dtype} for the label_batch")
     if prediction_batch.dtype != label_batch.dtype:
         raise ValueError(f"Prediction {prediction_batch.dtype} and label {label_batch.dtype} have different types.")
