@@ -501,7 +501,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
 
     # Create net
     nn = create_neural_network(config, 1, 1).to(config.device)
-    optimizer = torch.optim.Adam(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+    optimizer = torch.optim.AdamW(nn.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = create_loss_criterion(config)
 
     # MLFlow
