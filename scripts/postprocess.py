@@ -307,6 +307,123 @@ def detect_tunnels(prediction: NDArray[np.float32],
         mapping_result=mapping_result
     )
 
+def visualise_matching(gt_labeled, image, output_folder, labeled_prediction, binary_filtered_pred, binary_gt, mapping, duplicate_predictions, unmatched_labels, unmatched_predictions):
+    """Restore the full visualization function that was accidentally removed."""
+    if image.dtype == np.float32 or image.dtype == np.float64:
+        # Normalize to 0-255
+        img_min, img_max = image.min(), image.max()
+        image_normalized = ((image - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+    else:
+        image_normalized = image.astype(np.uint8)
+    
+    # Convert grayscale to RGB if needed
+    background_rgb = np.stack([image_normalized, image_normalized, image_normalized], axis=-1)
+
+    # 1. Basic confusion matrix visualization with background
+    basic_vis = background_rgb.copy()
+    alpha = 0.7  # Transparency for overlay
+    
+    # Create colored overlays
+    tp_color = np.array([0, 255, 0])      # TP: Green
+    fp_color = np.array([255, 0, 0])      # FP: Red
+    fn_color = np.array([0, 0, 255])      # FN: Blue
+    
+    # Apply overlays with alpha blending
+    tp_mask = (binary_filtered_pred == True) & (binary_gt == True)
+    fp_mask = (binary_filtered_pred == True) & (binary_gt == False)
+    fn_mask = (binary_filtered_pred == False) & (binary_gt == True)
+    
+    basic_vis[tp_mask] = (alpha * tp_color + (1-alpha) * basic_vis[tp_mask]).astype(np.uint8)
+    basic_vis[fp_mask] = (alpha * fp_color + (1-alpha) * basic_vis[fp_mask]).astype(np.uint8)
+    basic_vis[fn_mask] = (alpha * fn_color + (1-alpha) * basic_vis[fn_mask]).astype(np.uint8)
+    
+    tifffile.imwrite(str(output_folder / 'confusion_matrix_overlay.tif'), basic_vis)
+
+    # 2. Matched tunnels visualization with background
+    matched_vis = background_rgb.copy()
+    colors = [
+        (255, 100, 100),  # Light red
+        (100, 255, 100),  # Light green  
+        (100, 100, 255),  # Light blue
+        (255, 255, 100),  # Yellow
+        (255, 100, 255),  # Magenta
+        (100, 255, 255),  # Cyan
+        (200, 150, 100),  # Brown
+        (150, 100, 200),  # Purple
+    ]
+    
+    for i, (gt_label, (pred_label, overlap_score)) in enumerate(mapping.items()):
+        color = np.array(colors[i % len(colors)])
+        
+        # Color both GT and prediction with same color, but different intensities
+        gt_mask = gt_labeled == gt_label
+        pred_mask = labeled_prediction == pred_label
+        
+        # GT regions: blend with background
+        matched_vis[gt_mask] = (0.6 * color + 0.4 * matched_vis[gt_mask]).astype(np.uint8)
+        
+        # Prediction regions: blend with different intensity
+        pred_color = color * 0.7
+        matched_vis[pred_mask] = (0.5 * pred_color + 0.5 * matched_vis[pred_mask]).astype(np.uint8)
+        
+        # Overlap regions: bright white overlay
+        overlap_mask = gt_mask & pred_mask
+        overlap_color = np.array([255, 255, 255])
+        matched_vis[overlap_mask] = (0.8 * overlap_color + 0.2 * matched_vis[overlap_mask]).astype(np.uint8)
+    
+    tifffile.imwrite(str(output_folder / 'matched_tunnels_overlay.tif'), matched_vis)
+
+    # 3. Unmatched regions visualization with background
+    unmatched_vis = background_rgb.copy()
+    
+    # Unmatched GT tunnels in bright red
+    unmatched_gt_color = np.array([255, 0, 0])
+    for gt_label in unmatched_labels:
+        gt_mask = gt_labeled == gt_label
+        unmatched_vis[gt_mask] = (0.7 * unmatched_gt_color + 0.3 * unmatched_vis[gt_mask]).astype(np.uint8)
+    
+    # Unmatched predictions in bright blue
+    unmatched_pred_color = np.array([0, 0, 255])
+    for pred_label in unmatched_predictions:
+        pred_mask = labeled_prediction == pred_label
+        unmatched_vis[pred_mask] = (0.7 * unmatched_pred_color + 0.3 * unmatched_vis[pred_mask]).astype(np.uint8)
+    
+    tifffile.imwrite(str(output_folder / 'unmatched_regions_overlay.tif'), unmatched_vis)
+
+    # 4. Multimatch mappings visualization
+    if duplicate_predictions:
+        duplicate_vis = background_rgb.copy()
+        
+        # Use bright, distinctive colors for duplicates
+        duplicate_colors = [
+            (255, 0, 255),    # Magenta
+            (0, 255, 255),    # Cyan  
+            (255, 165, 0),    # Orange
+            (255, 20, 147),   # Deep pink
+            (50, 205, 50),    # Lime green
+            (255, 69, 0),     # Red orange
+        ]
+        
+        for i, (pred_label, gt_matches) in enumerate(duplicate_predictions.items()):
+            color = np.array(duplicate_colors[i % len(duplicate_colors)])
+            
+            # Highlight the prediction region in the chosen color
+            pred_mask = labeled_prediction == pred_label
+            duplicate_vis[pred_mask] = (0.8 * color + 0.2 * duplicate_vis[pred_mask]).astype(np.uint8)
+            
+            # Highlight each GT region it matches with a slightly different shade
+            for j, (gt_label, overlap_score) in enumerate(gt_matches):
+                gt_mask = gt_labeled == gt_label
+                # Use progressively darker shades for multiple GT matches
+                shade_factor = 0.8 - (j * 0.2)  # 0.8, 0.6, 0.4, etc.
+                gt_color = color * shade_factor
+                duplicate_vis[gt_mask] = (0.6 * gt_color + 0.4 * duplicate_vis[gt_mask]).astype(np.uint8)
+        
+        tifffile.imwrite(str(output_folder / 'duplicate_mappings_overlay.tif'), duplicate_vis)
+
+    # Original background for reference
+    tifffile.imwrite(str(output_folder / 'original_image.tif'), background_rgb)
+
 def visualise_mapping_results(gt_labeled, image, output_folder, labeled_prediction, 
                              binary_filtered_pred, binary_gt, mapping_result: TunnelMappingResult):
     """Updated visualization function that uses the mapping result."""
