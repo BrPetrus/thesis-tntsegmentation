@@ -18,12 +18,13 @@ import argparse
 import matplotlib.pyplot as plt
 
 
-
 @dataclass(frozen=True)
 class PostprocessConfig:
     minimum_size_px: int
     se_type: Any
     se_size: int
+    recall_threshold: float
+    prediction_threshold: float
 
 def post_process_output(predictions: NDArray[np.bool], config: PostprocessConfig) -> List[Dict]:
 
@@ -83,10 +84,11 @@ class TunnelDetectionResult:
     recall: float
     prec: float
 
-def detect_tunnels(binary_prediction: NDArray[np.bool], gt_labeled: NDArray[np.uint8], image: NDArray, config: PostprocessConfig, output_folder: Path) -> TunnelDetectionResult:
+def detect_tunnels(prediction: NDArray[np.float32], gt_labeled: NDArray[np.uint8], image: NDArray, config: PostprocessConfig, output_folder: Path) -> TunnelDetectionResult:
     output_folder.mkdir(parents=True, exist_ok=True)
 
     image = _preproces_raw_image(image) 
+    binary_prediction = prediction > config.prediction_threshold
     regions_prop, labeled_prediction = post_process_output(binary_prediction, config)
     tifffile.imwrite(output_folder / 'processed_prediction.tif', labeled_prediction)
     tifffile.imwrite(output_folder / 'processed_prediction_binary.tif', labeled_prediction != 0)
@@ -101,11 +103,12 @@ def detect_tunnels(binary_prediction: NDArray[np.bool], gt_labeled: NDArray[np.u
     prec = tntmetrics.precision(TP, FP)
     recall = tntmetrics.recall(TP, FN)
     f1 = tntmetrics.dice_coefficient(TP, FP, FN)
+    jacc = tntmetrics.jaccard_index(TP, FP, FN)
 
-    print(f"prec={prec}, recall={recall}, f1={f1}")
+    print(f"prec={prec}, recall={recall}, f1={f1}, jaccard={jacc}")
 
     # Tunnel matching logic
-    mapping = map_tunnels_gt_to_pred(gt_labeled, labeled_prediction)
+    mapping = map_tunnels_gt_to_pred(gt_labeled, labeled_prediction, config.recall_threshold)
     
     # Check for prediction labels that are mapped to multiple GT tunnels
     pred_to_gt_mapping = invert_mapping(mapping)
@@ -124,10 +127,21 @@ def detect_tunnels(binary_prediction: NDArray[np.bool], gt_labeled: NDArray[np.u
                 pred_size = np.sum(labeled_prediction == pred_label)
                 print(f"    -> GT {gt_label}: {overlap_score:.2f} overlap (GT size: {gt_size}, Pred size: {pred_size})")
     
-    # === FILTER TO GET CLEAN 1-1 MAPPINGS ===
-    clean_mapping = filter_clean_mappings(mapping, duplicate_predictions)
+    print(f"\n=== METRICS FOR ALL MATCHED TUNNELS")
+    matched_metrics = calculate_matched_metrics(gt_labeled, labeled_prediction, mapping) 
+    print(f" 1-1 matches: {matched_metrics['num_clean_matches']}/{len(mapping)} total matches")
+    print(f"Matched Dice: {matched_metrics['matched_dice']:.4f}")
+    print(f"Matched Jaccard: {matched_metrics['matched_jaccard']:.4f}")
+    print(f"Matched Precision: {matched_metrics['matched_precision']:.4f}")
+    print(f"Matched Recall: {matched_metrics['matched_recall']:.4f}")
+    print(f"TP: {matched_metrics['TP_matched']}, FP: {matched_metrics['FP_matched']}, FN: {matched_metrics['FN_matched']}")
+
+    print(f"Matched GT {len(mapping)} tunnels ({len(mapping) / (len(mapping)+len(unmatched_labels))*100:.1f}%)")
+    print(f"Unmatched ground truth tunnels: {len(unmatched_labels)}")
+    print(f"Unmatched predictions: {len(unmatched_predictions)}")
     
     # === CALCULATE METRICS ON CLEAN MAPPINGS ===
+    clean_mapping = filter_clean_mappings(mapping, duplicate_predictions)
     matched_metrics = calculate_matched_metrics(gt_labeled, labeled_prediction, clean_mapping)
     individual_metrics = calculate_individual_tunnel_metrics(gt_labeled, labeled_prediction, clean_mapping)
     
@@ -171,7 +185,7 @@ def visualise_matching(gt_labeled, image, output_folder, labeled_prediction, bin
     alpha = 0.7  # Transparency for overlay
     
     # Create colored overlays
-    tp_color = np.array([255, 255, 255])  # TP: White
+    tp_color = np.array([0, 255, 0])  # TP: Green
     fp_color = np.array([255, 0, 0])      # FP: Red
     fn_color = np.array([0, 0, 255])      # FN: Blue
     
@@ -404,28 +418,15 @@ def filter_clean_mappings(mapping: Dict[int, Tuple[int, float]],
     return clean_mapping
 
 def calculate_matched_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], 
-                            clean_mapping: Dict[int, Tuple[int, float]]) -> Dict[str, float]:
-    """Calculate Dice and Jaccard scores only for clean 1-1 matched tunnels."""
-    
-    if not clean_mapping:
-        print("No clean 1-1 mappings found for metric calculation")
-        return {
-            'matched_dice': 0.0,
-            'matched_jaccard': 0.0,
-            'matched_precision': 0.0,
-            'matched_recall': 0.0,
-            'num_clean_matches': 0,
-            'TP_matched': 0,
-            'FP_matched': 0,
-            'FN_matched': 0
-        }
+                            mapping: Dict[int, Tuple[int, float]]) -> Dict[str, float]:
+    """Calculate Dice and Jaccard scores only for matched tunnels"""
     
     # Create binary masks for only the matched regions
     matched_gt_mask = np.zeros_like(gt_labeled, dtype=bool)
     matched_pred_mask = np.zeros_like(labeled_prediction, dtype=bool)
     
-    # Accumulate masks for all clean matches
-    for gt_label, (pred_label, overlap_score) in clean_mapping.items():
+    # Accumulate masks for all  matches
+    for gt_label, (pred_label, overlap_score) in mapping.items():
         matched_gt_mask |= (gt_labeled == gt_label)
         matched_pred_mask |= (labeled_prediction == pred_label)
     
@@ -445,7 +446,7 @@ def calculate_matched_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction:
         'matched_jaccard': jaccard_matched,
         'matched_precision': precision_matched,
         'matched_recall': recall_matched,
-        'num_clean_matches': len(clean_mapping),
+        'num_clean_matches': len(mapping),
         'TP_matched': TP_matched,
         'FP_matched': FP_matched,
         'FN_matched': FN_matched
@@ -525,7 +526,7 @@ def invert_mapping(mapping):
         pred_to_gt_mapping[pred_label].append((gt_label, overlap_score))
     return pred_to_gt_mapping
 
-def map_tunnels_gt_to_pred(labeled_gt: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], recall_threshold: float = 0.7) -> Dict[int, Tuple[int, int]]:
+def map_tunnels_gt_to_pred(labeled_gt: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], recall_threshold: float = 0.5) -> Dict[int, Tuple[int, int]]:
     mapping = {}
     for label_id_gt in np.unique(labeled_gt):
         if label_id_gt == 0:
@@ -566,13 +567,15 @@ if __name__ == "__main__":
     parser.add_argument('output', type=Path)
     parser.add_argument('--min-size', type=int, default=100, help='Minimum object size in pixels')
     parser.add_argument('--se-size', type=int, default=3, help='Structuring element size')
+    parser.add_argument('--recall_threshold', type=float, default=0.6)  # TODO: help missing
+    parser.add_argument('--prediction_threshold', type=float, default=0.8)
     args = parser.parse_args()
 
     output_folder = Path(args.output)
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Load the files
-    prediction = tifffile.imread(args.prediction).astype(np.bool)
+    prediction = tifffile.imread(args.prediction)
     label = tifffile.imread(args.label).astype(np.uint8)
     img = tifffile.imread(args.input)
 
@@ -581,6 +584,8 @@ if __name__ == "__main__":
         minimum_size_px=args.min_size,
         se_type='disk',
         se_size=args.se_size, 
+        recall_threshold=args.recall_threshold,
+        prediction_threshold=args.prediction_threshold,
     )
 
     # Run tunnel matching
