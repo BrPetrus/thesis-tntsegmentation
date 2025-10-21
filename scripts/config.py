@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from enum import StrEnum, auto
+from enum import StrEnum
 
-from logging import basicConfig
 from typing import Tuple
 
 class ModelType(StrEnum):

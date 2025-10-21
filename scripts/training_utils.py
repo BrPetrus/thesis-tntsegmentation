@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from torch.types import Tensor
-from typing import List, Tuple
+from typing import List
 
 import tntseg.utilities.metrics.metrics_torch as tntloss
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D

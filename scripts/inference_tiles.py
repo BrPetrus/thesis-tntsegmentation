@@ -7,9 +7,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import albumentations as A
-import os
 
-from tntseg.nn.models.unet3d_basic import UNet3d
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 
@@ -35,7 +33,7 @@ def main(checkpoint_path: Path, input_folder: Path, output_folder: Path, batch_s
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     output_folder.mkdir(parents=True, exist_ok=True)
     logger = setup_logging(output_folder)
-    logger.info(f"Starting inference...")
+    logger.info("Starting inference...")
     logger.info(f"  - Checkpoint: {checkpoint_path}")
     logger.info(f"  - Input folder: {input_folder}")
     logger.info(f"  - Output folder: {output_folder}")

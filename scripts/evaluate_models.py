@@ -1,24 +1,14 @@
 from dataclasses import dataclass
 import json
-import mlflow.artifacts
-import mlflow.client
-import mlflow.pytorch
-import mlflow.pytorch
-from monai.transforms.croppad import batch
 import torch
 import numpy as np
 import tifffile
 from pathlib import Path
-import os
 import argparse
-import matplotlib.pyplot as plt
-import mlflow
-import tempfile
-import csv
 
 from typing import Tuple
 import torch.nn as nn
-from torch.utils.data import Dataset, TensorDataset
+from torch.utils.data import Dataset
 
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
@@ -26,10 +16,7 @@ from tntseg.nn.models.anisounet3d_csnet import AnisotropicUNet3DCSAM
 from tntseg.nn.models.unet3d_basic import UNet3d
 from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
 
-from config import ModelType, BaseConfig, AnisotropicUNetConfig, AnisotropicUNetSEConfig
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
-from training_utils import create_neural_network
-from config import BaseConfig, ModelType
 
 from torch.utils.data import DataLoader
 
@@ -176,7 +163,7 @@ def evaluate_predictions(predictions: np.ndarray, ground_truth: np.ndarray, thre
 
 def main(model: nn.Module, database_path: str, output_dir: str | Path, store_predictions: bool, tile_overlap: int, visualise_tiling_lines: bool = False) -> None:
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
-        raise ValueError(f"Invalid output_dir. Expected string or Path type")
+        raise ValueError("Invalid output_dir. Expected string or Path type")
     if isinstance(output_dir, str):
         output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -483,7 +470,7 @@ if __name__ == "__main__":
         print(f"Error loading config values: {e}")
         exit(1)
 
-    print(f"Using configuration:")
+    print("Using configuration:")
     print(f"  Dataset mean: {config.dataset_mean:.6f}")
     print(f"  Dataset std: {config.dataset_std:.6f}")
     print(f"  Device: {config.device}")

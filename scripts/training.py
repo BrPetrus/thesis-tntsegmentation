@@ -1,26 +1,19 @@
-import pandas as pd
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import argparse
 import logging
 import random
 from pathlib import Path
 from sklearn.model_selection import train_test_split
-from dataclasses import dataclass
-import albumentations as A
 import tifffile
 import mlflow
 from sklearn import metrics as skmetrics
-import sklearn.metrics as skmetrics
 import tntseg.utilities.metrics.metrics as tntmetrics
 from typing import List, Tuple
-from torch.types import Tensor
-from ast import literal_eval
 import monai.transforms as MT
 from monai.utils import set_determinism
 import json
@@ -32,7 +25,6 @@ from scripts.training_utils import (
     visualize_transform_effects
 )
 from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, ModelType
-from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
 
 def set_all_seeds(seed: int):
     """Set seeds for all random number generators"""
@@ -235,7 +227,7 @@ def _calculate_metrics(nn: torch.nn.Module, dataloader: DataLoader, criterion: t
         FP = 0
         FN = 0
         TN = 0
-        for batch_idx, batch in enumerate(tqdm(dataloader, desc=f"Validation")):
+        for batch_idx, batch in enumerate(tqdm(dataloader, desc="Validation")):
             inputs, masks = batch
             inputs, masks = inputs.to(config.device), masks.to(config.device)
 
@@ -520,7 +512,7 @@ def main(input_folder: Path, output_folder: Path, logger: logging.Logger, config
             nn.eval()
 
             # Also save the model
-            checkpoint_path = output_folder / f"model_final.pth"
+            checkpoint_path = output_folder / "model_final.pth"
             torch.save(nn.state_dict(), checkpoint_path)
             logger.info(f"Model checkpoint saved at {checkpoint_path}")
 

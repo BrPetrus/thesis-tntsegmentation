@@ -1,11 +1,9 @@
 import numpy as np
 import torch
-from typing import List, Tuple, Union, Optional, TypeVar
-from dataclasses import dataclass
+from typing import List, Tuple, TypeVar
 from enum import StrEnum, auto
 
 from numpy.typing import NDArray
-from torch.types import Tensor
 
 T = TypeVar('T', bound=np.generic)
 
