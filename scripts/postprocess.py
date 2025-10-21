@@ -33,15 +33,6 @@ def post_process_output(predictions: NDArray[np.bool], config: PostprocessConfig
     if predictions.ndim != 3:
         raise ValueError("Expected 3D data")
 
-    # # Construct the SE
-    # se = skmorph.disk(config.se_size)
-    
-    # # Clean up small stuff
-    # skmorph.binary_opening(predictions)    
-
-    ## Cleanup small parts
-    #removed_small = skmorph.remove_small_objects(predictions, config.minimum_size_px)
-
     # Find connected components
     labelled = skmorph.label(predictions, background=0)
     regions = skmeas.regionprops(labelled)
@@ -57,55 +48,63 @@ def post_process_output(predictions: NDArray[np.bool], config: PostprocessConfig
     
     return big_regions, labeled_regions
 
-    # # Visualise
-    # fig, ax = plt.subplots()
-    # result_vis = np.zeros_like(labelled, dtype=np.uint8)
-    # all_regions = np.zeros_like(labelled, dtype=np.uint8)
-    # # ax.imshow(np.max(predictions, axis=0)*255, 'gray')
-    # result_vis[predictions == True] = 255
-    # for region in big_regions:
-    #     # ax.imshow(np.max(region['label'] == labelled, axis=0), alpha=0.5, cmap='gray')
-    #     result_vis[region['label'] == labelled] = 128
-
-    #     all_regions[region['label'] == labelled] =         
-    # ax.imshow(np.max(result_vis, axis=0))
-    # fig.savefig(str(output_folder / 'post_process.tif'))
-    # plt.show()
-    # # tifffile.imwrite(output / '')
-
-
 @dataclass(frozen=True)
-class TunnelDetectionResult:
+class QualityMetrics:
     tp: int
     fp: int
     tn: int
     fn: int
-    f1: float
+    jaccard: float
+    dice: float
     recall: float
     prec: float
+    accuracy: float
+
+
+def create_quality_metrics(tp: int, fp: int, tn: int, fn: int) -> QualityMetrics:
+    if min([tp, fp, tn, fn]) < 0:
+        raise ValueError("Arguments must be nonnegative!")
+    return QualityMetrics(
+        tp=tp,
+        fp=fp,
+        tn=tn,
+        fn=fn,
+        recall=tntmetrics.recall(tp, fn),
+        jaccard=tntmetrics.jaccard_index(tp, fp, fn),
+        dice=tntmetrics.dice_coefficient(tp, fp, fn),
+        prec=tntmetrics.precision(tp, fp),
+        accuracy=tntmetrics.accuracy(tp, fp, fn, tn),
+    ) 
+
+
+@dataclass(frozen=True)
+class TunnelDetectionResult:
+    metrics_overall: QualityMetrics
+    metrics_one_on_one: QualityMetrics
+    metrics_all_matches: QualityMetrics
+
 
 def detect_tunnels(prediction: NDArray[np.float32], gt_labeled: NDArray[np.uint8], image: NDArray, config: PostprocessConfig, output_folder: Path) -> TunnelDetectionResult:
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    image = _preproces_raw_image(image) 
+    image = percentile_stretch(image) 
     binary_prediction = prediction > config.prediction_threshold
-    regions_prop, labeled_prediction = post_process_output(binary_prediction, config)
+    _, labeled_prediction = post_process_output(binary_prediction, config)
     tifffile.imwrite(output_folder / 'processed_prediction.tif', labeled_prediction)
     tifffile.imwrite(output_folder / 'processed_prediction_binary.tif', labeled_prediction != 0)
     binary_filtered_pred = labeled_prediction != 0
     binary_gt = gt_labeled != 0
 
     # Calculate basic metrics
-    TP = np.sum((binary_filtered_pred == True) & (binary_gt == True))
-    TN = np.sum((binary_filtered_pred == False) & (binary_gt == False))
-    FP = np.sum((binary_filtered_pred == True) & (binary_gt == False))
-    FN = np.sum((binary_filtered_pred == False) & (binary_gt == True))
-    prec = tntmetrics.precision(TP, FP)
-    recall = tntmetrics.recall(TP, FN)
-    f1 = tntmetrics.dice_coefficient(TP, FP, FN)
-    jacc = tntmetrics.jaccard_index(TP, FP, FN)
+    metrics_overall = create_quality_metrics(
+        tp = np.sum((binary_filtered_pred == True) & (binary_gt == True)),
+        tn = np.sum((binary_filtered_pred == False) & (binary_gt == False)),
+        fp = np.sum((binary_filtered_pred == True) & (binary_gt == False)),
+        fn = np.sum((binary_filtered_pred == False) & (binary_gt == True)),
+    )
 
-    print(f"prec={prec}, recall={recall}, f1={f1}, jaccard={jacc}")
+    print(f"Overall metrics:")
+    print(f"prec={metrics_overall.prec}, recall={metrics_overall.recall}, jaccard={metrics_overall.jaccard}, dice={metrics_overall.dice}")
 
     # Tunnel matching logic
     mapping = map_tunnels_gt_to_pred(gt_labeled, labeled_prediction, config.recall_threshold)
@@ -418,8 +417,8 @@ def filter_clean_mappings(mapping: Dict[int, Tuple[int, float]],
     return clean_mapping
 
 def calculate_matched_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], 
-                            mapping: Dict[int, Tuple[int, float]]) -> Dict[str, float]:
-    """Calculate Dice and Jaccard scores only for matched tunnels"""
+                            mapping: Dict[int, Tuple[int, float]]) -> QualityMetrics:
+    """Calculate metrics just for tunnels given in the mapping"""
     
     # Create binary masks for only the matched regions
     matched_gt_mask = np.zeros_like(gt_labeled, dtype=bool)
@@ -431,74 +430,29 @@ def calculate_matched_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction:
         matched_pred_mask |= (labeled_prediction == pred_label)
     
     # Calculate confusion matrix for matched regions only
-    TP_matched = np.sum(matched_gt_mask & matched_pred_mask)
-    FP_matched = np.sum(matched_pred_mask & ~matched_gt_mask)
-    FN_matched = np.sum(matched_gt_mask & ~matched_pred_mask)
-    
-    # Calculate metrics
-    dice_matched = tntmetrics.dice_coefficient(TP_matched, FP_matched, FN_matched)
-    jaccard_matched = tntmetrics.jaccard_index(TP_matched, FP_matched, FN_matched)
-    precision_matched = tntmetrics.precision(TP_matched, FP_matched)
-    recall_matched = tntmetrics.recall(TP_matched, FN_matched)
-    
-    return {
-        'matched_dice': dice_matched,
-        'matched_jaccard': jaccard_matched,
-        'matched_precision': precision_matched,
-        'matched_recall': recall_matched,
-        'num_clean_matches': len(mapping),
-        'TP_matched': TP_matched,
-        'FP_matched': FP_matched,
-        'FN_matched': FN_matched
-    }
+    TP = np.sum(matched_gt_mask & matched_pred_mask)
+    FP = np.sum(matched_pred_mask & ~matched_gt_mask)
+    FN = np.sum(matched_gt_mask & ~matched_pred_mask)
+    TN = np.sum(~matched_gt_mask & ~matched_pred_mask)
 
-def calculate_individual_tunnel_metrics(gt_labeled: NDArray[np.uint8], labeled_prediction: NDArray[np.uint8], 
-                                       clean_mapping: Dict[int, Tuple[int, float]]) -> List[Dict]:
-    """Calculate metrics for each individual matched tunnel pair."""
-    
-    individual_metrics = []
-    
-    for gt_label, (pred_label, overlap_score) in clean_mapping.items():
-        # Get masks for this specific tunnel pair
-        gt_mask = (gt_labeled == gt_label)
-        pred_mask = (labeled_prediction == pred_label)
-        
-        # Calculate confusion matrix for this pair
-        TP = np.sum(gt_mask & pred_mask)
-        FP = np.sum(pred_mask & ~gt_mask)
-        FN = np.sum(gt_mask & ~pred_mask)
-        
-        # Calculate metrics
-        dice = tntmetrics.dice_coefficient(TP, FP, FN)
-        jaccard = tntmetrics.jaccard_index(TP, FP, FN)
-        precision = tntmetrics.precision(TP, FP)
-        recall = tntmetrics.recall(TP, FN)
-        
-        gt_size = np.sum(gt_mask)
-        pred_size = np.sum(pred_mask)
-        
-        individual_metrics.append({
-            'gt_label': gt_label,
-            'pred_label': pred_label,
-            'dice': dice,
-            'jaccard': jaccard,
-            'precision': precision,
-            'recall': recall,
-            'overlap_score': overlap_score,
-            'gt_size': gt_size,
-            'pred_size': pred_size,
-            'TP': TP,
-            'FP': FP,
-            'FN': FN
-        })
-    
-    return individual_metrics
+    return create_quality_metrics(
+        TP, FP, TN, FN
+    )
+   
 
-def find_unmatched_and_duplicates(gt_labeled, labeled_prediction, mapping, pred_to_gt_mapping):
-    duplicate_predictions = {}
+
+def find_unmatched_and_multi_mapped(gt_labeled, labeled_prediction, mapping, pred_to_gt_mapping):
+    """Find predictions that map to multiple GT tunnels and unmatched regions.
+    
+    Returns:
+        multi_mapped_predictions: Dict mapping prediction labels to list of (gt_label, overlap_score) tuples
+        unmatched_labels: List of GT labels that have no matching prediction
+        unmatched_predictions: List of prediction labels that don't match any GT
+    """
+    multi_mapped_predictions = {}
     for pred_label, gt_matches in pred_to_gt_mapping.items():
         if len(gt_matches) > 1:
-            duplicate_predictions[pred_label] = gt_matches
+            multi_mapped_predictions[pred_label] = gt_matches
     
     # Find unmatched labels
     unmatched_labels = []
@@ -516,7 +470,7 @@ def find_unmatched_and_duplicates(gt_labeled, labeled_prediction, mapping, pred_
             continue
         if seg_id not in matched_predictions:
             unmatched_predictions.append(seg_id)
-    return duplicate_predictions,unmatched_labels,unmatched_predictions
+    return multi_mapped_predictions, unmatched_labels, unmatched_predictions
 
 def invert_mapping(mapping):
     pred_to_gt_mapping = {}  # prediction_label -> list of (gt_label, overlap_score)
@@ -547,7 +501,7 @@ def map_tunnels_gt_to_pred(labeled_gt: NDArray[np.uint8], labeled_prediction: ND
                     mapping[label_id_gt] = (label_id_pred, recall)
     return mapping
 
-def _preproces_raw_image(image):
+def percentile_stretch(image, low_quantile = 0.03, high_quantile = 0.97):
     img_q3 = np.quantile(img, 0.03)
     img_q97 = np.quantile(img, 0.97)
     image = image.copy()
