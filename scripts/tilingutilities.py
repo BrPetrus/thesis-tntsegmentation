@@ -5,25 +5,28 @@ from enum import StrEnum, auto
 
 from numpy.typing import NDArray
 
-T = TypeVar('T', bound=np.generic)
+T = TypeVar("T", bound=np.generic)
+
 
 def _draw_diagonal_in_square(volume: NDArray, val=(0, 0, 0)):
     rows, cols, _ = volume.shape
     assert rows == cols, "Just squares are supported"
     for i in range(rows):
         volume[i, i] = val
-        volume[rows-i-1, i] = val
+        volume[rows - i - 1, i] = val
 
-def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
-                overlap: int = 0) -> Tuple[NDArray[T], List[Tuple[int, int, int]]]:
+
+def tile_volume(
+    volume: NDArray[T], tile_size: Tuple[int, int, int], overlap: int = 0
+) -> Tuple[NDArray[T], List[Tuple[int, int, int]]]:
     if volume.ndim != 3:
         raise ValueError("Expected 3D data")
     depth, rows, cols = volume.shape
-    
+
     d_size, r_size, c_size = tile_size
     tiles = []
     tiles_position = []
-    
+
     for d_start in range(0, depth, d_size):
         for r_start in range(0, rows, r_size - overlap):
             for c_start in range(0, cols, c_size - overlap):
@@ -35,8 +38,10 @@ def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
                 r_end_allowed = min(rows, r_end)
                 c_end_allowed = min(cols, c_end)
 
-                assert d_end == d_end_allowed, "Unsupported depth"  # NOTE: we are supporting just our data right now
-                
+                assert d_end == d_end_allowed, (
+                    "Unsupported depth"
+                )  # NOTE: we are supporting just our data right now
+
                 if r_end_allowed != r_end:
                     diff = r_end - r_end_allowed
 
@@ -52,23 +57,29 @@ def tile_volume(volume: NDArray[T], tile_size: Tuple[int, int, int],
 
                 tile = volume[d_start:d_end, r_start:r_end, c_start:c_end]
 
-                assert tile.shape == tile_size, f"{tile.shape} != {tile_size} for d,r,c = {d_start},{r_start},{c_start}"
+                assert tile.shape == tile_size, (
+                    f"{tile.shape} != {tile_size} for d,r,c = {d_start},{r_start},{c_start}"
+                )
 
                 tiles.append(tile)
                 tiles_position.append((d_start, r_start, c_start))
-    
+
     return tiles, tiles_position
+
 
 class AggregationMethod(StrEnum):
     Mean = auto()
     Max = auto()
     Min = auto()
 
-def stitch_volume(tiles: List[torch.Tensor],
-                  positions: List[Tuple[int, int, int]], 
-                  original_shape: Tuple[int, int, int], 
-                  aggregation_method: AggregationMethod = AggregationMethod.Mean,
-                  visualise_lines: bool = False) -> NDArray[T] | Tuple[NDArray[T], NDArray[np.uint8]]:
+
+def stitch_volume(
+    tiles: List[torch.Tensor],
+    positions: List[Tuple[int, int, int]],
+    original_shape: Tuple[int, int, int],
+    aggregation_method: AggregationMethod = AggregationMethod.Mean,
+    visualise_lines: bool = False,
+) -> NDArray[T] | Tuple[NDArray[T], NDArray[np.uint8]]:
     # Initialize output volume and count matrix for averaging
     depth, rows, cols = original_shape
     result = torch.zeros(original_shape, dtype=tiles[0].dtype)
@@ -101,14 +112,20 @@ def stitch_volume(tiles: List[torch.Tensor],
         assert d_ideal_end - d_end == tile_depth - tile.shape[0]
         assert r_ideal_end - r_end == tile_rows - tile.shape[1]
         assert c_ideal_end - c_end == tile_cols - tile.shape[2]
-        
+
         if aggregation_method == AggregationMethod.Mean:
-            assert tile.shape == result[d_start:d_end, r_start:r_end, c_start:c_end].shape, f"{tile.shape}; {result[d_start:d_end,r_start:r_end, c_start:c_end].shape}"
+            assert (
+                tile.shape == result[d_start:d_end, r_start:r_end, c_start:c_end].shape
+            ), (
+                f"{tile.shape}; {result[d_start:d_end, r_start:r_end, c_start:c_end].shape}"
+            )
             result[d_start:d_end, r_start:r_end, c_start:c_end] += tile
             counts[d_start:d_end, r_start:r_end, c_start:c_end] += 1
         elif aggregation_method == AggregationMethod.Max:
             current = result[d_start:d_end, r_start:r_end, c_start:c_end]
-            result[d_start:d_end, r_start:r_end, c_start:c_end] = np.maximum(current, tile)
+            result[d_start:d_end, r_start:r_end, c_start:c_end] = np.maximum(
+                current, tile
+            )
         else:  # Min
             current = result[d_start:d_end, r_start:r_end, c_start:c_end]
             mask = (current == 0) | (tile < current)
@@ -117,10 +134,12 @@ def stitch_volume(tiles: List[torch.Tensor],
         if visualise_lines:
             val = (255, 0, 0) if idx % 2 == 0 else (0, 0, 255)
             visualisation[r_start:r_end, c_start] = val  # left line
-            visualisation[r_end-1, c_start:c_end] = val  # bottom line
+            visualisation[r_end - 1, c_start:c_end] = val  # bottom line
             visualisation[r_start, c_start:c_end] = val  # top line
-            visualisation[r_start:r_end, c_end-1] = val  # right line
-            _draw_diagonal_in_square(visualisation[r_start:r_end, c_start:c_end], val=val)  # Diagonals
+            visualisation[r_start:r_end, c_end - 1] = val  # right line
+            _draw_diagonal_in_square(
+                visualisation[r_start:r_end, c_start:c_end], val=val
+            )  # Diagonals
 
     # Compute final result based on aggregation method
     if aggregation_method == AggregationMethod.Mean:

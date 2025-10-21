@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from typing import Tuple
 
+
 class ModelType(StrEnum):
     UNet3D = "unet3d"
     AnisotropicUNet = "anisotropicunet"
@@ -10,6 +11,7 @@ class ModelType(StrEnum):
     AnisotropicUNetCSAM = "anisotropicunet_csam"
     AnisotropicUNetUSENet = "anisotropicunet_usenet"
     Unknown = "unknown"
+
 
 @dataclass
 class BaseConfig:
@@ -23,7 +25,7 @@ class BaseConfig:
     seed: int = 42
     dataset_std: float = 0.07579
     dataset_mean: float = 0.05988
-    test_size: float = 1/3
+    test_size: float = 1 / 3
     notimprovement_tolerance: int = 50
     eval_tversky_alpha: float = 0.8
     eval_tversky_beta: float = 0.2
@@ -31,7 +33,9 @@ class BaseConfig:
     use_cross_entropy: bool = True
     cross_entropy_loss_weight: float = 0.5
     ce_use_weights: bool = True
-    ce_pos_weight: float  = ((3602171+67845) / 67845.) / 1. # Negative/positive ratio to penalize
+    ce_pos_weight: float = (
+        (3602171 + 67845) / 67845.0
+    ) / 1.0  # Negative/positive ratio to penalize
     use_dice_loss: bool = True
     dice_loss_weight: float = 0.5
     use_focal_tversky_loss: bool = False
@@ -43,17 +47,19 @@ class BaseConfig:
     model_type: ModelType = ModelType.Unknown
     crop_size: Tuple[int, int, int] = (7, 64, 64)
 
+
 @dataclass
 class AnisotropicUNetConfig(BaseConfig):
-    model_depth: int = 3 
+    model_depth: int = 3
     base_channels: int = 64
     channel_growth: int = 2
-    horizontal_kernel: Tuple[int, int, int] = (1, 3, 3) 
+    horizontal_kernel: Tuple[int, int, int] = (1, 3, 3)
     horizontal_padding: Tuple[int, int, int] = (0, 1, 1)
-    downscale_kernel : Tuple[int, int, int] = (1, 2, 2)
+    downscale_kernel: Tuple[int, int, int] = (1, 2, 2)
     downscale_stride: Tuple[int, int, int] = (1, 2, 2)
     upscale_kernel: Tuple[int, int, int] = (1, 2, 2)
     upscale_stride: Tuple[int, int, int] = (1, 2, 2)
+
 
 @dataclass
 class AnisotropicUNetSEConfig(AnisotropicUNetConfig):
