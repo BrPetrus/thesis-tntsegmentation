@@ -47,3 +47,10 @@ jupyter = [
 
 [tool.uv]
 extra-index-url = ["https://download.pytorch.org/whl/cu124"]
+
+[dependency-groups]
+dev = [
+    "autopep8>=2.3.2",
+    "flake8>=7.3.0",
+    "ruff>=0.14.1",
+]
