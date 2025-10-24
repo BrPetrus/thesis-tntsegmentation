@@ -13,8 +13,6 @@ import tntseg.utilities.metrics.metrics as tntmetrics
 @dataclass(frozen=True)
 class PostprocessConfig:
     minimum_size_px: int
-    se_type: Any
-    se_size: int
     recall_threshold: float
     prediction_threshold: float
 
@@ -607,9 +605,6 @@ if __name__ == "__main__":
     parser.add_argument("output", type=Path)
     parser.add_argument(
         "--min-size", type=int, default=100, help="Minimum object size in pixels"
-    )
-    parser.add_argument(
-        "--se-size", type=int, default=3, help="Structuring element size"
     )
     parser.add_argument(
         "--recall_threshold", type=float, default=0.6
