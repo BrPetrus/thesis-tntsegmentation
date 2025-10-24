@@ -202,8 +202,8 @@ def map_tunnels_gt_to_pred(
 
 
 def percentile_stretch(image, low_quantile=0.03, high_quantile=0.97):
-    img_q3 = np.quantile(img, 0.03)
-    img_q97 = np.quantile(img, 0.97)
+    img_q3 = np.quantile(image, 0.03)
+    img_q97 = np.quantile(image, 0.97)
     image = image.copy()
     image[image <= img_q3] = img_q3
     image[image >= img_q97] = img_q97
