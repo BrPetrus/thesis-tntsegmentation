@@ -113,8 +113,8 @@ class TNTDataset(Dataset):
         return mask.astype(np.uint8) / 255.0
     
     def _process_instance_mask(self, mask):
-        if mask.dtype != np.uint8:
-            raise RuntimeError("Expected 8bit unsigne integer mask")
+        if mask.dtype != np.uint8 and mask.dtype !=np.uint16:
+            raise RuntimeError(f"Expected 8/16bit unsigned integer mask. Got {mask.dtype}")
         return mask
     
     def __len__(self) -> int:

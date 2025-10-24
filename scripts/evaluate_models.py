@@ -24,7 +24,7 @@ from tntseg.utilities.dataset.datasets import MaskType, TNTDataset, load_dataset
 import tntseg.utilities.metrics.metrics as tntmetrics
 
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
-from postprocess import PostprocessConfig, QualityMetrics, TunnelDetectionResult, TunnelMappingResult, create_quality_metrics
+from postprocess import PostprocessConfig, QualityMetrics, TunnelDetectionResult, TunnelMappingResult, create_quality_metrics, detect_tunnels
 
 @dataclass
 class EvaluationConfig:
