@@ -5,27 +5,26 @@ import numpy as np
 import tifffile
 from pathlib import Path
 import argparse
+import pandas as pd
+from typing import Tuple, Dict, List, Optional
+import sys
+import os
+import tqdm
 
-from typing import Tuple
-import torch.nn as nn
 from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+import monai.transforms as MT
 
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
 from tntseg.nn.models.anisounet3d_csnet import AnisotropicUNet3DCSAM
 from tntseg.nn.models.unet3d_basic import UNet3d
 from tntseg.nn.models.anisounet3d_usenet import AnisotropicUSENet
-
-from tilingutilities import AggregationMethod, stitch_volume, tile_volume
-
-from torch.utils.data import DataLoader
-
-from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
-import tqdm
-
-import monai.transforms as MT
+from tntseg.utilities.dataset.datasets import MaskType, TNTDataset, load_dataset_metadata
 import tntseg.utilities.metrics.metrics as tntmetrics
 
+from tilingutilities import AggregationMethod, stitch_volume, tile_volume
+from postprocess import PostprocessConfig, QualityMetrics, TunnelDetectionResult, TunnelMappingResult, create_quality_metrics
 
 @dataclass
 class EvaluationConfig:
@@ -39,7 +38,6 @@ class EvaluationConfig:
 
 # Create a config instance
 config = EvaluationConfig()
-
 
 class TiledDataset(Dataset):
     """Dataset that preserves tile positions with data."""
@@ -55,6 +53,7 @@ class TiledDataset(Dataset):
         return self.tiles_data[idx], self.tiles_positions[idx]
 
 
+# TODO: unify this with the training.py
 def create_model_from_args(
     model_type: str,
     model_depth: int,
@@ -67,7 +66,7 @@ def create_model_from_args(
     upscale_kernel,
     upscale_stride,
     reduction_factor: int = 16,
-) -> nn.Module:
+) -> torch.nn.Module:
     """Create a model based on command line arguments."""
 
     if model_type == "anisotropicunet":
@@ -178,13 +177,16 @@ def evaluate_predictions(
 
 
 def main(
-    model: nn.Module,
+    model: torch.nn.Module,
     database_path: str,
     output_dir: str | Path,
     store_predictions: bool,
     tile_overlap: int,
     visualise_tiling_lines: bool = False,
+    run_postprocessing: bool = False,
+    postprocess_config: Optional[PostprocessConfig] = None,
 ) -> None:
+    
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
         raise ValueError("Invalid output_dir. Expected string or Path type")
     if isinstance(output_dir, str):
@@ -195,11 +197,16 @@ def main(
     print(f"Found {len(dataset)} images.")
 
     all_metrics = []  # Store metrics for each volume
+    volume_results = []  # Store detailed volume results
+    postprocess_results = []  # Store postprocessing results
 
     # Split the data
     for i in range(len(dataset)):
         data, mask = dataset[i]
         print(f"\nProcessing volume {i + 1}/{len(dataset)}")
+        
+        # Get volume info for postprocessing
+        volume_info = dataset.dataframe.iloc[i]
 
         # Split the volume into tiles
         tiles_data, tiles_positions = tile_volume(
@@ -217,13 +224,8 @@ def main(
         for batch_data, batch_positions in tqdm.tqdm(
             tiles_dataloader, desc="Running inference..."
         ):
-            # Add fake colour channel
             batch_data = batch_data[:, torch.newaxis, ...]
-
-            # Move data to device
             batch_data_dev = batch_data.to(config.device)
-
-            # Run model
             predictions = model(batch_data_dev).detach().to("cpu")
 
             # Store predictions and their positions
@@ -246,6 +248,7 @@ def main(
             aggregation_method=AggregationMethod.Mean,
             visualise_lines=visualise_tiling_lines,
         )
+        
         if visualise_tiling_lines:
             reconstructed_volume, stitch_lines_vis = out
             tifffile.imwrite(
@@ -263,7 +266,7 @@ def main(
         if store_predictions:
             tifffile.imwrite(output_dir / f"prediction_{i}.tif", probabilities)
             tifffile.imwrite(output_dir / f"threshold_{i}.tif", thresholded)
-
+        
         # Evaluate
         print(f"Evaluating volume {i + 1}...")
         volume_metrics = evaluate_predictions(probabilities, mask[0].numpy())
@@ -279,21 +282,52 @@ def main(
         print(f"  Recall: {volume_metrics['recall']:.4f}")
         print(f"  Tversky: {volume_metrics['tversky']:.4f}")
 
+        # Run postprocessing if requested
+        if run_postprocessing and postprocess_config is not None:
+            print(f"\nRunning postprocessing for volume {i + 1}...")
+            
+            # Get original image for visualization
+            original_image = data[0].numpy()
+            
+            # Get instance mask (ground truth)
+            gt_instance_mask = mask[0].numpy().astype(np.uint8)
+            
+            # Create volume-specific output directory
+            volume_output_dir = output_dir / f"postprocess_volume_{i}"
+            
+            try:
+                # Run tunnel detection
+                tunnel_result = detect_tunnels(
+                    probabilities,
+                    gt_instance_mask, 
+                    original_image,
+                    postprocess_config,
+                    output_folder=volume_output_dir,
+                    visualise=True
+                )
+                
+                # Print detailed results for this volume
+                print(f"\nPostprocessing Results for Volume {i + 1}:")
+                print_detailed_results(tunnel_result)
+                
+                # Store results
+                postprocess_results.append({
+                    'volume_id': i,
+                    'tunnel_result': tunnel_result
+                })
+                
+            except Exception as e:
+                print(f"Error in postprocessing volume {i + 1}: {e}")
+                continue
+
     # Calculate and display aggregate metrics
     print("\n" + "=" * 50)
     print("AGGREGATE METRICS ACROSS ALL VOLUMES")
     print("=" * 50)
 
-    # Calculate mean metrics
     mean_metrics = {}
     metric_names = [
-        "dice",
-        "jaccard",
-        "accuracy",
-        "precision",
-        "recall",
-        "tversky",
-        "focal_tversky",
+        "dice", "jaccard", "accuracy", "precision", "recall", "tversky", "focal_tversky",
     ]
 
     for metric in metric_names:
@@ -322,6 +356,7 @@ def main(
             f"{mean_metrics['mean_tversky']};{mean_metrics['std_tversky']};"
             f"{mean_metrics['mean_focal_tversky']};{mean_metrics['std_focal_tversky']};\n"
         )
+    
     # Print results
     print(
         f"Mean Dice: {mean_metrics['mean_dice']:.4f} ± {mean_metrics['std_dice']:.4f}"
@@ -341,6 +376,21 @@ def main(
     print(
         f"Mean Tversky: {mean_metrics['mean_tversky']:.4f} ± {mean_metrics['std_tversky']:.4f}"
     )
+
+    # Print aggregate postprocessing results if available
+    if postprocess_results:
+        print("\n" + "=" * 50)
+        print("AGGREGATE POSTPROCESSING METRICS")
+        print("=" * 50)
+        
+        # Calculate mean postprocessing metrics
+        tunnel_metrics = [r['tunnel_result'].metrics_on_tunnels for r in postprocess_results]
+        overall_metrics = [r['tunnel_result'].metrics_overall for r in postprocess_results]
+        
+        print(f"Tunnel Detection - Mean Precision: {np.mean([m.prec for m in tunnel_metrics]):.4f}")
+        print(f"Tunnel Detection - Mean Recall: {np.mean([m.recall for m in tunnel_metrics]):.4f}")
+        print(f"Overall Postprocessed - Mean Dice: {np.mean([m.dice for m in overall_metrics]):.4f}")
+        print(f"Overall Postprocessed - Mean Jaccard: {np.mean([m.jaccard for m in overall_metrics]):.4f}")
 
 
 def load_training_config(model_path: str) -> dict:
@@ -370,7 +420,7 @@ def create_dataset(database_path: str | Path) -> Dataset:
 
     # Load the dataset
     df = load_dataset_metadata(
-        database_path / "IMG", database_path / "GT_MERGED_LABELS"
+        database_path / "IMG", database_path / "GT"
     )
 
     # Create the transforms
@@ -387,7 +437,7 @@ def create_dataset(database_path: str | Path) -> Dataset:
     )
 
     # Create the dataset
-    dataset = TNTDataset(df, load_masks=True, transforms=transforms)
+    dataset = TNTDataset(df, load_masks=True, transforms=transforms, mask_type=MaskType.instance)
     return dataset
 
 
@@ -403,7 +453,7 @@ def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
 
 
 # TODO: reuse code from training utils
-def create_model_from_config(config: dict) -> nn.Module:
+def create_model_from_config(config: dict) -> torch.nn.Module:
     """Create a model based on loaded configuration."""
     try:
         model_type = config["model_type"]
@@ -476,7 +526,6 @@ def create_model_from_config(config: dict) -> nn.Module:
         return None
 
 
-# Update the main execution section
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate deep learning models")
 
@@ -543,6 +592,26 @@ if __name__ == "__main__":
         "--override_dataset_std", type=float, help="Override dataset std from config"
     )
 
+    # Add new arguments for postprocessing
+    parser.add_argument(
+        "--run_postprocessing",
+        action="store_true",
+        default=False,
+        help="Run tunnel-level postprocessing analysis"
+    )
+    parser.add_argument(
+        "--prediction_threshold",
+        type=float,
+        default=0.5,
+        help="Threshold for binarizing predictions in postprocessing"
+    )
+    parser.add_argument(
+        "--recall_threshold",
+        type=float,
+        default=0.5,
+        help="Recall threshold for tunnel matching"
+    )
+    
     args = parser.parse_args()
 
     # Load training configuration
@@ -607,13 +676,23 @@ if __name__ == "__main__":
         print(f"Error loading model weights: {e}")
         exit(1)
 
+    # Create postprocess config if needed
+    postprocess_config = None
+    if args.run_postprocessing:
+        postprocess_config = PostprocessConfig(
+            prediction_threshold=args.prediction_threshold,
+            recall_threshold=args.recall_threshold
+        )
+
     # Run evaluation
     with torch.no_grad():
-        main(
+        result = main(
             model,
             args.database,
             args.output_dir,
             args.save_predictions,
             args.tile_overlap,
             args.visualise_tiling,
+            run_postprocessing=args.run_postprocessing,
+            postprocess_config=postprocess_config
         )

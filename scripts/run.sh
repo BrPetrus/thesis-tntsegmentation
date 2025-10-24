@@ -37,6 +37,11 @@ TILE_OVERLAP=0
 MODEL_DIR=""  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
+# Postprocessing options
+RUN_POSTPROCESSING=false
+PREDICTION_THRESHOLD=0.5
+RECALL_THRESHOLD=0.5
+
 # Misc. options
 RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
 ENV_VAR="${OUTPUT_BASE}/env.txt"
@@ -56,12 +61,27 @@ while [[ $# -gt 0 ]]; do
             TILE_OVERLAP="$2"
             shift 2
             ;;
+        --run-postprocessing)
+            RUN_POSTPROCESSING=true
+            shift
+            ;;
+        --prediction-threshold)
+            PREDICTION_THRESHOLD="$2"
+            shift 2
+            ;;
+        --recall-threshold)
+            RECALL_THRESHOLD="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
             echo "  --mode [train|eval|both]     What to run (default: both)"
             echo "  --model-dir PATH             Directory containing trained models (required for eval mode)"
-            echo "  --overlap_px N               Tile overlap in pixels (default: 20)"
+            echo "  --overlap_px N               Tile overlap in pixels (default: 0)"
+            echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
+            echo "  --prediction-threshold F     Threshold for binarizing predictions (default: 0.5)"
+            echo "  --recall-threshold F         Recall threshold for tunnel matching (default: 0.5)"
             echo "  --help                       Show this help"
             echo ""
             echo "Examples:"
@@ -69,6 +89,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --mode eval --model-dir ./output/some-run       # Evaluate existing models"
             echo "  $0 --mode both                                     # Train then evaluate"
             echo "  $0 --mode eval --model-dir ./models --overlap_px 40 # Evaluate with custom overlap"
+            echo "  $0 --mode eval --model-dir ./models --run-postprocessing # Evaluate with postprocessing"
             exit 0
             ;;
         *)
@@ -94,6 +115,7 @@ fi
 # Initialize output directory and log mode
 mkdir -p "${OUTPUT_BASE}"
 echo "Running in mode: ${MODE}" | tee "${OUTPUT_BASE}/run_mode.log"
+echo "Postprocessing enabled: ${RUN_POSTPROCESSING}" | tee -a "${OUTPUT_BASE}/run_mode.log"
 
 # Training function
 run_training() {
@@ -184,15 +206,27 @@ run_evaluation() {
             echo "  Testing on ${TEST_QUAD} with overlap ${TILE_OVERLAP}px..."
             mkdir -p "${EVAL_OUTPUT}"
             
-            # Run evaluation script
-            python evaluate_models.py \
-                "${MODEL_PATH}" \
-                "${TEST_DATA}" \
-                "${EVAL_OUTPUT}" \
+            # Build evaluation command
+            EVAL_CMD="python evaluate_models.py \
+                \"${MODEL_PATH}\" \
+                \"${TEST_DATA}\" \
+                \"${EVAL_OUTPUT}\" \
                 --save_predictions \
                 --device cuda \
                 --batch_size ${BATCH} \
-                --tile_overlap ${TILE_OVERLAP} \
+                --tile_overlap ${TILE_OVERLAP}"
+            
+            # Add postprocessing arguments if enabled
+            if [ "${RUN_POSTPROCESSING}" = true ]; then
+                EVAL_CMD="${EVAL_CMD} \
+                    --run_postprocessing \
+                    --prediction_threshold ${PREDICTION_THRESHOLD} \
+                    --recall_threshold ${RECALL_THRESHOLD}"
+                echo "    Postprocessing enabled (pred_thresh=${PREDICTION_THRESHOLD}, recall_thresh=${RECALL_THRESHOLD})"
+            fi
+            
+            # Run evaluation script
+            eval ${EVAL_CMD}
             
             # Check for evaluation success
             if [ $? -ne 0 ]; then
@@ -267,6 +301,11 @@ echo "Timestamp: ${TIMESTAMP}"
 echo "Output directory: ${OUTPUT_BASE}"
 if [ "${MODE}" = "eval" ] || [ "${MODE}" = "both" ]; then
     echo "Tile overlap: ${TILE_OVERLAP}px"
+    echo "Postprocessing: ${RUN_POSTPROCESSING}"
+    if [ "${RUN_POSTPROCESSING}" = true ]; then
+        echo "  Prediction threshold: ${PREDICTION_THRESHOLD}"
+        echo "  Recall threshold: ${RECALL_THRESHOLD}"
+    fi
     echo "Results CSV: ${RESULTS_CSV}"
 fi
 echo "Environment saved to: ${ENV_VAR}"

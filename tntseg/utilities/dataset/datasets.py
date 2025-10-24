@@ -1,5 +1,6 @@
 from pathlib import Path
 import matplotlib
+from enum import StrEnum, auto
 from torch.utils.data import Dataset
 from torchvision import datasets
 from torchvision.transforms import ToTensor
@@ -54,10 +55,13 @@ def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) ->
     df = pd.DataFrame(data)
     return df.sort_values('img_path').reset_index(drop=True)
 
+class MaskType(StrEnum):
+    binary = auto()
+    instance = auto()
 
 # TODO: add transformation pipeline option
 class TNTDataset(Dataset):
-    def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True, transforms: Optional[List] = None):
+    def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True, transforms: Optional[List] = None, mask_type: MaskType = MaskType.binary):
         """
         Dataset for TNT segmentation.
         
@@ -65,11 +69,12 @@ class TNTDataset(Dataset):
             dataframe: DataFrame with columns ['img_path'] and optionally ['mask_path']
             load_masks: Whether to load mask images
             transforms: Albumentations transforms to apply
+            mask_type: 'binary' for training, 'instance' for evaluation
         """
         self.dataframe = dataframe.copy()
         self.load_masks = load_masks
         self.transforms = transforms
-        self.tile_metadata = []
+        self.mask_type = mask_type
 
         if self.load_masks and 'mask_path' not in self.dataframe.columns:
             raise ValueError("load_masks=True requires 'mask_path' column in dataframe")
@@ -92,13 +97,13 @@ class TNTDataset(Dataset):
                 if img.shape != mask.shape:
                     raise RuntimeError(f"Size mismatch {img.shape} != {mask.shape}: {row['img_path']} and {row['mask_path']}")
 
-                # Convert to float32 (handle uint8 masks)
-                if mask.dtype == np.uint8 and not set(np.unique(mask)).issubset(set([0,255])):
-                    raise RuntimeError(f"Expected just 0 and 255 in file at {row['mask_path']}, got {np.unique(mask)}")
-                elif mask.dtype == np.uint8:
-                    mask = mask.astype(np.float32) / 255.0
-
-                mask = mask.astype(np.float32)
+                # Process based on type
+                if self.mask_type == MaskType.binary:
+                    mask = self._process_binary_mask(mask)
+                elif self.mask_type == MaskType.instance:
+                    mask = self._process_instance_mask(mask)
+                else:
+                    assert False  # NOTE: this should never happen
                 self.mask_data.append(mask)
     
     def __len__(self) -> int:
