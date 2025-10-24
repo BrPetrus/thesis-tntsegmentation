@@ -156,6 +156,7 @@ def evaluate_predictions(
         binary_predictions, binary_ground_truth, negative_val=0, positive_val=255
     )
 
+    # TODO: automate
     # Calculate all metrics
     metrics = {
         "TP": int(TP),

@@ -222,8 +222,8 @@ run_evaluation() {
                 EVAL_CMD="${EVAL_CMD} \
                     --run_postprocessing \
                     --prediction_threshold ${PREDICTION_THRESHOLD} \
-                    --recall_threshold ${RECALL_THRESHOLD}" \
-                    --minimum_size ${MINIMUM_SIZE}
+                    --recall_threshold ${RECALL_THRESHOLD} \
+                    --minimum_size ${MINIMUM_SIZE}"
                 echo "    Postprocessing enabled (pred_thresh=${PREDICTION_THRESHOLD}, recall_thresh=${RECALL_THRESHOLD})"
             fi
             
