@@ -106,6 +106,17 @@ class TNTDataset(Dataset):
                     assert False  # NOTE: this should never happen
                 self.mask_data.append(mask)
     
+    def _process_binary_mask(self, mask):
+        # Convert to float32 (handle uint8 masks)
+        if mask.dtype != np.uint8 or not set(np.unique(mask)).issubset(set([0,255])):
+            raise RuntimeError(f"Expected just 0 and 255 values in 8bit unsigned integer")
+        return mask.astype(np.uint8) / 255.0
+    
+    def _process_instance_mask(self, mask):
+        if mask.dtype != np.uint8:
+            raise RuntimeError("Expected 8bit unsigne integer mask")
+        return mask
+    
     def __len__(self) -> int:
         return len(self.data)
     
