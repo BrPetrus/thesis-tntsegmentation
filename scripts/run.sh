@@ -38,7 +38,7 @@ MODEL_DIR=""  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
 # Postprocessing options
-RUN_POSTPROCESSING=false
+RUN_POSTPROCESSING=true
 PREDICTION_THRESHOLD=0.5
 RECALL_THRESHOLD=0.5
 
