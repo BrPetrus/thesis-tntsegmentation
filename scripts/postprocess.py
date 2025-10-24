@@ -623,8 +623,6 @@ if __name__ == "__main__":
     # Create config
     config = PostprocessConfig(
         minimum_size_px=args.min_size,
-        se_type="disk",
-        se_size=args.se_size,
         recall_threshold=args.recall_threshold,
         prediction_threshold=args.prediction_threshold,
     )
