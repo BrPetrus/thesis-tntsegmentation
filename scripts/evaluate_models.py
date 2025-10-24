@@ -24,7 +24,7 @@ from tntseg.utilities.dataset.datasets import MaskType, TNTDataset, load_dataset
 import tntseg.utilities.metrics.metrics as tntmetrics
 
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
-from postprocess import PostprocessConfig, QualityMetrics, TunnelDetectionResult, TunnelMappingResult, create_quality_metrics, detect_tunnels
+from postprocess import PostprocessConfig, QualityMetrics, TunnelDetectionResult, TunnelMappingResult, create_quality_metrics, detect_tunnels, print_detailed_results
 
 @dataclass
 class EvaluationConfig:
@@ -309,7 +309,7 @@ def main(
                 
                 # Print detailed results for this volume
                 print(f"\nPostprocessing Results for Volume {i + 1}:")
-                # print_detailed_results(tunnel_result)  # TODO fix
+                print_detailed_results(tunnel_result)  # TODO fix
                 
                 # Store results
                 postprocess_results.append({
