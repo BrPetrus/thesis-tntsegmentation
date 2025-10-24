@@ -41,6 +41,7 @@ EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 RUN_POSTPROCESSING=true
 PREDICTION_THRESHOLD=0.5
 RECALL_THRESHOLD=0.5
+MINIMUM_SIZE=100
 
 # Misc. options
 RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
@@ -221,7 +222,8 @@ run_evaluation() {
                 EVAL_CMD="${EVAL_CMD} \
                     --run_postprocessing \
                     --prediction_threshold ${PREDICTION_THRESHOLD} \
-                    --recall_threshold ${RECALL_THRESHOLD}"
+                    --recall_threshold ${RECALL_THRESHOLD}" \
+                    --minimum_size ${MINIMUM_SIZE}
                 echo "    Postprocessing enabled (pred_thresh=${PREDICTION_THRESHOLD}, recall_thresh=${RECALL_THRESHOLD})"
             fi
             

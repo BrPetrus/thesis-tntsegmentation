@@ -611,6 +611,12 @@ if __name__ == "__main__":
         default=0.5,
         help="Recall threshold for tunnel matching"
     )
+    parser.add_argument(
+        "--minimum_size",
+        type=int,
+        default=100,
+        help="Minimum size of a connected component to be considered a real prediction"
+    )
     
     args = parser.parse_args()
 
@@ -681,7 +687,8 @@ if __name__ == "__main__":
     if args.run_postprocessing:
         postprocess_config = PostprocessConfig(
             prediction_threshold=args.prediction_threshold,
-            recall_threshold=args.recall_threshold
+            recall_threshold=args.recall_threshold,
+            minimum_size_px=args.minimum_size,
         )
 
     # Run evaluation
