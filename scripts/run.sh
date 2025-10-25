@@ -183,7 +183,7 @@ run_evaluation() {
     
     # Initialize CSV if it doesn't exist
     if [ ! -f "${RESULTS_CSV}" ]; then
-        echo "Model,Train Quad,Test Quad,Tile_Overlap,Jaccard,Dice,Accuracy,Precision,Recall,Tversky,Focal Tversky" > "${RESULTS_CSV}"
+        echo "Run Name,Run ID,Model Signature,Train Quad,Test Quad,Tile_Overlap,Eval_Jaccard,Eval_Dice,Eval_Accuracy,Eval_Precision,Eval_Recall,Eval_Tversky,Eval_Focal_Tversky,Train_Dice,Train_Jaccard,Postprocess_Overall_Dice,Tunnel_Precision,Tunnel_Recall" > "${RESULTS_CSV}"
     fi
     
     for i in "${!QUADS[@]}"; do
@@ -245,9 +245,10 @@ run_evaluation() {
                     LINE=$(tail -n 1 "${METRICS_CSV}")
                 fi
 
-                # Parse semicolon-separated fields:
-                IFS=';' read -r DBPATH DICE_MEAN DICE_STD JACCARD_MEAN JACCARD_STD ACCURACY_MEAN ACCURACY_STD PRECISION_MEAN PRECISION_STD RECALL_MEAN RECALL_STD TVERSKY_MEAN TVERSKY_STD FOCAL_TVERSKY_MEAN FOCAL_TVERSKY_STD <<< "${LINE}"
-                echo "${MODEL},${TRAIN_QUAD},${TEST_QUAD},${TILE_OVERLAP},${JACCARD_MEAN},${DICE_MEAN},${ACCURACY_MEAN},${PRECISION_MEAN},${RECALL_MEAN},${TVERSKY_MEAN},${FOCAL_TVERSKY_MEAN}" >> "${RESULTS_CSV}"
+                # Parse semicolon-separated fields (updated for new format):
+                IFS=';' read -r DBPATH RUN_NAME RUN_ID MODEL_SIGNATURE TRAIN_DICE TRAIN_JACCARD EVAL_DICE_MEAN EVAL_DICE_STD EVAL_JACCARD_MEAN EVAL_JACCARD_STD EVAL_ACCURACY_MEAN EVAL_ACCURACY_STD EVAL_PRECISION_MEAN EVAL_PRECISION_STD EVAL_RECALL_MEAN EVAL_RECALL_STD EVAL_TVERSKY_MEAN EVAL_TVERSKY_STD EVAL_FOCAL_TVERSKY_MEAN EVAL_FOCAL_TVERSKY_STD POSTPROCESS_OVERALL_DICE POSTPROCESS_OVERALL_JACCARD POSTPROCESS_OVERALL_PRECISION POSTPROCESS_OVERALL_RECALL POSTPROCESS_MATCHED_DICE POSTPROCESS_MATCHED_JACCARD POSTPROCESS_MATCHED_PRECISION POSTPROCESS_MATCHED_RECALL TUNNEL_TP TUNNEL_FP TUNNEL_FN TUNNEL_PRECISION TUNNEL_RECALL TUNNEL_F1 <<< "${LINE}"
+                
+                echo "${MODEL_NAME},${TRAIN_QUAD},${TEST_QUAD},${TILE_OVERLAP},${EVAL_JACCARD_MEAN},${EVAL_DICE_MEAN},${EVAL_ACCURACY_MEAN},${EVAL_PRECISION_MEAN},${EVAL_RECALL_MEAN},${EVAL_TVERSKY_MEAN},${EVAL_FOCAL_TVERSKY_MEAN},${TRAIN_DICE},${TRAIN_JACCARD},${POSTPROCESS_OVERALL_DICE},${TUNNEL_PRECISION},${TUNNEL_RECALL}" >> "${RESULTS_CSV}"
             else
                 echo "No metrics CSV found at ${METRICS_CSV}. Skipping results for this evaluation."
             fi

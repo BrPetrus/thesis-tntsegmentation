@@ -186,6 +186,7 @@ def main(
     visualise_tiling_lines: bool = False,
     run_postprocessing: bool = False,
     postprocess_config: Optional[PostprocessConfig] = None,
+    training_config: Dict[str, str] = dict()
 ) -> None:
     
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
@@ -198,7 +199,7 @@ def main(
     print(f"Found {len(dataset)} images.")
 
     all_metrics = []  # Store metrics for each volume
-    volume_results = []  # Store detailed volume results
+    # volume_results = []  # Store detailed volume results
     postprocess_results = []  # Store postprocessing results
 
     # Split the data
@@ -206,8 +207,8 @@ def main(
         data, mask = dataset[i]
         print(f"\nProcessing volume {i + 1}/{len(dataset)}")
         
-        # Get volume info for postprocessing
-        volume_info = dataset.dataframe.iloc[i]
+        # # Get volume info for postprocessing
+        # volume_info = dataset.dataframe.iloc[i]
 
         # Split the volume into tiles
         tiles_data, tiles_positions = tile_volume(
@@ -342,21 +343,85 @@ def main(
         write_header = True
     else:
         write_header = False
+
     with open(csv_file_path, "a") as csv_file:
         if write_header:
-            csv_file.write(
-                "database_path;dice_mean;dice_std;jaccard_mean;jaccard_std;accuracy_mean;accuracy_std;precision_mean;precision_std;recall_mean;recall_std;tversky_mean;tversky_std;focal_tversky_mean;focal_tversky_std\n"
+            # Extended header with model info and postprocessing metrics
+            header = (
+                "database_path;run_name;run_id;model_signature;train_dice;train_jaccard;"
+                "eval_dice_mean;eval_dice_std;eval_jaccard_mean;eval_jaccard_std;"
+                "eval_accuracy_mean;eval_accuracy_std;eval_precision_mean;eval_precision_std;"
+                "eval_recall_mean;eval_recall_std;eval_tversky_mean;eval_tversky_std;"
+                "eval_focal_tversky_mean;eval_focal_tversky_std;"
+                "postprocess_overall_dice;postprocess_overall_jaccard;postprocess_overall_precision;postprocess_overall_recall;"
+                "postprocess_matched_dice;postprocess_matched_jaccard;postprocess_matched_precision;postprocess_matched_recall;"
+                "tunnel_tp;tunnel_fp;tunnel_fn;tunnel_precision;tunnel_recall;tunnel_f1\n"
             )
+            csv_file.write(header)
+        
+
+        # Get model info from training config
+        # model_name = training_config.get("model_name", "unknwogn")
+        run_name = training_config.get("mlflow_run_name")
+        run_id = training_config.get("mlflow_run_id")
+        model_signature = training_config.get("model_signature")
+        train_dice = training_config.get("best_dice", "N/A")
+        train_jaccard = training_config.get("best_jaccard", "N/A")
+        
+        # Calculate aggregate postprocessing metrics
+        postprocess_overall_dice = "N/A"
+        postprocess_overall_jaccard = "N/A"
+        postprocess_overall_precision = "N/A"
+        postprocess_overall_recall = "N/A"
+        postprocess_matched_dice = "N/A"
+        postprocess_matched_jaccard = "N/A"
+        postprocess_matched_precision = "N/A"
+        postprocess_matched_recall = "N/A"
+        tunnel_tp = "N/A"
+        tunnel_fp = "N/A"
+        tunnel_fn = "N/A"
+        tunnel_precision = "N/A"
+        tunnel_recall = "N/A"
+        tunnel_f1 = "N/A"
+        
+        if postprocess_results:
+            # Calculate mean postprocessing metrics
+            overall_metrics = [r['tunnel_result'].metrics_overall for r in postprocess_results]
+            matched_metrics = [r['tunnel_result'].metrics_on_matched_tunnels for r in postprocess_results]
+            tunnel_metrics = [r['tunnel_result'].metrics_on_tunnels for r in postprocess_results]
+            
+            postprocess_overall_dice = np.mean([m.dice for m in overall_metrics])
+            postprocess_overall_jaccard = np.mean([m.jaccard for m in overall_metrics])
+            postprocess_overall_precision = np.mean([m.prec for m in overall_metrics])
+            postprocess_overall_recall = np.mean([m.recall for m in overall_metrics])
+            
+            postprocess_matched_dice = np.mean([m.dice for m in matched_metrics])
+            postprocess_matched_jaccard = np.mean([m.jaccard for m in matched_metrics])
+            postprocess_matched_precision = np.mean([m.prec for m in matched_metrics])
+            postprocess_matched_recall = np.mean([m.recall for m in matched_metrics])
+            
+            tunnel_tp = np.sum([r['tunnel_result'].mapping_result.tp for r in postprocess_results])
+            tunnel_fp = np.sum([r['tunnel_result'].mapping_result.fp for r in postprocess_results])
+            tunnel_fn = np.sum([r['tunnel_result'].mapping_result.fn for r in postprocess_results])
+            tunnel_precision = np.mean([m.prec for m in tunnel_metrics])
+            tunnel_recall = np.mean([m.recall for m in tunnel_metrics])
+            tunnel_f1 = np.mean([m.f1 for m in tunnel_metrics])
+        
+        # Write the data row
         csv_file.write(
-            f"{database_path};"
+            f"{database_path};{run_name}'{run_id};{model_signature};{train_dice};{train_jaccard};"
             f"{mean_metrics['mean_dice']};{mean_metrics['std_dice']};"
             f"{mean_metrics['mean_jaccard']};{mean_metrics['std_jaccard']};"
             f"{mean_metrics['mean_accuracy']};{mean_metrics['std_accuracy']};"
             f"{mean_metrics['mean_precision']};{mean_metrics['std_precision']};"
             f"{mean_metrics['mean_recall']};{mean_metrics['std_recall']};"
             f"{mean_metrics['mean_tversky']};{mean_metrics['std_tversky']};"
-            f"{mean_metrics['mean_focal_tversky']};{mean_metrics['std_focal_tversky']};\n"
+            f"{mean_metrics['mean_focal_tversky']};{mean_metrics['std_focal_tversky']};"
+            f"{postprocess_overall_dice};{postprocess_overall_jaccard};{postprocess_overall_precision};{postprocess_overall_recall};"
+            f"{postprocess_matched_dice};{postprocess_matched_jaccard};{postprocess_matched_precision};{postprocess_matched_recall};"
+            f"{tunnel_tp};{tunnel_fp};{tunnel_fn};{tunnel_precision};{tunnel_recall};{tunnel_f1};\n"
         )
+
     
     # Print results
     print(
@@ -517,7 +582,7 @@ def create_model_from_config(config: dict) -> torch.nn.Module:
                 downscale_stride=tuple(config["downscale_stride"]),
                 squeeze_factor=config["reduction_factor"],
             )
-        elif model_type == "unet3d":
+        elif model_type == "unet3d":  # TODO: is this still the right name?
             return UNet3d(n_channels_in=1, n_classes_out=1)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
@@ -702,5 +767,6 @@ if __name__ == "__main__":
             args.tile_overlap,
             args.visualise_tiling,
             run_postprocessing=args.run_postprocessing,
-            postprocess_config=postprocess_config
+            postprocess_config=postprocess_config,
+            training_config=training_config
         )

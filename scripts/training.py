@@ -13,7 +13,7 @@ import tifffile
 import mlflow
 from sklearn import metrics as skmetrics
 import tntseg.utilities.metrics.metrics as tntmetrics
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 import monai.transforms as MT
 from monai.utils import set_determinism
 import json
@@ -516,7 +516,7 @@ def _save_test_outputs(
 
 def _calculate_test_metrics(
     inputs: List, masks: List, predictions: List, config: BaseConfig, epoch: int
-) -> dict:
+) -> Dict:
     """Calculate and log test metrics."""
     # Flatten arrays for metric calculation
     flat_inputs = np.concatenate(inputs, axis=0).flatten()
@@ -590,7 +590,7 @@ def _test(
     output_folder: Path,
     logger: logging.Logger,
     epoch: int,
-) -> None:
+) -> Dict:
     """Run complete testing process."""
     logger.info("Starting test evaluation")
 
@@ -602,6 +602,7 @@ def _test(
     logger.info(
         f"Test set metrics: Dice={metrics['test/dice']:.4f}, Jaccard={metrics['test/jaccard']:.4f}"
     )
+    return metrics
 
 
 def main(
@@ -624,9 +625,9 @@ def main(
     logger.addHandler(fh)
 
     # Prepare mlflow
-    logger.info(f"Using MLFlow serve at {args.mlflow_address}:{args.mlflow_port}")
+    logger.info(f"Using MLFlow serve at {mlflow_address}:{mlflow_port}")
     logger.info("Trying to create mlflow tracking")
-    mlflow.set_tracking_uri(uri=f"http://{args.mlflow_address}:{args.mlflow_port}")
+    mlflow.set_tracking_uri(uri=f"http://{mlflow_address}:{mlflow_port}")
 
     # Prepare dataloaders
     train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(
@@ -662,7 +663,7 @@ def main(
         )
 
         # Run testing
-        _test(nn, test_dataloader, config, output_folder, logger, config.epochs - 1)
+        test_metrics = _test(nn, test_dataloader, config, output_folder, logger, config.epochs - 1)
 
         # After training, log the final model
         with torch.no_grad():
@@ -687,6 +688,9 @@ def main(
             config_dict = asdict(config)
             config_dict["mlflow_run_name"] = run.info.run_name
             config_dict["mlflow_run_id"] = run.info.run_id
+            config_dict["model_signature"] = nn.get_signature() 
+            config_dict["test_dice"] = test_metrics['test/dice']
+            config_dict["test_jaccard"] = test_metrics['test/jaccard']
             json.dump(config_dict, jsonfile, indent=2, default=str)
 
 
@@ -849,6 +853,7 @@ if __name__ == "__main__":
     model_type = model_type_map[args.model]
     logging.info(f"Got {model_type} model")
 
+    # TODO: code duplication
     # Create appropriate config based on model type
     if (
         model_type == ModelType.AnisotropicUNetSE
