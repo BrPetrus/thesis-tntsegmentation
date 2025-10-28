@@ -361,8 +361,8 @@ def main(
         run_name = training_config.get("mlflow_run_name")
         run_id = training_config.get("mlflow_run_id")
         model_signature = training_config.get("model_signature")
-        train_dice = training_config.get("best_dice", "N/A")
-        train_jaccard = training_config.get("best_jaccard", "N/A")
+        train_dice = training_config.get("train_dice", "N/A")
+        train_jaccard = training_config.get("train_jaccard", "N/A")
         
         # Calculate aggregate postprocessing metrics
         postprocess_overall_dice = "N/A"
@@ -423,7 +423,7 @@ def main(
         
         # Write the data row
         csv_file.write(
-            f"{database_path};{run_name}'{run_id};{model_signature};{train_dice};{train_jaccard};"
+            f"{database_path};{run_name};{run_id};{model_signature};{train_dice};{train_jaccard};"
             f"{mean_metrics['mean_dice']};{mean_metrics['std_dice']};"
             f"{mean_metrics['mean_jaccard']};{mean_metrics['std_jaccard']};"
             f"{mean_metrics['mean_accuracy']};{mean_metrics['std_accuracy']};"
