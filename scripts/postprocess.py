@@ -13,8 +13,6 @@ import tntseg.utilities.metrics.metrics as tntmetrics
 @dataclass(frozen=True)
 class PostprocessConfig:
     minimum_size_px: int
-    se_type: Any
-    se_size: int
     recall_threshold: float
     prediction_threshold: float
 
@@ -204,8 +202,8 @@ def map_tunnels_gt_to_pred(
 
 
 def percentile_stretch(image, low_quantile=0.03, high_quantile=0.97):
-    img_q3 = np.quantile(img, 0.03)
-    img_q97 = np.quantile(img, 0.97)
+    img_q3 = np.quantile(image, 0.03)
+    img_q97 = np.quantile(image, 0.97)
     image = image.copy()
     image[image <= img_q3] = img_q3
     image[image >= img_q97] = img_q97
@@ -609,9 +607,6 @@ if __name__ == "__main__":
         "--min-size", type=int, default=100, help="Minimum object size in pixels"
     )
     parser.add_argument(
-        "--se-size", type=int, default=3, help="Structuring element size"
-    )
-    parser.add_argument(
         "--recall_threshold", type=float, default=0.6
     )  # TODO: help missing
     parser.add_argument("--prediction_threshold", type=float, default=0.8)
@@ -628,8 +623,6 @@ if __name__ == "__main__":
     # Create config
     config = PostprocessConfig(
         minimum_size_px=args.min_size,
-        se_type="disk",
-        se_size=args.se_size,
         recall_threshold=args.recall_threshold,
         prediction_threshold=args.prediction_threshold,
     )

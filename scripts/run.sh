@@ -15,12 +15,12 @@ MODE="both"  # Options: train, eval, both
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
-EPOCHS=1000
+EPOCHS=5
 WORKERS=4
 BATCH=32
 MLFLOW_SERVER_PORT=8800
 LR=0.0001
-MODEL=anisotropicunet
+MODEL=basicunet
 SEED=42
 MODEL_DEPTH=5
 WEIGHT_DECAY=0.0001
@@ -36,6 +36,12 @@ QUADS=(quad1 quad2 quad3 quad4)
 TILE_OVERLAP=0
 MODEL_DIR=""  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
+
+# Postprocessing options
+RUN_POSTPROCESSING=true
+PREDICTION_THRESHOLD=0.5
+RECALL_THRESHOLD=0.5
+MINIMUM_SIZE=100
 
 # Misc. options
 RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
@@ -56,12 +62,32 @@ while [[ $# -gt 0 ]]; do
             TILE_OVERLAP="$2"
             shift 2
             ;;
+        --run-postprocessing)
+            RUN_POSTPROCESSING=true
+            shift
+            ;;
+        --prediction-threshold)
+            PREDICTION_THRESHOLD="$2"
+            shift 2
+            ;;
+        --recall-threshold)
+            RECALL_THRESHOLD="$2"
+            shift 2
+            ;;
+        --minimum-size)
+            MINIMUM_SIZE="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
             echo "  --mode [train|eval|both]     What to run (default: both)"
             echo "  --model-dir PATH             Directory containing trained models (required for eval mode)"
-            echo "  --overlap_px N               Tile overlap in pixels (default: 20)"
+            echo "  --overlap_px N               Tile overlap in pixels (default: 0)"
+            echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
+            echo "  --prediction-threshold F     Threshold for binarizing predictions (default: 0.5)"
+            echo "  --recall-threshold F         Recall threshold for tunnel matching (default: 0.5)"
+            echo "  --minimum-size N             Minimum size for connected components (default: 100)"
             echo "  --help                       Show this help"
             echo ""
             echo "Examples:"
@@ -69,6 +95,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --mode eval --model-dir ./output/some-run       # Evaluate existing models"
             echo "  $0 --mode both                                     # Train then evaluate"
             echo "  $0 --mode eval --model-dir ./models --overlap_px 40 # Evaluate with custom overlap"
+            echo "  $0 --mode eval --model-dir ./models --run-postprocessing # Evaluate with postprocessing"
             exit 0
             ;;
         *)
@@ -94,6 +121,7 @@ fi
 # Initialize output directory and log mode
 mkdir -p "${OUTPUT_BASE}"
 echo "Running in mode: ${MODE}" | tee "${OUTPUT_BASE}/run_mode.log"
+echo "Postprocessing enabled: ${RUN_POSTPROCESSING}" | tee -a "${OUTPUT_BASE}/run_mode.log"
 
 # Training function
 run_training() {
@@ -160,7 +188,7 @@ run_evaluation() {
     
     # Initialize CSV if it doesn't exist
     if [ ! -f "${RESULTS_CSV}" ]; then
-        echo "Model,Train Quad,Test Quad,Tile_Overlap,Jaccard,Dice,Accuracy,Precision,Recall,Tversky,Focal Tversky" > "${RESULTS_CSV}"
+        echo "Database_Path,Run_Name,Run_ID,Model_Signature,Train_Dice,Train_Jaccard,Eval_Dice_Mean,Eval_Dice_Std,Eval_Jaccard_Mean,Eval_Jaccard_Std,Eval_Accuracy_Mean,Eval_Accuracy_Std,Eval_Precision_Mean,Eval_Precision_Std,Eval_Recall_Mean,Eval_Recall_Std,Eval_Tversky_Mean,Eval_Tversky_Std,Eval_Focal_Tversky_Mean,Eval_Focal_Tversky_Std,Postprocess_Overall_Dice,Postprocess_Overall_Jaccard,Postprocess_Overall_Precision,Postprocess_Overall_Recall,Postprocess_Matched_Dice,Postprocess_Matched_Jaccard,Postprocess_Matched_Precision,Postprocess_Matched_Recall,Postprocess_Clean_Matched_Dice,Postprocess_Clean_Matched_Jaccard,Postprocess_Clean_Matched_Precision,Postprocess_Clean_Matched_Recall,Tunnel_TP,Tunnel_FP,Tunnel_FN,Tunnel_Precision,Tunnel_Recall,Tunnel_Dice,Tunnel_Jaccard,Unmatched_Predictions,Unmatched_Labels,Train_Quad,Test_Quad,Tile_Overlap" > "${RESULTS_CSV}"
     fi
     
     for i in "${!QUADS[@]}"; do
@@ -184,15 +212,28 @@ run_evaluation() {
             echo "  Testing on ${TEST_QUAD} with overlap ${TILE_OVERLAP}px..."
             mkdir -p "${EVAL_OUTPUT}"
             
-            # Run evaluation script
-            python evaluate_models.py \
-                "${MODEL_PATH}" \
-                "${TEST_DATA}" \
-                "${EVAL_OUTPUT}" \
+            # Build evaluation command
+            EVAL_CMD="python evaluate_models.py \
+                \"${MODEL_PATH}\" \
+                \"${TEST_DATA}\" \
+                \"${EVAL_OUTPUT}\" \
                 --save_predictions \
                 --device cuda \
                 --batch_size ${BATCH} \
-                --tile_overlap ${TILE_OVERLAP} \
+                --tile_overlap ${TILE_OVERLAP}"
+            
+            # Add postprocessing arguments if enabled
+            if [ "${RUN_POSTPROCESSING}" = true ]; then
+                EVAL_CMD="${EVAL_CMD} \
+                    --run_postprocessing \
+                    --prediction_threshold ${PREDICTION_THRESHOLD} \
+                    --recall_threshold ${RECALL_THRESHOLD} \
+                    --minimum_size ${MINIMUM_SIZE}"
+                echo "    Postprocessing enabled (pred_thresh=${PREDICTION_THRESHOLD}, recall_thresh=${RECALL_THRESHOLD})"
+            fi
+            
+            # Run evaluation script
+            eval ${EVAL_CMD}
             
             # Check for evaluation success
             if [ $? -ne 0 ]; then
@@ -209,9 +250,11 @@ run_evaluation() {
                     LINE=$(tail -n 1 "${METRICS_CSV}")
                 fi
 
-                # Parse semicolon-separated fields:
-                IFS=';' read -r DBPATH DICE_MEAN DICE_STD JACCARD_MEAN JACCARD_STD ACCURACY_MEAN ACCURACY_STD PRECISION_MEAN PRECISION_STD RECALL_MEAN RECALL_STD TVERSKY_MEAN TVERSKY_STD FOCAL_TVERSKY_MEAN FOCAL_TVERSKY_STD <<< "${LINE}"
-                echo "${MODEL},${TRAIN_QUAD},${TEST_QUAD},${TILE_OVERLAP},${JACCARD_MEAN},${DICE_MEAN},${ACCURACY_MEAN},${PRECISION_MEAN},${RECALL_MEAN},${TVERSKY_MEAN},${FOCAL_TVERSKY_MEAN}" >> "${RESULTS_CSV}"
+                # Parse semicolon-separated fields
+                IFS=';' read -r DBPATH RUN_NAME RUN_ID MODEL_SIGNATURE TRAIN_DICE TRAIN_JACCARD EVAL_DICE_MEAN EVAL_DICE_STD EVAL_JACCARD_MEAN EVAL_JACCARD_STD EVAL_ACCURACY_MEAN EVAL_ACCURACY_STD EVAL_PRECISION_MEAN EVAL_PRECISION_STD EVAL_RECALL_MEAN EVAL_RECALL_STD EVAL_TVERSKY_MEAN EVAL_TVERSKY_STD EVAL_FOCAL_TVERSKY_MEAN EVAL_FOCAL_TVERSKY_STD POSTPROCESS_OVERALL_DICE POSTPROCESS_OVERALL_JACCARD POSTPROCESS_OVERALL_PRECISION POSTPROCESS_OVERALL_RECALL POSTPROCESS_MATCHED_DICE POSTPROCESS_MATCHED_JACCARD POSTPROCESS_MATCHED_PRECISION POSTPROCESS_MATCHED_RECALL POSTPROCESS_CLEAN_MATCHED_DICE POSTPROCESS_CLEAN_MATCHED_JACCARD POSTPROCESS_CLEAN_MATCHED_PRECISION POSTPROCESS_CLEAN_MATCHED_RECALL TUNNEL_TP TUNNEL_FP TUNNEL_FN TUNNEL_PRECISION TUNNEL_RECALL TUNNEL_DICE TUNNEL_JACCARD UNMATCHED_PREDICTIONS UNMATCHED_LABELS <<< "${LINE}"
+                
+                # Write to results CSV with all fields
+                echo "${DBPATH},${RUN_NAME},${RUN_ID},${MODEL_SIGNATURE},${TRAIN_DICE},${TRAIN_JACCARD},${EVAL_DICE_MEAN},${EVAL_DICE_STD},${EVAL_JACCARD_MEAN},${EVAL_JACCARD_STD},${EVAL_ACCURACY_MEAN},${EVAL_ACCURACY_STD},${EVAL_PRECISION_MEAN},${EVAL_PRECISION_STD},${EVAL_RECALL_MEAN},${EVAL_RECALL_STD},${EVAL_TVERSKY_MEAN},${EVAL_TVERSKY_STD},${EVAL_FOCAL_TVERSKY_MEAN},${EVAL_FOCAL_TVERSKY_STD},${POSTPROCESS_OVERALL_DICE},${POSTPROCESS_OVERALL_JACCARD},${POSTPROCESS_OVERALL_PRECISION},${POSTPROCESS_OVERALL_RECALL},${POSTPROCESS_MATCHED_DICE},${POSTPROCESS_MATCHED_JACCARD},${POSTPROCESS_MATCHED_PRECISION},${POSTPROCESS_MATCHED_RECALL},${POSTPROCESS_CLEAN_MATCHED_DICE},${POSTPROCESS_CLEAN_MATCHED_JACCARD},${POSTPROCESS_CLEAN_MATCHED_PRECISION},${POSTPROCESS_CLEAN_MATCHED_RECALL},${TUNNEL_TP},${TUNNEL_FP},${TUNNEL_FN},${TUNNEL_PRECISION},${TUNNEL_RECALL},${TUNNEL_DICE},${TUNNEL_JACCARD},${UNMATCHED_PREDICTIONS},${UNMATCHED_LABELS},${TRAIN_QUAD},${TEST_QUAD},${TILE_OVERLAP}" >> "${RESULTS_CSV}"
             else
                 echo "No metrics CSV found at ${METRICS_CSV}. Skipping results for this evaluation."
             fi
@@ -267,6 +310,12 @@ echo "Timestamp: ${TIMESTAMP}"
 echo "Output directory: ${OUTPUT_BASE}"
 if [ "${MODE}" = "eval" ] || [ "${MODE}" = "both" ]; then
     echo "Tile overlap: ${TILE_OVERLAP}px"
+    echo "Postprocessing: ${RUN_POSTPROCESSING}"
+    if [ "${RUN_POSTPROCESSING}" = true ]; then
+        echo "  Minimum size: ${MINIMUM_SIZE}"
+        echo "  Prediction threshold: ${PREDICTION_THRESHOLD}"
+        echo "  Recall threshold: ${RECALL_THRESHOLD}"
+    fi
     echo "Results CSV: ${RESULTS_CSV}"
 fi
 echo "Environment saved to: ${ENV_VAR}"
