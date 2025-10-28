@@ -74,6 +74,10 @@ while [[ $# -gt 0 ]]; do
             RECALL_THRESHOLD="$2"
             shift 2
             ;;
+        --minimum-size)
+            MINIMUM_SIZE="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -83,6 +87,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
             echo "  --prediction-threshold F     Threshold for binarizing predictions (default: 0.5)"
             echo "  --recall-threshold F         Recall threshold for tunnel matching (default: 0.5)"
+            echo "  --minimum-size N             Minimum size for connected components (default: 100)"
             echo "  --help                       Show this help"
             echo ""
             echo "Examples:"
@@ -183,7 +188,7 @@ run_evaluation() {
     
     # Initialize CSV if it doesn't exist
     if [ ! -f "${RESULTS_CSV}" ]; then
-        echo "Run Name,Run ID,Model Signature,Train Quad,Test Quad,Tile_Overlap,Eval_Jaccard,Eval_Dice,Eval_Accuracy,Eval_Precision,Eval_Recall,Eval_Tversky,Eval_Focal_Tversky,Train_Dice,Train_Jaccard,Postprocess_Overall_Dice,Tunnel_Precision,Tunnel_Recall" > "${RESULTS_CSV}"
+        echo "Database_Path,Run_Name,Run_ID,Model_Signature,Train_Dice,Train_Jaccard,Eval_Dice_Mean,Eval_Dice_Std,Eval_Jaccard_Mean,Eval_Jaccard_Std,Eval_Accuracy_Mean,Eval_Accuracy_Std,Eval_Precision_Mean,Eval_Precision_Std,Eval_Recall_Mean,Eval_Recall_Std,Eval_Tversky_Mean,Eval_Tversky_Std,Eval_Focal_Tversky_Mean,Eval_Focal_Tversky_Std,Postprocess_Overall_Dice,Postprocess_Overall_Jaccard,Postprocess_Overall_Precision,Postprocess_Overall_Recall,Postprocess_Matched_Dice,Postprocess_Matched_Jaccard,Postprocess_Matched_Precision,Postprocess_Matched_Recall,Postprocess_Clean_Matched_Dice,Postprocess_Clean_Matched_Jaccard,Postprocess_Clean_Matched_Precision,Postprocess_Clean_Matched_Recall,Tunnel_TP,Tunnel_FP,Tunnel_FN,Tunnel_Precision,Tunnel_Recall,Tunnel_F1,Unmatched_Predictions,Unmatched_Labels,Train_Quad,Test_Quad,Tile_Overlap" > "${RESULTS_CSV}"
     fi
     
     for i in "${!QUADS[@]}"; do
@@ -245,10 +250,11 @@ run_evaluation() {
                     LINE=$(tail -n 1 "${METRICS_CSV}")
                 fi
 
-                # Parse semicolon-separated fields (updated for new format):
-                IFS=';' read -r DBPATH RUN_NAME RUN_ID MODEL_SIGNATURE TRAIN_DICE TRAIN_JACCARD EVAL_DICE_MEAN EVAL_DICE_STD EVAL_JACCARD_MEAN EVAL_JACCARD_STD EVAL_ACCURACY_MEAN EVAL_ACCURACY_STD EVAL_PRECISION_MEAN EVAL_PRECISION_STD EVAL_RECALL_MEAN EVAL_RECALL_STD EVAL_TVERSKY_MEAN EVAL_TVERSKY_STD EVAL_FOCAL_TVERSKY_MEAN EVAL_FOCAL_TVERSKY_STD POSTPROCESS_OVERALL_DICE POSTPROCESS_OVERALL_JACCARD POSTPROCESS_OVERALL_PRECISION POSTPROCESS_OVERALL_RECALL POSTPROCESS_MATCHED_DICE POSTPROCESS_MATCHED_JACCARD POSTPROCESS_MATCHED_PRECISION POSTPROCESS_MATCHED_RECALL TUNNEL_TP TUNNEL_FP TUNNEL_FN TUNNEL_PRECISION TUNNEL_RECALL TUNNEL_F1 <<< "${LINE}"
+                # Parse semicolon-separated fields
+                IFS=';' read -r DBPATH RUN_NAME RUN_ID MODEL_SIGNATURE TRAIN_DICE TRAIN_JACCARD EVAL_DICE_MEAN EVAL_DICE_STD EVAL_JACCARD_MEAN EVAL_JACCARD_STD EVAL_ACCURACY_MEAN EVAL_ACCURACY_STD EVAL_PRECISION_MEAN EVAL_PRECISION_STD EVAL_RECALL_MEAN EVAL_RECALL_STD EVAL_TVERSKY_MEAN EVAL_TVERSKY_STD EVAL_FOCAL_TVERSKY_MEAN EVAL_FOCAL_TVERSKY_STD POSTPROCESS_OVERALL_DICE POSTPROCESS_OVERALL_JACCARD POSTPROCESS_OVERALL_PRECISION POSTPROCESS_OVERALL_RECALL POSTPROCESS_MATCHED_DICE POSTPROCESS_MATCHED_JACCARD POSTPROCESS_MATCHED_PRECISION POSTPROCESS_MATCHED_RECALL POSTPROCESS_CLEAN_MATCHED_DICE POSTPROCESS_CLEAN_MATCHED_JACCARD POSTPROCESS_CLEAN_MATCHED_PRECISION POSTPROCESS_CLEAN_MATCHED_RECALL TUNNEL_TP TUNNEL_FP TUNNEL_FN TUNNEL_PRECISION TUNNEL_RECALL TUNNEL_F1 UNMATCHED_PREDICTIONS UNMATCHED_LABELS <<< "${LINE}"
                 
-                echo "${MODEL_NAME},${TRAIN_QUAD},${TEST_QUAD},${TILE_OVERLAP},${EVAL_JACCARD_MEAN},${EVAL_DICE_MEAN},${EVAL_ACCURACY_MEAN},${EVAL_PRECISION_MEAN},${EVAL_RECALL_MEAN},${EVAL_TVERSKY_MEAN},${EVAL_FOCAL_TVERSKY_MEAN},${TRAIN_DICE},${TRAIN_JACCARD},${POSTPROCESS_OVERALL_DICE},${TUNNEL_PRECISION},${TUNNEL_RECALL}" >> "${RESULTS_CSV}"
+                # Write to results CSV with all fields
+                echo "${DBPATH},${RUN_NAME},${RUN_ID},${MODEL_SIGNATURE},${TRAIN_DICE},${TRAIN_JACCARD},${EVAL_DICE_MEAN},${EVAL_DICE_STD},${EVAL_JACCARD_MEAN},${EVAL_JACCARD_STD},${EVAL_ACCURACY_MEAN},${EVAL_ACCURACY_STD},${EVAL_PRECISION_MEAN},${EVAL_PRECISION_STD},${EVAL_RECALL_MEAN},${EVAL_RECALL_STD},${EVAL_TVERSKY_MEAN},${EVAL_TVERSKY_STD},${EVAL_FOCAL_TVERSKY_MEAN},${EVAL_FOCAL_TVERSKY_STD},${POSTPROCESS_OVERALL_DICE},${POSTPROCESS_OVERALL_JACCARD},${POSTPROCESS_OVERALL_PRECISION},${POSTPROCESS_OVERALL_RECALL},${POSTPROCESS_MATCHED_DICE},${POSTPROCESS_MATCHED_JACCARD},${POSTPROCESS_MATCHED_PRECISION},${POSTPROCESS_MATCHED_RECALL},${POSTPROCESS_CLEAN_MATCHED_DICE},${POSTPROCESS_CLEAN_MATCHED_JACCARD},${POSTPROCESS_CLEAN_MATCHED_PRECISION},${POSTPROCESS_CLEAN_MATCHED_RECALL},${TUNNEL_TP},${TUNNEL_FP},${TUNNEL_FN},${TUNNEL_PRECISION},${TUNNEL_RECALL},${TUNNEL_F1},${UNMATCHED_PREDICTIONS},${UNMATCHED_LABELS},${TRAIN_QUAD},${TEST_QUAD},${TILE_OVERLAP}" >> "${RESULTS_CSV}"
             else
                 echo "No metrics CSV found at ${METRICS_CSV}. Skipping results for this evaluation."
             fi
@@ -306,6 +312,7 @@ if [ "${MODE}" = "eval" ] || [ "${MODE}" = "both" ]; then
     echo "Tile overlap: ${TILE_OVERLAP}px"
     echo "Postprocessing: ${RUN_POSTPROCESSING}"
     if [ "${RUN_POSTPROCESSING}" = true ]; then
+        echo "  Minimum size: ${MINIMUM_SIZE}"
         echo "  Prediction threshold: ${PREDICTION_THRESHOLD}"
         echo "  Recall threshold: ${RECALL_THRESHOLD}"
     fi

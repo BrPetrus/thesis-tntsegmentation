@@ -346,22 +346,18 @@ def main(
 
     with open(csv_file_path, "a") as csv_file:
         if write_header:
-            # Extended header with model info and postprocessing metrics
-            header = (
-                "database_path;run_name;run_id;model_signature;train_dice;train_jaccard;"
-                "eval_dice_mean;eval_dice_std;eval_jaccard_mean;eval_jaccard_std;"
-                "eval_accuracy_mean;eval_accuracy_std;eval_precision_mean;eval_precision_std;"
-                "eval_recall_mean;eval_recall_std;eval_tversky_mean;eval_tversky_std;"
-                "eval_focal_tversky_mean;eval_focal_tversky_std;"
-                "postprocess_overall_dice;postprocess_overall_jaccard;postprocess_overall_precision;postprocess_overall_recall;"
-                "postprocess_matched_dice;postprocess_matched_jaccard;postprocess_matched_precision;postprocess_matched_recall;"
-                "tunnel_tp;tunnel_fp;tunnel_fn;tunnel_precision;tunnel_recall;tunnel_f1\n"
-            )
+            # Define header sections
+            basic_info = "database_path;run_name;run_id;model_signature;train_dice;train_jaccard"
+            eval_metrics = "eval_dice_mean;eval_dice_std;eval_jaccard_mean;eval_jaccard_std;eval_accuracy_mean;eval_accuracy_std;eval_precision_mean;eval_precision_std;eval_recall_mean;eval_recall_std;eval_tversky_mean;eval_tversky_std;eval_focal_tversky_mean;eval_focal_tversky_std"
+            postproc_metrics = "postprocess_overall_dice;postprocess_overall_jaccard;postprocess_overall_precision;postprocess_overall_recall;postprocess_matched_dice;postprocess_matched_jaccard;postprocess_matched_precision;postprocess_matched_recall;postprocess_clean_matched_dice;postprocess_clean_matched_jaccard;postprocess_clean_matched_precision;postprocess_clean_matched_recall"
+            tunnel_metrics = "tunnel_tp;tunnel_fp;tunnel_fn;tunnel_precision;tunnel_recall;tunnel_f1;unmatched_predictions;unmatched_labels"
+            
+            # Combine all sections
+            header = f"{basic_info};{eval_metrics};{postproc_metrics};{tunnel_metrics}\n"
             csv_file.write(header)
         
 
         # Get model info from training config
-        # model_name = training_config.get("model_name", "unknwogn")
         run_name = training_config.get("mlflow_run_name")
         run_id = training_config.get("mlflow_run_id")
         model_signature = training_config.get("model_signature")
@@ -377,18 +373,26 @@ def main(
         postprocess_matched_jaccard = "N/A"
         postprocess_matched_precision = "N/A"
         postprocess_matched_recall = "N/A"
+        postprocess_clean_matched_dice = "N/A"
+        postprocess_clean_matched_jaccard = "N/A"
+        postprocess_clean_matched_precision = "N/A"
+        postprocess_clean_matched_recall = "N/A"
         tunnel_tp = "N/A"
         tunnel_fp = "N/A"
         tunnel_fn = "N/A"
         tunnel_precision = "N/A"
         tunnel_recall = "N/A"
         tunnel_f1 = "N/A"
+        unmatched_predictions = "N/A"
+        unmatched_labels = "N/A"
         
         if postprocess_results:
             # Calculate mean postprocessing metrics
             overall_metrics = [r['tunnel_result'].metrics_overall for r in postprocess_results]
-            matched_metrics = [r['tunnel_result'].metrics_on_matched_tunnels for r in postprocess_results]
+            matched_metrics = [r['tunnel_result'].metrics_all_matches for r in postprocess_results]
+            clean_matched_metrics = [r['tunnel_result'].metrics_one_on_one for r in postprocess_results]
             tunnel_metrics = [r['tunnel_result'].metrics_on_tunnels for r in postprocess_results]
+            tunnel_mappings = [r['tunnel_result'].mapping_result for r in postprocess_results]
             
             postprocess_overall_dice = np.mean([m.dice for m in overall_metrics])
             postprocess_overall_jaccard = np.mean([m.jaccard for m in overall_metrics])
@@ -399,13 +403,21 @@ def main(
             postprocess_matched_jaccard = np.mean([m.jaccard for m in matched_metrics])
             postprocess_matched_precision = np.mean([m.prec for m in matched_metrics])
             postprocess_matched_recall = np.mean([m.recall for m in matched_metrics])
+
+            postprocess_clean_matched_dice = np.mean([m.dice for m in clean_matched_metrics])
+            postprocess_clean_matched_jaccard = np.mean([m.jaccard for m in clean_matched_metrics])
+            postprocess_clean_matched_precision = np.mean([m.prec for m in clean_matched_metrics])
+            postprocess_clean_matched_recall = np.mean([m.recall for m in clean_matched_metrics])
             
-            tunnel_tp = np.sum([r['tunnel_result'].mapping_result.tp for r in postprocess_results])
-            tunnel_fp = np.sum([r['tunnel_result'].mapping_result.fp for r in postprocess_results])
-            tunnel_fn = np.sum([r['tunnel_result'].mapping_result.fn for r in postprocess_results])
+            tunnel_tp = np.sum([m.tp for m in tunnel_metrics])
+            tunnel_fp = np.sum([m.fp for m in tunnel_metrics])
+            tunnel_fn = np.sum([m.fn for m in tunnel_metrics])
             tunnel_precision = np.mean([m.prec for m in tunnel_metrics])
             tunnel_recall = np.mean([m.recall for m in tunnel_metrics])
             tunnel_f1 = np.mean([m.f1 for m in tunnel_metrics])
+
+            unmatched_predictions = np.sum([m.unmatched_predictions for m in tunnel_mappings])
+            unmatched_labels = np.sum([m.unmatched_labels for m in tunnel_mappings])
         
         # Write the data row
         csv_file.write(
@@ -419,7 +431,8 @@ def main(
             f"{mean_metrics['mean_focal_tversky']};{mean_metrics['std_focal_tversky']};"
             f"{postprocess_overall_dice};{postprocess_overall_jaccard};{postprocess_overall_precision};{postprocess_overall_recall};"
             f"{postprocess_matched_dice};{postprocess_matched_jaccard};{postprocess_matched_precision};{postprocess_matched_recall};"
-            f"{tunnel_tp};{tunnel_fp};{tunnel_fn};{tunnel_precision};{tunnel_recall};{tunnel_f1};\n"
+            f"{postprocess_clean_matched_dice};{postprocess_clean_matched_jaccard};{postprocess_clean_matched_precision};{postprocess_clean_matched_recall};"
+            f"{tunnel_tp};{tunnel_fp};{tunnel_fn};{tunnel_precision};{tunnel_recall};{tunnel_f1};{unmatched_predictions};{unmatched_labels}\n"
         )
 
     
