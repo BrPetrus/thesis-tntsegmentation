@@ -350,7 +350,7 @@ def main(
             basic_info = "database_path;run_name;run_id;model_signature;train_dice;train_jaccard"
             eval_metrics = "eval_dice_mean;eval_dice_std;eval_jaccard_mean;eval_jaccard_std;eval_accuracy_mean;eval_accuracy_std;eval_precision_mean;eval_precision_std;eval_recall_mean;eval_recall_std;eval_tversky_mean;eval_tversky_std;eval_focal_tversky_mean;eval_focal_tversky_std"
             postproc_metrics = "postprocess_overall_dice;postprocess_overall_jaccard;postprocess_overall_precision;postprocess_overall_recall;postprocess_matched_dice;postprocess_matched_jaccard;postprocess_matched_precision;postprocess_matched_recall;postprocess_clean_matched_dice;postprocess_clean_matched_jaccard;postprocess_clean_matched_precision;postprocess_clean_matched_recall"
-            tunnel_metrics = "tunnel_tp;tunnel_fp;tunnel_fn;tunnel_precision;tunnel_recall;tunnel_f1;unmatched_predictions;unmatched_labels"
+            tunnel_metrics = "tunnel_tp;tunnel_fp;tunnel_fn;tunnel_precision;tunnel_recall;tunnel_dice;tunnel_jaccard;unmatched_predictions;unmatched_labels"
             
             # Combine all sections
             header = f"{basic_info};{eval_metrics};{postproc_metrics};{tunnel_metrics}\n"
@@ -382,7 +382,8 @@ def main(
         tunnel_fn = "N/A"
         tunnel_precision = "N/A"
         tunnel_recall = "N/A"
-        tunnel_f1 = "N/A"
+        tunnel_dice = "N/A"
+        tunnel_jaccard = "N/A"
         unmatched_predictions = "N/A"
         unmatched_labels = "N/A"
         
@@ -414,7 +415,8 @@ def main(
             tunnel_fn = np.sum([m.fn for m in tunnel_metrics])
             tunnel_precision = np.mean([m.prec for m in tunnel_metrics])
             tunnel_recall = np.mean([m.recall for m in tunnel_metrics])
-            tunnel_f1 = np.mean([m.f1 for m in tunnel_metrics])
+            tunnel_dice = np.mean([m.dice for m in tunnel_metrics])
+            tunnel_jaccard = np.mean([m.jaccard for m in tunnel_metrics])
 
             unmatched_predictions = np.sum([m.unmatched_predictions for m in tunnel_mappings])
             unmatched_labels = np.sum([m.unmatched_labels for m in tunnel_mappings])
@@ -432,7 +434,7 @@ def main(
             f"{postprocess_overall_dice};{postprocess_overall_jaccard};{postprocess_overall_precision};{postprocess_overall_recall};"
             f"{postprocess_matched_dice};{postprocess_matched_jaccard};{postprocess_matched_precision};{postprocess_matched_recall};"
             f"{postprocess_clean_matched_dice};{postprocess_clean_matched_jaccard};{postprocess_clean_matched_precision};{postprocess_clean_matched_recall};"
-            f"{tunnel_tp};{tunnel_fp};{tunnel_fn};{tunnel_precision};{tunnel_recall};{tunnel_f1};{unmatched_predictions};{unmatched_labels}\n"
+            f"{tunnel_tp};{tunnel_fp};{tunnel_fn};{tunnel_precision};{tunnel_recall};{tunnel_dice};{tunnel_jaccard};{unmatched_predictions};{unmatched_labels}\n"
         )
 
     
