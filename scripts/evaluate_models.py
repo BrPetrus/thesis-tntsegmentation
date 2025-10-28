@@ -418,8 +418,8 @@ def main(
             tunnel_dice = np.mean([m.dice for m in tunnel_metrics])
             tunnel_jaccard = np.mean([m.jaccard for m in tunnel_metrics])
 
-            unmatched_predictions = np.sum([m.unmatched_predictions for m in tunnel_mappings])
-            unmatched_labels = np.sum([m.unmatched_labels for m in tunnel_mappings])
+            unmatched_predictions = np.sum([len(m.unmatched_predictions) for m in tunnel_mappings])
+            unmatched_labels = np.sum([len(m.unmatched_labels) for m in tunnel_mappings])
         
         # Write the data row
         csv_file.write(
