@@ -9,7 +9,7 @@ export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 # CLI option
-MODE="both"  # Options: train, eval, both
+MODE="eval"  # Options: train, eval, both
 
 # Training options
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
@@ -34,7 +34,7 @@ QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
 TILE_OVERLAP=0
-MODEL_DIR=""  # Must be provided for eval-only mode
+MODEL_DIR="/home/xpetrus/DP/DP-WIP/scripts/output/output-train-all-quads/2025-10-28_20-02-21/"  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
 # Postprocessing options
