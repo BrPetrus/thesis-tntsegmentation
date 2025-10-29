@@ -519,7 +519,6 @@ def _calculate_test_metrics(
 ) -> Dict:
     """Calculate and log test metrics."""
     # Flatten arrays for metric calculation
-    flat_inputs = np.concatenate(inputs, axis=0).flatten()
     flat_masks = np.concatenate(masks, axis=0).flatten()
     flat_predictions = np.concatenate(predictions, axis=0).flatten()
 
@@ -533,12 +532,6 @@ def _calculate_test_metrics(
     # Calculate metrics
     binary_predictions = (flat_predictions > 0.5).astype(bool)
     binary_masks = flat_masks == 1.0
-
-    # Scikit-learn metrics
-    sk_accuracy = skmetrics.accuracy_score(binary_masks, binary_predictions)
-    sk_f1score = skmetrics.f1_score(binary_masks, binary_predictions)
-    sk_recall = skmetrics.recall_score(binary_masks, binary_predictions)
-    sk_precision = skmetrics.precision_score(binary_masks, binary_predictions)
 
     # Custom metrics
     TP, FP, FN, TN = tntmetrics.calculate_batch_stats(
@@ -573,10 +566,6 @@ def _calculate_test_metrics(
         "test/accuracy": accuracy,
         "test/precision": precision,
         "test/recall": recall,
-        "test/accuracy_skmetric": sk_accuracy,
-        "test/f1score_skmetric": sk_f1score,
-        "test/recall_skmetric": sk_recall,
-        "test/precision_skmetric": sk_precision,
     }
 
     mlflow.log_metrics(metrics, step=epoch)
