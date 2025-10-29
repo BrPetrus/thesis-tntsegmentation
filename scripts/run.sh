@@ -33,7 +33,7 @@ UPSCALE_KERNEL="2,2,2"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
-TILE_OVERLAP=0
+TILE_OVERLAP=10
 MODEL_DIR="/home/xpetrus/DP/DP-WIP/scripts/output/output-train-all-quads/2025-10-28_20-02-21/"  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
