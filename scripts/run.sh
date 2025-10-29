@@ -9,7 +9,7 @@ export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 # CLI option
-MODE="eval"  # Options: train, eval, both
+MODE="both"  # Options: train, eval, both
 
 # Training options
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
@@ -22,18 +22,18 @@ MLFLOW_SERVER_PORT=8800
 LR=0.0001
 MODEL=anisotropicunet
 SEED=42
-MODEL_DEPTH=2
+MODEL_DEPTH=6
 WEIGHT_DECAY=0.0001
-HORIZONTAL_KERNEL="3,3,3"
-HORIZONTAL_PADDING="1,1,1"
-DOWNSCALE_KERNEL="2,2,2"
-DOWNSCALE_STRIDE="2,2,2"
-UPSCALE_STRIDE="2,2,2"
-UPSCALE_KERNEL="2,2,2"
+HORIZONTAL_KERNEL="1,3,3"
+HORIZONTAL_PADDING="0,1,1"
+DOWNSCALE_KERNEL="1,2,2"
+DOWNSCALE_STRIDE="1,2,2"
+UPSCALE_STRIDE="1,2,2"
+UPSCALE_KERNEL="1,2,2"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
-TILE_OVERLAP=20
+TILE_OVERLAP=0
 MODEL_DIR="/home/xpetrus/DP/DP-WIP/scripts/output/output-train-all-quads/2025-10-28_20-02-21/"  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
