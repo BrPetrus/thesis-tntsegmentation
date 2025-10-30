@@ -9,7 +9,7 @@ export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 # CLI option
-MODE="both"  # Options: train, eval, both
+MODE="eval"  # Options: train, eval, both
 
 # Training options
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
