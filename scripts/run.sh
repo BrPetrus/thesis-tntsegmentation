@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --seed)
             SEED="$2"
-            shift
+            shift 2
             ;;
         --prediction-threshold)
             PREDICTION_THRESHOLD="$2"
