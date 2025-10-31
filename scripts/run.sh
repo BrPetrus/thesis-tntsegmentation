@@ -66,6 +66,10 @@ while [[ $# -gt 0 ]]; do
             RUN_POSTPROCESSING=true
             shift
             ;;
+        --seed)
+            SEED="$2"
+            shift
+            ;;
         --prediction-threshold)
             PREDICTION_THRESHOLD="$2"
             shift 2
@@ -84,6 +88,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --mode [train|eval|both]     What to run (default: both)"
             echo "  --model-dir PATH             Directory containing trained models (required for eval mode)"
             echo "  --overlap_px N               Tile overlap in pixels (default: 0)"
+            echo "  --seed N                     Random seed for training"
             echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
             echo "  --prediction-threshold F     Threshold for binarizing predictions (default: 0.5)"
             echo "  --recall-threshold F         Recall threshold for tunnel matching (default: 0.5)"
