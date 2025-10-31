@@ -133,9 +133,8 @@ def _prepare_datasets(
             MT.RandZoomd(
                 keys=["volume", "mask3d"],
                 prob=0.5,
-                min_zoom=0.5,
-                max_zoom=1.5,
-                spatial_axis=[1, 2],  # Skip Z (depth)
+                min_zoom=[1, 0.5, 0.5],
+                max_zoom=[1, 1.5, 1.5],
             ),
             MT.RandSpatialCropd(keys=["volume", "mask3d"], roi_size=config.crop_size),
             # Convert to Tensor
