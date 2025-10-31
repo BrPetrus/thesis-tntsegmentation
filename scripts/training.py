@@ -129,13 +129,13 @@ def _prepare_datasets(
             MT.RandFlipd(keys=["volume", "mask3d"], prob=0.5, spatial_axis=0),
             MT.RandFlipd(keys=["volume", "mask3d"], prob=0.5, spatial_axis=1),
             MT.RandFlipd(keys=["volume", "mask3d"], prob=0.5, spatial_axis=2),
-            # Random zoom
-            MT.RandZoomd(
-                keys=["volume", "mask3d"],
-                prob=0.5,
-                min_zoom=[1, 0.5, 0.5],
-                max_zoom=[1, 1.5, 1.5],
-            ),
+            # # Random zoom
+            # MT.RandZoomd(
+            #     keys=["volume", "mask3d"],
+            #     prob=0.5,
+            #     min_zoom=[1, 0.5, 0.5],
+            #     max_zoom=[1, 1.5, 1.5],
+            # ),
             MT.RandSpatialCropd(keys=["volume", "mask3d"], roi_size=config.crop_size),
             # Convert to Tensor
             MT.ToTensord(keys=["volume", "mask3d"]),
