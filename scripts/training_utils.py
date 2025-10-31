@@ -204,6 +204,14 @@ def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
                 output_path / f"sample_{i}_transformed.tiff",
                 trans_volume.detach().cpu().numpy().astype(np.float32),
             )
+            tifffile.imwrite(
+                output_path / f"mask_{i}_original.tiff",
+                orig_mask
+            )
+            tifffile.imwrite(
+                output_path / f"mask_{i}_transformed.tiff",
+                trans_mask
+            )
 
     # Restore transforms
     dataset.transforms = transforms_backup
