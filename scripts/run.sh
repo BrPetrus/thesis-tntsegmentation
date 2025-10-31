@@ -5,7 +5,7 @@
 TIME=$((10*3600))
 echo "Setting time limit to $(($TIME / 3600)) hours"
 ulimit -t $TIME
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=1
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 # CLI option
@@ -22,7 +22,7 @@ MLFLOW_SERVER_PORT=8800
 LR=0.0001
 MODEL=anisotropicunet
 SEED=42
-MODEL_DEPTH=3
+MODEL_DEPTH=4
 WEIGHT_DECAY=0.0001
 HORIZONTAL_KERNEL="3,3,3"
 HORIZONTAL_PADDING="1,1,1"
