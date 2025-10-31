@@ -206,11 +206,11 @@ def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
             )
             tifffile.imwrite(
                 output_path / f"mask_{i}_original.tiff",
-                orig_mask
+                orig_mask.astype(np.float32)
             )
             tifffile.imwrite(
                 output_path / f"mask_{i}_transformed.tiff",
-                trans_mask
+                trans_mask.detach().cpu().numpy().astype(np.float32)
             )
 
     # Restore transforms
