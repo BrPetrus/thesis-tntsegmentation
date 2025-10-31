@@ -129,44 +129,14 @@ def _prepare_datasets(
             MT.RandFlipd(keys=["volume", "mask3d"], prob=0.5, spatial_axis=0),
             MT.RandFlipd(keys=["volume", "mask3d"], prob=0.5, spatial_axis=1),
             MT.RandFlipd(keys=["volume", "mask3d"], prob=0.5, spatial_axis=2),
-            # # Random rotations
-            # # TODO: remove wrong comments
-            # MT.RandRotated(
-            #     keys=["volume", "mask3d"],
-            #     prob=0.5,
-            #     range_x=np.pi / 2,  # No rotation around X-axis (keeps Z intact)
-            #     range_y=0,  # No rotation around Y-axis (keeps Z intact)
-            #     range_z=0,  # Rotation around Z-axis (rotates in X,Y plane)
-            # ),
             # Random zoom
             MT.RandZoomd(
                 keys=["volume", "mask3d"],
                 prob=0.5,
                 min_zoom=0.5,
                 max_zoom=1.5,
-                # spatial_axis=[1, 2],  # Skip Z (depth)
+                spatial_axis=[1, 2],  # Skip Z (depth)
             ),
-            # # Elastic deformations
-            # MT.Rand3DElasticd(
-            #     keys=['volume', 'mask3d'],
-            #     sigma_range=(5, 8),
-            #     magnitude_range=(100, 200),
-            #     spatial_size=config.crop_size,
-            #     prob=0.5
-            # ),
-            # # RandomCrop
-            # MT.RandCropByPosNegLabeld(
-            #     keys=['volume', 'mask3d'],
-            #     label_key='mask3d',
-            #     spatial_size=config.crop_size,
-            #     pos=1.,
-            #     neg=0.25,
-            #     num_samples=1
-            # ),
-            # MT.CenterSpatialCropd(
-            #     keys=['volume', 'mask3d'],
-            #     roi_size=config.crop_size
-            # ),
             MT.RandSpatialCropd(keys=["volume", "mask3d"], roi_size=config.crop_size),
             # Convert to Tensor
             MT.ToTensord(keys=["volume", "mask3d"]),
