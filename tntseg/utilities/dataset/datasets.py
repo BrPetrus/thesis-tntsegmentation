@@ -59,7 +59,6 @@ class MaskType(StrEnum):
     binary = auto()
     instance = auto()
 
-# TODO: add transformation pipeline option
 class TNTDataset(Dataset):
     def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True, transforms: Optional[List] = None, mask_type: MaskType = MaskType.binary):
         """
