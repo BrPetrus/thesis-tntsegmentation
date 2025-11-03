@@ -22,10 +22,10 @@ MLFLOW_SERVER_PORT=8800
 LR=0.0001
 MODEL=anisotropicunet
 SEED=42
-MODEL_DEPTH=6
+MODEL_DEPTH=3
 WEIGHT_DECAY=0.0001
-HORIZONTAL_KERNEL="3,3,3"
-HORIZONTAL_PADDING="1,1,1"
+HORIZONTAL_KERNEL="1,3,3"
+HORIZONTAL_PADDING="0,1,1"
 DOWNSCALE_KERNEL="1,2,2"
 DOWNSCALE_STRIDE="1,2,2"
 UPSCALE_STRIDE="1,2,2"
@@ -33,7 +33,7 @@ UPSCALE_KERNEL="1,2,2"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
-TILE_OVERLAP=0
+TILE_OVERLAP=20
 MODEL_DIR="/home/xpetrus/DP/DP-WIP/scripts/output/output-train-all-quads/2025-10-28_20-02-21/"  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 
