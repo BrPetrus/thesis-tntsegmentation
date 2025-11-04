@@ -99,4 +99,10 @@ if __name__ == "__main__":
     from torchsummary import summary
     
     net = UNet3d(n_channels_in=1, n_classes_out=1)
-    summary(net, (1, 32, 128, 128))
+    summary(net, (1, 7, 64, 64))
+
+    from torchviz import make_dot
+    x = torch.randn((1,1,7,64,64))
+    y = net(x)
+    dot = make_dot(y, params=dict(net.named_parameters()))
+    dot.render("net", format="png")

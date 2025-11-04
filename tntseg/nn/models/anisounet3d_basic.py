@@ -171,6 +171,7 @@ if __name__ == "__main__":
     net = AnisotropicUNet3D(1, 1)
     print("Original Network:")
     summary(net, (1, 7, 64, 64))
+
     
     # Test with different depths
     config = {
@@ -195,8 +196,34 @@ if __name__ == "__main__":
     config['horizontal_kernel'] = (3, 3, 3)
     config['horizontal_padding'] = (1, 1, 1)
     config['horizontal_stride'] = (1, 1, 1)
-    config['depth'] = 4
+    config['depth'] = 2
     deep_3d_net = create_anisotropic_unet3d(config)
     print("\nDeep truly 3D network")
     summary(deep_3d_net, (1, 7, 64, 64))
     print(deep_3d_net.get_signature())
+
+    # Basic
+    from torchinfo import summary
+
+    net = AnisotropicUNet3D(
+        n_channels_in=1,
+        n_classes_out=1,
+        depth=2,  # Same depth as basic UNet (2 downsampling steps)
+        base_channels=64,  # Starts with 64 channels
+        channel_growth=2,  # 64 -> 128 -> 256
+        horizontal_kernel=(3, 3, 3),  # Isotropic 3D convolutions
+        horizontal_padding=(1, 1, 1),  # Same padding
+        horizontal_stride=(1, 1, 1),   # Standard stride
+        downscale_kernel=(2, 2, 2),   # Isotropic downsampling
+        downscale_stride=(2, 2, 2),   # Same as basic UNet
+        upscale_kernel=(2, 2, 2),     # Isotropic upsampling  
+        upscale_stride=(2, 2, 2)      # Same as basic UNet
+    )
+
+    summary(net, (1,1,7,64,64))
+
+    from torchviz import make_dot
+    x = torch.randn((1,1,7,64,64))
+    y = net(x)
+    dot = make_dot(y, params=dict(net.named_parameters()))
+    dot.render("netaniso", format="png")
