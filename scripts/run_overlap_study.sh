@@ -29,7 +29,7 @@ if [ ! -d "${RUNS_DIR}" ]; then
 fi
 
 # Create output directory for this study
-OUTPUT_BASE="./output/overlap_study_${TIMESTAMP}"
+OUTPUT_BASE="./output/overlap_study_diff_arch/overlap_study_${TIMESTAMP}"
 mkdir -p "${OUTPUT_BASE}"
 
 echo "==================================="
