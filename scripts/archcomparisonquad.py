@@ -22,6 +22,10 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
         'Eval_Jaccard_Mean': 'Evaluation Jaccard', 
         'Postprocess_Overall_Dice': 'Postprocess Overall Dice',
         'Postprocess_Overall_Jaccard': 'Postprocess Overall Jaccard',
+        'Postprocess_Matched_Dice': 'Postprocessed Matched Tunnels Dice',
+        'Postprocess_Matched_Jaccard': 'Postprocessed Matched Tunnels Jaccard',
+        'Postprocess_Clean_Matched_Dice': 'Postprocessed Cleanly Matched Tunnels Dice',
+        'Postprocess_Clean_Matched_Jaccard': 'Postprocessed Cleanly Matched Tunnels Jaccard',
         'Tunnel_Dice': 'Tunnel Dice',
         'Tunnel_Jaccard': 'Tunnel Jaccard'
     }
