@@ -55,8 +55,6 @@ def aggregate_csv_files_cross_quads(directory_path, output_path):
     # Combine all dataframes
     combined_df = pd.concat(all_data, ignore_index=True)
     print(f"Combined data shape: {combined_df.shape}")
-
-    print(combined_df['Train_Quad'])
     
     # Filter rows where Train_Quad equals Test_Quad
     print(f"Train_Quad values: {sorted(combined_df['Train_Quad'].unique())}")

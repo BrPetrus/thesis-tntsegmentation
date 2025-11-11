@@ -17,147 +17,155 @@ def create_performance_plots(csv_path, output_dir='./plots'):
     
     # Read the CSV file
     df = pd.read_csv(csv_path)
+
+    print(f"Data loaded: {df.shape}")
+    print(f"Architectures: {len(df['Architecture'].unique())}")
     
-    # Separate mean and std data
-    mean_df = df[~df['Quad'].str.contains('std', na=False)].copy()
-    std_df = df[df['Quad'].str.contains('std', na=False)].copy()
-    
-    # Clean the std dataframe - remove 'std' suffix from Quad column
-    std_df['Quad'] = std_df['Quad'].str.replace('std', '')
-    
-    print(f"Mean data shape: {mean_df.shape}")
-    print(f"Std data shape: {std_df.shape}")
-    
-    # Get unique quadrants and architectures from mean data
-    quadrants = sorted(mean_df['Quad'].unique())
-    architectures = sorted(mean_df['Architecture'].unique())
-    
-    print(f"Found quadrants: {quadrants}")
-    print(f"Found architectures: {architectures}")
-    
-    # Set up the plotting style
-    plt.style.use('default')
-    
-    # Create plots for each metric category
-    metric_categories = {
-        'Training': ['Train_Dice', 'Train_Jaccard'],
-        'Evaluation': ['Eval_Dice_Mean', 'Eval_Jaccard_Mean'],
-        'Postprocess_Overall': ['Postprocess_Overall_Dice', 'Postprocess_Overall_Jaccard'],
-        'Postprocess_Matched': ['Postprocess_Matched_Dice', 'Postprocess_Matched_Jaccard'],
-        'Postprocess_Clean': ['Postprocess_Clean_Matched_Dice', 'Postprocess_Clean_Matched_Jaccard'],
-        'Tunnel': ['Tunnel_Dice', 'Tunnel_Jaccard']
+    # Define key Dice and Jaccard metrics to plot
+    metrics = {
+        'Eval_Dice_Mean': 'Evaluation Dice',
+        'Eval_Jaccard_Mean': 'Evaluation Jaccard', 
+        'Postprocess_Overall_Dice': 'Postprocess Overall Dice',
+        'Postprocess_Overall_Jaccard': 'Postprocess Overall Jaccard',
+        'Postprocess_Matched_Dice': 'Postprocessed Matched Tunnels Dice',
+        'Postprocess_Matched_Jaccard': 'Postprocessed Matched Tunnels Jaccard',
+        'Postprocess_Clean_Matched_Dice': 'Postprocessed Cleanly Matched Tunnels Dice',
+        'Postprocess_Clean_Matched_Jaccard': 'Postprocessed Cleanly Matched Tunnels Jaccard',
+        'Tunnel_Dice': 'Tunnel Dice',
+        'Tunnel_Jaccard': 'Tunnel Jaccard'
     }
     
-    for category_name, metrics in metric_categories.items():
-        # Check if metrics exist in dataframe
-        available_metrics = [m for m in metrics if m in mean_df.columns]
-        if not available_metrics:
-            print(f"Skipping {category_name}: metrics not found in data")
+    # Filter available metrics
+    available_metrics = {k: v for k, v in metrics.items() if k in df.columns}
+    
+    if not available_metrics:
+        print("No metrics found!")
+        return
+
+    print(f"Creating plots for {len(available_metrics)} metrics")
+    
+    # # Separate mean and std data
+    # mean_df = df[~df['Quad'].str.contains('std', na=False)].copy()
+    # std_df = df[df['Quad'].str.contains('std', na=False)].copy()
+    
+    # # Clean the std dataframe - remove 'std' suffix from Quad column
+    # std_df['Quad'] = std_df['Quad'].str.replace('std', '')
+    
+    # print(f"Mean data shape: {mean_df.shape}")
+    # print(f"Std data shape: {std_df.shape}")
+    
+    # # Get unique quadrants and architectures from mean data
+    # quadrants = sorted(mean_df['Quad'].unique())
+    # architectures = sorted(mean_df['Architecture'].unique())
+    
+    # print(f"Found quadrants: {quadrants}")
+    # print(f"Found architectures: {architectures}")
+    
+    # # Set up the plotting style
+    # plt.style.use('default')
+    
+    # # Create plots for each metric category
+    # metric_categories = {
+    #     'Training': ['Train_Dice', 'Train_Jaccard'],
+    #     'Evaluation': ['Eval_Dice_Mean', 'Eval_Jaccard_Mean'],
+    #     'Postprocess_Overall': ['Postprocess_Overall_Dice', 'Postprocess_Overall_Jaccard'],
+    #     'Postprocess_Matched': ['Postprocess_Matched_Dice', 'Postprocess_Matched_Jaccard'],
+    #     'Postprocess_Clean': ['Postprocess_Clean_Matched_Dice', 'Postprocess_Clean_Matched_Jaccard'],
+    #     'Tunnel': ['Tunnel_Dice', 'Tunnel_Jaccard']
+    # }
+    
+    # for category_name, metrics in metric_categories.items():
+    for metric_col, metric_name in available_metrics.items():
+        std_col = f"{metric_col}_Std"
+        if std_col not in df.columns:
+            print(f"Warning: {std_col} not found, using zero errors")
+            df[std_col] = 0
+
+        data = df.copy()
+
+        quadrants = sorted(data['Quad'].dropna().unique())
+        architectures = sorted(data['Architecture'].dropna().unique())
+
+        print(f"\nCreating plot for metric: {metric_name} ({metric_col}) across quadrants: {quadrants}")
+
+        if not quadrants:
+            print("No quadrant information found in 'Quad' column, skipping.")
             continue
-            
-        print(f"\nCreating plots for {category_name}...")
-        
-        # Create subplots for each quadrant
-        n_quads = len(quadrants)
-        if n_quads <= 4:
-            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            axes = axes.flatten()
-        else:
-            # If more than 4 quadrants, adjust subplot layout
-            rows = int(np.ceil(n_quads / 3))
-            fig, axes = plt.subplots(rows, 3, figsize=(18, 6*rows))
-            axes = axes.flatten() if rows > 1 else [axes] if rows == 1 and n_quads == 1 else axes
-        
-        fig.suptitle(f'{category_name} Metrics by Architecture and Quadrant', fontsize=16, fontweight='bold')
-        
+
+        # The user guarantees exactly 4 quadrants with filled values -> use a 2x2 layout
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        axes = axes.flatten()
+        fig.suptitle(f'{metric_name} by Architecture and Quadrant', fontsize=16, fontweight='bold')
+
+        std_col = f"{metric_col}_Std"
+        has_std_col = std_col in data.columns
+        if not has_std_col:
+            print(f"Warning: std column '{std_col}' not found in dataframe; error bars will be zero.")
+
+        # For each quadrant, plot a grouped bar of architectures for this single metric
         for idx, quad in enumerate(quadrants):
-            if idx >= len(axes):
-                break
-                
             ax = axes[idx]
-            
-            # Filter data for current quadrant
-            quad_mean_data = mean_df[mean_df['Quad'] == quad]
-            quad_std_data = std_df[std_df['Quad'] == quad] if not std_df.empty else pd.DataFrame()
-            
-            if quad_mean_data.empty:
-                ax.text(0.5, 0.5, f'No data for {quad}', ha='center', va='center', transform=ax.transAxes)
-                ax.set_title(f'{quad.upper()}')
-                continue
-            
-            # Prepare data for plotting
+
+            quad_data = data[data['Quad'] == quad]
+
             x_pos = np.arange(len(architectures))
-            width = 0.35 if len(available_metrics) == 2 else 0.8 / len(available_metrics)
-            
-            # Create bars for each metric
-            for i, metric in enumerate(available_metrics):
-                values = []
-                errors = []
-                
-                for arch in architectures:
-                    # Get mean value
-                    arch_mean_data = quad_mean_data[quad_mean_data['Architecture'] == arch]
-                    
-                    if not arch_mean_data.empty:
-                        value = arch_mean_data[metric].iloc[0]
-                        values.append(value if pd.notna(value) else 0)
-                        
-                        # Get std value if available
-                        arch_std_data = quad_std_data[quad_std_data['Architecture'] == arch] if not quad_std_data.empty else pd.DataFrame()
-                        if not arch_std_data.empty and metric in arch_std_data.columns:
-                            std_value = arch_std_data[metric].iloc[0]
-                            errors.append(std_value if pd.notna(std_value) else 0)
-                        else:
-                            errors.append(0)
-                    else:
-                        values.append(0)
-                        errors.append(0)
-                
-                # Create bars
-                if len(available_metrics) == 2:
-                    offset = (i - 0.5) * width
+            values = []
+            errors = []
+
+            for arch in architectures:
+                arch_rows = quad_data[quad_data['Architecture'] == arch]
+                if not arch_rows.empty and metric_col in arch_rows.columns:
+                    # if multiple rows exist for this (quad,arch) take the mean
+                    val = pd.to_numeric(arch_rows[metric_col], errors='coerce').mean(skipna=True)
+                    values.append(float(val) if pd.notna(val) else 0.0)
                 else:
-                    offset = (i - (len(available_metrics) - 1) / 2) * width
-                
-                bars = ax.bar(x_pos + offset, values, width, 
-                             label=metric.replace('_', ' '), 
-                             alpha=0.8,
-                             yerr=errors if any(errors) else None,
-                             capsize=3)
-                
-                # Add value labels on bars
-                for bar, value, error in zip(bars, values, errors):
-                    if value > 0:
-                        height = bar.get_height()
-                        label_height = height + error + 0.01 if error > 0 else height + 0.01
-                        ax.text(bar.get_x() + bar.get_width()/2., label_height,
-                               f'{value:.3f}', ha='center', va='bottom', fontsize=8)
-            
-            # Customize the subplot
-            ax.set_title(f'{quad.upper()}', fontweight='bold')
+                    values.append(0.0)
+
+                if has_std_col and not arch_rows.empty and std_col in arch_rows.columns:
+                    stdv = pd.to_numeric(arch_rows[std_col], errors='coerce').mean(skipna=True)
+                    errors.append(float(stdv) if pd.notna(stdv) else 0.0)
+                else:
+                    errors.append(0.0)
+
+            # Draw bars with optional error bars
+            show_errors = any(e > 0 for e in errors)
+            bars = ax.bar(x_pos, values, 0.7, alpha=0.8,
+                yerr=errors if show_errors else None,
+                capsize=3, label=metric_name)
+
+            # Label bars
+            for bar, val, err in zip(bars, values, errors):
+                if val > 0:
+                    h = bar.get_height()
+                    label_y = h + err + 0.01 if err > 0 else h + 0.01
+                    ax.text(bar.get_x() + bar.get_width() / 2., label_y, f'{val:.3f}',
+                        ha='center', va='bottom', fontsize=8)
+
+            ax.set_title(str(quad).upper(), fontweight='bold')
             ax.set_xlabel('Architecture')
             ax.set_ylabel('Score')
             ax.set_xticks(x_pos)
             ax.set_xticklabels(architectures, rotation=45, ha='right')
-            ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
             ax.grid(True, alpha=0.3)
-            
-            # Set y-axis limits based on data
-            max_val = max([max(values) if values else 0 for values in [values]]) if values else 1
+
+            max_val = max(values) if any(v > 0 for v in values) else 1
             ax.set_ylim(0, max_val * 1.4)
-        
-        # Hide unused subplots
-        for idx in range(len(quadrants), len(axes)):
-            axes[idx].set_visible(False)
-        
-        # Adjust layout and save
+
+
         plt.tight_layout()
-        plot_path = output_dir / f'{category_name.lower()}_metrics_by_quad_arch.png'
+        filename = metric_col.replace(' ', '_').lower()
+        plot_path = output_dir / f'{filename}_by_quad_arch.png'
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
         print(f"Saved plot: {plot_path}")
+
+        # Provide mean_df/std_df for downstream functions: do not split rows, keep mean_df as full data
+        # and provide an empty std_df (downstream functions handle empty std_df).
+        mean_df = data.copy()
+        std_df = pd.DataFrame()
     
     # Create a comprehensive comparison plot
-    print("\nCreating comprehensive comparison plot...")
+    print("\nCreating comprehensive plot...")
     create_comprehensive_plot(mean_df, std_df, output_dir)
 
 def create_comprehensive_plot(mean_df, std_df, output_dir):
@@ -173,11 +181,23 @@ def create_comprehensive_plot(mean_df, std_df, output_dir):
         'Tunnel_Jaccard'
     ]
     
-    # Available metrics in the dataframe
-    available_metrics = [m for m in key_metrics if m in mean_df.columns]
+    # Filter available metrics (same logic as main function)
+    available_metrics = {k: k.replace('_', ' ') for k in key_metrics if k in mean_df.columns}
     
     if not available_metrics:
         print("No key metrics found for comprehensive plot")
+        return
+    
+    # Extract quadrants and architectures (same logic as main function)
+    data = mean_df.copy()
+    quadrants = sorted(data['Quad'].dropna().unique())
+    architectures = sorted(data['Architecture'].dropna().unique())
+    
+    print(f"Creating comprehensive plot with quadrants: {quadrants}")
+    print(f"Architectures: {architectures}")
+    
+    if not quadrants:
+        print("No quadrant information found in 'Quad' column, skipping comprehensive plot.")
         return
     
     # Create a large comparison plot
@@ -194,64 +214,74 @@ def create_comprehensive_plot(mean_df, std_df, output_dir):
     else:
         axes = axes.flatten()
     
-    quadrants = sorted(mean_df['Quad'].unique())
-    architectures = sorted(mean_df['Architecture'].unique())
-    
-    for idx, metric in enumerate(available_metrics):
+    for idx, (metric_col, metric_name) in enumerate(available_metrics.items()):
         ax = axes[idx]
+        
+        # Check for std column (same logic as main function)
+        std_col = f"{metric_col}_Std"
+        has_std_col = std_col in data.columns
+        if not has_std_col:
+            print(f"Warning: std column '{std_col}' not found; error bars will be zero.")
         
         # Create grouped bar plot
         x = np.arange(len(quadrants))
         width = 0.8 / len(architectures)
         
+        # Track the maximum value across all architectures for this metric so ylim fits all bars
+        metric_max = 0.0
         for i, arch in enumerate(architectures):
             values = []
             errors = []
             
             for quad in quadrants:
-                # Get mean data
-                mean_data = mean_df[(mean_df['Quad'] == quad) & (mean_df['Architecture'] == arch)]
+                # Get data for this quad and architecture (same logic as main function)
+                quad_arch_data = data[(data['Quad'] == quad) & (data['Architecture'] == arch)]
                 
-                if not mean_data.empty:
-                    value = mean_data[metric].iloc[0]
-                    values.append(value if pd.notna(value) else 0)
-                    
-                    # Get std data
-                    std_data = std_df[(std_df['Quad'] == quad) & (std_df['Architecture'] == arch)] if not std_df.empty else pd.DataFrame()
-                    if not std_data.empty and metric in std_data.columns:
-                        std_value = std_data[metric].iloc[0]
-                        errors.append(std_value if pd.notna(std_value) else 0)
-                    else:
-                        errors.append(0)
+                if not quad_arch_data.empty and metric_col in quad_arch_data.columns:
+                    # If multiple rows exist for this (quad,arch) take the mean
+                    val = pd.to_numeric(quad_arch_data[metric_col], errors='coerce').mean(skipna=True)
+                    values.append(float(val) if pd.notna(val) else 0.0)
                 else:
-                    values.append(0)
-                    errors.append(0)
+                    values.append(0.0)
+                
+                # Handle std data (same logic as main function)
+                if has_std_col and not quad_arch_data.empty and std_col in quad_arch_data.columns:
+                    stdv = pd.to_numeric(quad_arch_data[std_col], errors='coerce').mean(skipna=True)
+                    errors.append(float(stdv) if pd.notna(stdv) else 0.0)
+                else:
+                    errors.append(0.0)
             
-            # Create bars
+            # Update the running metric max with this architecture's highest value
+            if any(v > 0 for v in values):
+                arch_max = max(values)
+                if arch_max > metric_max:
+                    metric_max = arch_max
+            
+            # Create bars with error bars if available
+            show_errors = any(e > 0 for e in errors)
             bars = ax.bar(x + i * width - width * (len(architectures) - 1) / 2, 
                          values, width, label=arch, alpha=0.8,
-                         yerr=errors if any(errors) else None, capsize=2)
+                         yerr=errors if show_errors else None, capsize=2)
             
-            # Add value labels
+            # Add value labels (same logic as main function)
             for bar, value, error in zip(bars, values, errors):
                 if value > 0:
                     height = bar.get_height()
                     label_height = height + error + 0.01 if error > 0 else height + 0.01
                     ax.text(bar.get_x() + bar.get_width()/2., label_height,
-                           f'{value:.2f}', ha='center', va='bottom', fontsize=8)
+                           f'{value:.3f}', ha='center', va='bottom', fontsize=8)
         
-        ax.set_title(metric.replace('_', ' '), fontweight='bold')
+        ax.set_title(metric_name, fontweight='bold')
         ax.set_xlabel('Quadrant')
         ax.set_ylabel('Score')
         ax.set_xticks(x)
-        ax.set_xticklabels(quadrants)
+        ax.set_xticklabels([str(q).upper() for q in quadrants])  # Make consistent with main function
         ax.legend()
         ax.grid(True, alpha=0.3)
         
-        # Set y-axis limits based on data
-        if values:
-            max_val = max([v for v in values if v > 0] + [0])
-            ax.set_ylim(0, max_val * 1.3)
+        # Set y-axis limits based on the maximum value observed across all architectures for this metric
+        max_val = metric_max if metric_max > 0 else 1
+        ax.set_ylim(0, max_val * 1.4)
     
     # Remove empty subplots
     for idx in range(len(available_metrics), len(axes)):
@@ -260,6 +290,7 @@ def create_comprehensive_plot(mean_df, std_df, output_dir):
     plt.tight_layout()
     plot_path = output_dir / 'comprehensive_comparison.png'
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
     print(f"Saved comprehensive plot: {plot_path}")
 
 def print_summary_statistics(mean_df, std_df):
