@@ -54,10 +54,15 @@ def aggregate_csv_files(directory_path, output_path):
     # Combine all dataframes
     combined_df = pd.concat(all_data, ignore_index=True)
     print(f"Combined data shape: {combined_df.shape}")
+    print(combined_df.head())
     
     # Filter rows where Train_Quad equals Test_Quad
+    print(combined_df['Train_Quad'].unique())
+    print(combined_df['Test_Quad'].unique())
     filtered_df = combined_df[combined_df['Train_Quad'] == combined_df['Test_Quad']].copy()
     print(f"After filtering Train_Quad == Test_Quad: {filtered_df.shape}")
+    # print(filtered_df['Model_Signature'].unique())
+    # print(combined_df['Model_Signature'].unique())
     
     if len(filtered_df) == 0:
         print("No rows found where Train_Quad equals Test_Quad")
@@ -65,6 +70,9 @@ def aggregate_csv_files(directory_path, output_path):
     
     # Extract architecture from Model_Signature (convert to title case for consistency)
     filtered_df['Architecture'] = filtered_df['Model_Signature'].str.title()
+
+    # print(filtered_df['Architecture'].unique())
+    # exit(1)
     
     # Rename Test_Quad to Quad for consistency with plotting script
     filtered_df['Quad'] = filtered_df['Test_Quad']
@@ -85,7 +93,7 @@ def aggregate_csv_files(directory_path, output_path):
     print(f"Aggregating {len(numeric_columns)} numeric columns")
     
     # Group by Quad and Architecture
-    grouped = filtered_df.groupby(['Quad', 'Architecture'])
+    grouped = filtered_df.groupby(['Architecture', 'Quad', 'Overlap'])
     
     # Calculate means and standard deviations separately
     means = grouped[numeric_columns].mean().reset_index()
@@ -103,10 +111,7 @@ def aggregate_csv_files(directory_path, output_path):
         result_df[std_col_name] = stds[col].values
     
     # Sort by Quad and Architecture
-    result_df = result_df.sort_values(['Quad', 'Architecture']).reset_index(drop=True)
-    
-    # Add Tile_Overlap column (assuming 0 for all, adjust if needed)
-    result_df['Tile_Overlap'] = 0
+    result_df = result_df.sort_values(['Architecture', 'Quad', 'Overlap']).reset_index(drop=True)
     
     # Save the aggregated results
     output_path = Path(output_path)
@@ -120,20 +125,26 @@ def aggregate_csv_files(directory_path, output_path):
     print("\n" + "="*60)
     print("AGGREGATION SUMMARY")
     print("="*60)
-    
     print(f"Total rows: {len(result_df)}")
     print(f"Quadrants: {sorted(result_df['Quad'].unique())}")
     print(f"Architectures: {sorted(result_df['Architecture'].unique())}")
+    print(f"Overlap values: {sorted(result_df['Overlap'].unique())}")
     
-    # Show sample counts per group
-    print(f"\nSample counts per group:")
-    sample_counts = filtered_df.groupby(['Quad', 'Architecture']).size().reset_index(name='Count')
+    # Show sample counts per group including Overlap
+    print(f"\nSample counts per (Quad, Architecture, Overlap):")
+    sample_counts = filtered_df.groupby(['Quad', 'Architecture', 'Overlap']).size().reset_index(name='Count')
     for _, row in sample_counts.iterrows():
-        print(f"  {row['Quad']} + {row['Architecture']}: {row['Count']} samples")
+        print(f"  Quad={row['Quad']} | Arch={row['Architecture']} | Overlap={row['Overlap']}: {row['Count']} samples")
     
-    # Show first few rows as example
+    # Show totals per Overlap (across quads/architectures)
+    overlap_totals = filtered_df.groupby('Overlap').size().reset_index(name='Total')
+    print(f"\nTotals per Overlap:")
+    for _, row in overlap_totals.iterrows():
+        print(f"  Overlap={row['Overlap']}: {row['Total']} samples")
+    
+    # Show first few columns of aggregated data (include Overlap)
     print(f"\nFirst few columns of aggregated data:")
-    display_cols = ['Quad', 'Architecture'] + numeric_columns[:3] + [f"{numeric_columns[0]}_Std"]
+    display_cols = ['Quad', 'Architecture', 'Overlap'] + numeric_columns[:3] + [f"{numeric_columns[0]}_Std"]
     available_display_cols = [col for col in display_cols if col in result_df.columns]
     print(result_df[available_display_cols].head())
     
