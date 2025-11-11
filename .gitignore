@@ -16,3 +16,5 @@ data/
 # MLFlow
 mlruns
 mlartifacts
+
+plots/
