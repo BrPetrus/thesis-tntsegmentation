@@ -15,7 +15,6 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
     
     print(f"Data loaded: {df.shape}")
     print(f"Architectures: {len(df['Architecture'].unique())}")
-    print(f"Quadrants: {sorted(df['Quad'].unique())}")
     
     # Define key Dice and Jaccard metrics to plot
     metrics = {
@@ -36,11 +35,10 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
     
     print(f"Creating plots for {len(available_metrics)} metrics")
     
-    # Get unique architectures and quadrants
+    # Get unique architectures
     architectures = sorted(df['Architecture'].unique())
-    quadrants = sorted(df['Quad'].unique())
     
-    # For each metric, calculate mean and std across all quadrants per architecture
+    # For each metric, calculate mean and std
     for metric_col, metric_name in available_metrics.items():
         std_col = f"{metric_col}_Std"
         
@@ -56,10 +54,9 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
             arch_data = df[df['Architecture'] == arch]
             
             if not arch_data.empty:
-                # Mean across quadrants
-                overall_mean = arch_data[metric_col].mean()
-                # Std across quadrants  
-                overall_std = arch_data[metric_col].std()
+                overall_mean = arch_data[metric_col].item()
+                assert arch_data[metric_col].size == 1
+                overall_std = arch_data[std_col].item()
                 arch_stats.append({
                     'Architecture': arch,
                     'Mean': overall_mean,
@@ -130,9 +127,11 @@ def create_comprehensive_summary(df, available_metrics, output_dir):
         arch_summary = {'Architecture': arch}
         
         for metric_col, metric_name in available_metrics.items():
+            std_col = f"{metric_col}_Std"
             if not arch_data.empty:
-                mean_val = arch_data[metric_col].mean()
-                std_val = arch_data[metric_col].std()
+                mean_val = arch_data[metric_col].item()
+                std_val = arch_data[std_col].item()
+                assert arch_data[metric_col].size == 1
                 arch_summary[f'{metric_name}_Mean'] = mean_val
                 arch_summary[f'{metric_name}_Std'] = std_val if pd.notna(std_val) else 0
             else:

@@ -360,7 +360,7 @@ Examples:
     parser.add_argument('-o', '--output', default='aggregated_results.csv',
                        help='Output CSV file path (default: aggregated_results.csv)')
     parser.add_argument('--overlap', type=int,
-                       help='Filter results to only include this overlap value (e.g., 0, 10, 20, 30, 40)")
+                       help='Filter results to only include this overlap value (e.g., 0, 10, 20, 30, 40)')
     parser.add_argument('--across-quads', action='store_true',
                        help='Aggregate across quadrants (by Architecture only) instead of within quadrants')
     
