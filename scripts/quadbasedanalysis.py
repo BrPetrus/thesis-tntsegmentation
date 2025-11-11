@@ -28,16 +28,6 @@ def create_performance_plots(csv_path, output_dir='./plots'):
     print(f"Mean data shape: {mean_df.shape}")
     print(f"Std data shape: {std_df.shape}")
     
-    # # Define the metrics we want to plot (Dice and Jaccard related columns)
-    # dice_jaccard_columns = [
-    #     'Train_Dice', 'Train_Jaccard',
-    #     'Eval_Dice_Mean', 'Eval_Jaccard_Mean',
-    #     'Postprocess_Overall_Dice', 'Postprocess_Overall_Jaccard',
-    #     'Postprocess_Matched_Dice', 'Postprocess_Matched_Jaccard',
-    #     'Postprocess_Clean_Matched_Dice', 'Postprocess_Clean_Matched_Jaccard',
-    #     'Tunnel_Dice', 'Tunnel_Jaccard'
-    # ]
-    
     # Get unique quadrants and architectures from mean data
     quadrants = sorted(mean_df['Quad'].unique())
     architectures = sorted(mean_df['Architecture'].unique())
@@ -152,10 +142,9 @@ def create_performance_plots(csv_path, output_dir='./plots'):
             ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
             ax.grid(True, alpha=0.3)
             
-            # # Set y-axis limits based on data
-            # max_val = max([max(values) if values else 0 for values in [values]]) if values else 1
-            # ax.set_ylim(0, min(max_val * 1.2, 1.1))
-            ax.set_ylim(0, 0.7)
+            # Set y-axis limits based on data
+            max_val = max([max(values) if values else 0 for values in [values]]) if values else 1
+            ax.set_ylim(0, max_val * 1.4)
         
         # Hide unused subplots
         for idx in range(len(quadrants), len(axes)):
@@ -261,9 +250,8 @@ def create_comprehensive_plot(mean_df, std_df, output_dir):
         
         # Set y-axis limits based on data
         if values:
-            # max_val = max([v for v in values if v > 0] + [0])
-            # ax.set_ylim(0, min(max_val * 1.3, 1.1))
-            ax.set_ylim(0, 0.8)
+            max_val = max([v for v in values if v > 0] + [0])
+            ax.set_ylim(0, max_val * 1.3)
     
     # Remove empty subplots
     for idx in range(len(available_metrics), len(axes)):
