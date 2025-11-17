@@ -143,43 +143,5 @@ echo "Results saved to: ${OUTPUT_BASE}"
 echo "Consolidated CSV: ${CONSOLIDATED_CSV}"
 echo ""
 
-# # Generate summary statistics
-# if command -v python3 &> /dev/null && [ -f "${CONSOLIDATED_CSV}" ]; then
-#     echo "Generating summary..."
-#     python3 - <<EOF
-# import pandas as pd
-# import sys
-
-# try:
-#     df = pd.read_csv("${CONSOLIDATED_CSV}")
-    
-#     print("\n=== SUMMARY BY OVERLAP (ALL RUNS) ===")
-#     summary = df.groupby('Overlap')[['Eval_Dice_Mean', 'Eval_Jaccard_Mean', 'Postprocess_Overall_Dice']].agg(['mean', 'std', 'min', 'max'])
-#     print(summary)
-    
-#     print("\n=== SUMMARY BY RUN ===")
-#     run_summary = df.groupby('Run_Name')[['Eval_Dice_Mean', 'Eval_Jaccard_Mean']].agg(['mean', 'std', 'count'])
-#     print(run_summary)
-    
-#     print("\n=== BEST OVERLAP PER RUN-TRAIN-TEST COMBINATION ===")
-#     best = df.loc[df.groupby(['Run_Name', 'Train_Quad', 'Test_Quad'])['Eval_Dice_Mean'].idxmax()]
-#     print(best[['Run_Name', 'Train_Quad', 'Test_Quad', 'Overlap', 'Eval_Dice_Mean', 'Postprocess_Overall_Dice']].to_string(index=False))
-    
-#     print("\n=== TOP 10 OVERALL CONFIGURATIONS ===")
-#     print(df.nlargest(10, 'Eval_Dice_Mean')[['Run_Name', 'Train_Quad', 'Test_Quad', 'Overlap', 'Eval_Dice_Mean', 'Postprocess_Overall_Dice']].to_string(index=False))
-    
-#     # Export summary to CSV
-#     summary_file = "${OUTPUT_BASE}/overlap_summary.csv"
-#     overlap_summary = df.groupby(['Run_Name', 'Overlap'])[['Eval_Dice_Mean', 'Eval_Jaccard_Mean', 'Postprocess_Overall_Dice']].mean()
-#     overlap_summary.to_csv(summary_file)
-#     print(f"\nSummary exported to: {summary_file}")
-    
-# except Exception as e:
-#     print(f"Could not generate summary: {e}", file=sys.stderr)
-#     import traceback
-#     traceback.print_exc()
-# EOF
-# fi
-
 # echo ""
 echo "Done!"
