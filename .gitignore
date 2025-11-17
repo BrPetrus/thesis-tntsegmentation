@@ -12,6 +12,7 @@ output/
 output*
 checkpoints
 data/
+*.csv
 
 # MLFlow
 mlruns
