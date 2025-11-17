@@ -25,7 +25,7 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
         'Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D4',
         'Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D5',
         'Anisotropicunet3D-D6-Hk(3-3-3)Dk(1-2-2)': 'AnisoUNet-D6',
-        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-3D',
+        # 'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-3D',
         'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)': 'AnisoUNet-2D',
         'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-3D',
         'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-2D',
