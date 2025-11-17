@@ -13,6 +13,17 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
     # Read the CSV
     df = pd.read_csv(csv_path)
     
+    # Rename architectures
+    architecture_name_mapping = {
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-3D',
+        'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)': 'AnisoUNet-2D',
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-3D',
+        'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-2D',
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16': 'AnisoUNet-UseNet-3D',
+        'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16': 'AnisoUNet-UseNet-2D'
+    }
+    df['Architecture'] = df['Architecture'].replace(architecture_name_mapping)
+    print(f"Found architectures: {sorted(df['Architecture'].unique())}")
     print(f"Data loaded: {df.shape}")
     print(f"Architectures: {len(df['Architecture'].unique())}")
     
@@ -97,11 +108,7 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
         ax.set_xticks(x_pos)
         ax.set_xticklabels(short_labels, rotation=45, ha='right', fontsize=10)
         ax.grid(True, alpha=0.3, axis='y')
-        
-        # Set y-axis limits
-        if means and max(means) > 0:
-            max_val = max([m + s for m, s in zip(means, stds) if m > 0])
-            ax.set_ylim(0, max_val * 1.15)
+        ax.set_ylim(0, 0.8)
         
         plt.tight_layout()
         

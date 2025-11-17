@@ -18,8 +18,26 @@ def create_performance_plots(csv_path, output_dir='./plots'):
     # Read the CSV file
     df = pd.read_csv(csv_path)
 
+    # Rename architectures
+    architecture_name_mapping = {
+        'AnisotropicUNet3D-d2-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D2', 
+        'AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D3',
+        'AnisotropicUNet3D-d4-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D4',
+        'AnisotropicUNet3D-d5-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D5',
+        'AnisotropicUNet3D-d6-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D6',
+        'Anisotropicunet3D-D2-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D2', 
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D3',
+        'Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D4',
+        'Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D5',
+        'Anisotropicunet3D-D6-Hk(3-3-3)Dk(1-2-2)': 'AnisoUNet-D6',
+        'UNet3d-BasicUNet': 'BasicUNet3D',
+        'AnisotropicUNet3DSE-d2-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-SE',
+        'AnisotropicUNet3DCSAM-d2-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-CSAM',
+        'AnisotropicUSENet-d2-hk(3-3-3)-dk(1-2-2)': 'AnisoUSENet',
+    }
+    df['Architecture'] = df['Architecture'].replace(architecture_name_mapping)
+    print(f"Found architectures: {sorted(df['Architecture'].unique())}")
     print(f"Data loaded: {df.shape}")
-    print(f"Architectures: {len(df['Architecture'].unique())}")
     
     # Define key Dice and Jaccard metrics to plot
     metrics = {
@@ -44,37 +62,6 @@ def create_performance_plots(csv_path, output_dir='./plots'):
 
     print(f"Creating plots for {len(available_metrics)} metrics")
     
-    # # Separate mean and std data
-    # mean_df = df[~df['Quad'].str.contains('std', na=False)].copy()
-    # std_df = df[df['Quad'].str.contains('std', na=False)].copy()
-    
-    # # Clean the std dataframe - remove 'std' suffix from Quad column
-    # std_df['Quad'] = std_df['Quad'].str.replace('std', '')
-    
-    # print(f"Mean data shape: {mean_df.shape}")
-    # print(f"Std data shape: {std_df.shape}")
-    
-    # # Get unique quadrants and architectures from mean data
-    # quadrants = sorted(mean_df['Quad'].unique())
-    # architectures = sorted(mean_df['Architecture'].unique())
-    
-    # print(f"Found quadrants: {quadrants}")
-    # print(f"Found architectures: {architectures}")
-    
-    # # Set up the plotting style
-    # plt.style.use('default')
-    
-    # # Create plots for each metric category
-    # metric_categories = {
-    #     'Training': ['Train_Dice', 'Train_Jaccard'],
-    #     'Evaluation': ['Eval_Dice_Mean', 'Eval_Jaccard_Mean'],
-    #     'Postprocess_Overall': ['Postprocess_Overall_Dice', 'Postprocess_Overall_Jaccard'],
-    #     'Postprocess_Matched': ['Postprocess_Matched_Dice', 'Postprocess_Matched_Jaccard'],
-    #     'Postprocess_Clean': ['Postprocess_Clean_Matched_Dice', 'Postprocess_Clean_Matched_Jaccard'],
-    #     'Tunnel': ['Tunnel_Dice', 'Tunnel_Jaccard']
-    # }
-    
-    # for category_name, metrics in metric_categories.items():
     for metric_col, metric_name in available_metrics.items():
         std_col = f"{metric_col}_Std"
         if std_col not in df.columns:
@@ -148,8 +135,7 @@ def create_performance_plots(csv_path, output_dir='./plots'):
             ax.set_xticklabels(architectures, rotation=45, ha='right')
             ax.grid(True, alpha=0.3)
 
-            max_val = max(values) if any(v > 0 for v in values) else 1
-            ax.set_ylim(0, max_val * 1.4)
+            ax.set_ylim(0., 0.8)
 
 
         plt.tight_layout()
