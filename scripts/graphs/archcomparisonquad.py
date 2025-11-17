@@ -15,6 +15,16 @@ def create_architecture_comparison_plots(csv_path, output_dir='./plots'):
     
     # Rename architectures
     architecture_name_mapping = {
+        'AnisotropicUNet3D-d2-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D2', 
+        'AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D3',
+        'AnisotropicUNet3D-d4-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D4',
+        'AnisotropicUNet3D-d5-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D5',
+        'AnisotropicUNet3D-d6-hk(3-3-3)-dk(1-2-2)': 'AnisoUNet-D6',
+        'Anisotropicunet3D-D2-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D2', 
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D3',
+        'Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D4',
+        'Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-D5',
+        'Anisotropicunet3D-D6-Hk(3-3-3)Dk(1-2-2)': 'AnisoUNet-D6',
         'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-3D',
         'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)': 'AnisoUNet-2D',
         'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-3D',
