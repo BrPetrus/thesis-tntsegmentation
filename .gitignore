@@ -12,7 +12,11 @@ output/
 output*
 checkpoints
 data/
+*.csv
 
 # MLFlow
 mlruns
 mlartifacts
+
+plots/
+tables/
