@@ -30,7 +30,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
         "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D3",
         "Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D4",
         "Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D5",
-        "Anisotropicunet3D-D6-Hk(3-3-3)Dk(1-2-2)": "AnisoUNet-D6",
+        "Anisotropicunet3D-D6-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D6",
         "UNet3d-BasicUNet": "BasicUNet3D",
         "AnisotropicUNet3DSE-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-SE",
         "AnisotropicUNet3DCSAM-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-CSAM",
@@ -40,6 +40,9 @@ def create_performance_plots(csv_path, output_dir="./plots"):
         "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUSENet-2D",
         "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam": "AnisoUNet-CSAM-3D",
         "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUSENet-3D",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUSENet-3D",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet": "AnisoUSENet-2D",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet": "AnisoUSENet-3D",
     }
     df["Architecture"] = df["Architecture"].replace(architecture_name_mapping)
     print(f"Found architectures: {sorted(df['Architecture'].unique())}")

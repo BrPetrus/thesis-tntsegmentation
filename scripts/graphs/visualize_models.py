@@ -37,10 +37,10 @@ def create_model_configs():
             "channel_growth": 2,
             "horizontal_kernel": (3, 3, 3),
             "horizontal_padding": (1, 1, 1),
-            "downscale_kernel": (2, 2, 2),
-            "downscale_stride": (2, 2, 2),
-            "upscale_kernel": (2, 2, 2),
-            "upscale_stride": (2, 2, 2),
+            "downscale_kernel": (1, 2, 2),
+            "downscale_stride": (1, 2, 2),
+            "upscale_kernel": (1, 2, 2),
+            "upscale_stride": (1, 2, 2),
         },
     }
     return configs
@@ -185,9 +185,9 @@ def main():
 
     # Input sizes to test for basic_unet
     basic_unet_input_sizes = [
-        (1, 1, 16, 64, 64),  # Small
-        (1, 1, 32, 128, 128),  # Medium
-        (1, 1, 64, 128, 128),  # Large
+        (1, 1, 7, 64, 64),  # Small
+        # (1, 1, 32, 128, 128),  # Medium
+        # (1, 1, 64, 128, 128),  # Large
     ]
 
     print("=== MODEL VISUALIZATION GENERATOR ===")
@@ -248,10 +248,10 @@ def main():
                         )
 
                         # Use appropriate input size based on configuration
-                        if config_name == "basic":
-                            input_size = (1, 1, 7, 64, 64)  # Anisotropic
-                        else:
-                            input_size = (1, 1, 16, 64, 64)  # More isotropic
+                        # if config_name == "basic":
+                        input_size = (1, 1, 7, 64, 64)  # Anisotropic
+                        # else:
+                        #     input_size = (1, 1, 16, 64, 64)  # More isotropic
 
                         input_tensor = torch.randn(*input_size)
 

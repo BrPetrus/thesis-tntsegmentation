@@ -27,7 +27,7 @@ def create_metric_tables(csv_path, output_dir="./tables"):
         "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D3",
         "Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D4",
         "Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D5",
-        "Anisotropicunet3D-D6-Hk(3-3-3)Dk(1-2-2)": "AnisoUNet-D6",
+        "Anisotropicunet3D-D6-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D6",
         "UNet3d-BasicUNet": "BasicUNet3D",
         "AnisotropicUNet3DSE-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-SE",
         "AnisotropicUNet3DCSAM-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-CSAM",
