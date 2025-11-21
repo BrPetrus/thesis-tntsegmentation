@@ -38,6 +38,7 @@ echo "==================================="
 echo "Runs directory: ${RUNS_DIR}"
 echo "Output directory: ${OUTPUT_BASE}"
 echo "Overlaps to test: ${OVERLAPS[*]}"
+echo "Eval mode: Same quad only"
 echo "==================================="
 echo ""
 
@@ -68,7 +69,7 @@ echo ""
 
 # Initialize consolidated results CSV
 CONSOLIDATED_CSV="${OUTPUT_BASE}/consolidated_results.csv"
-echo "Run_Name,Overlap,Database_Path,Run_Name_Internal,Run_ID,Model_Signature,Train_Dice,Train_Jaccard,Eval_Dice_Mean,Eval_Dice_Std,Eval_Jaccard_Mean,Eval_Jaccard_Std,Eval_Accuracy_Mean,Eval_Accuracy_Std,Eval_Precision_Mean,Eval_Precision_Std,Eval_Recall_Mean,Eval_Recall_Std,Eval_Tversky_Mean,Eval_Tversky_Std,Eval_Focal_Tversky_Mean,Eval_Focal_Tversky_Std,Postprocess_Overall_Dice,Postprocess_Overall_Jaccard,Postprocess_Overall_Precision,Postprocess_Overall_Recall,Postprocess_Matched_Dice,Postprocess_Matched_Jaccard,Postprocess_Matched_Precision,Postprocess_Matched_Recall,Postprocess_Clean_Matched_Dice,Postprocess_Clean_Matched_Jaccard,Postprocess_Clean_Matched_Precision,Postprocess_Clean_Matched_Recall,Tunnel_TP,Tunnel_FP,Tunnel_FN,Tunnel_Precision,Tunnel_Recall,Tunnel_Dice,Tunnel_Jaccard,Unmatched_Predictions,Unmatched_Labels,Train_Quad,Test_Quad" > "${CONSOLIDATED_CSV}"
+echo "Run_Name,Overlap,Database_Path,Run_Name_Internal,Run_ID,Model_Signature,Train_Dice,Train_Jaccard,Eval_Dice_Mean,Eval_Dice_Std,Eval_Jaccard_Mean,Eval_Jaccard_Std,Eval_Accuracy_Mean,Eval_Accuracy_Std,Eval_Precision_Mean,Eval_Precision_Std,Eval_Recall_Mean,Eval_Recall_Std,Eval_Tversky_Mean,Eval_Tversky_Std,Eval_Focal_Tversky_Mean,Eval_Focal_Tversky_Std,Postprocess_Overall_Dice,Postprocess_Overall_Jaccard,Postprocess_Overall_Precision,Postprocess_Overall_Recall,Postprocess_Matched_Dice,Postprocess_Matched_Jaccard,Postprocess_Matched_Precision,Postprocess_Matched_Recall,Postprocess_Clean_Matched_Dice,Postprocess_Clean_Matched_Jaccard,Postprocess_Clean_Matched_Precision,Postprocess_Clean_Matched_Recall,Tunnel_TP,Tunnel_FP,Tunnel_FN,Tunnel_Precision,Tunnel_Recall,Tunnel_Dice,Tunnel_Jaccard,Unmatched_Predictions,Unmatched_Labels,Train_Quad,Test_Quad,Tile_Overlap" > "${CONSOLIDATED_CSV}"
 
 # Counter for progress
 TOTAL_RUNS=$((${#RUN_DIRS[@]} * ${#OVERLAPS[@]}))
@@ -99,11 +100,12 @@ for run_dir in "${RUN_DIRS[@]}"; do
         # We'll capture the output and move it
         TEMP_OUTPUT_BASE="./output/output-train-all-quads"
         
-        # Run the evaluation using run.sh
+        # Run the evaluation using run.sh with --eval-same-quad-only flag
         ./run.sh \
             --mode eval \
             --model-dir "${run_dir}" \
             --overlap_px ${overlap} \
+            --eval-same-quad-only \
             --run-postprocessing \
             --prediction-threshold 0.5 \
             --recall-threshold 0.5 \
