@@ -96,14 +96,11 @@ for run_dir in "${RUN_DIRS[@]}"; do
         RUN_OUTPUT="${OUTPUT_BASE}/${RUN_NAME}_overlap_${overlap}"
         mkdir -p "${RUN_OUTPUT}"
         
-        # Temporarily override OUTPUT_BASE in run.sh by modifying its behavior
-        # We'll capture the output and move it
-        TEMP_OUTPUT_BASE="./output/output-train-all-quads"
-        
-        # Run the evaluation using run.sh with --eval-same-quad-only flag
+        # Run the evaluation using run.sh with custom output directory
         ./run.sh \
             --mode eval \
             --model-dir "${run_dir}" \
+            --output-dir "${RUN_OUTPUT}" \
             --overlap_px ${overlap} \
             --eval-same-quad-only \
             --run-postprocessing \
@@ -111,22 +108,14 @@ for run_dir in "${RUN_DIRS[@]}"; do
             --recall-threshold 0.5 \
             --minimum-size 100
         
-        # Find the most recent output directory created by run.sh
-        LATEST_RUN=$(ls -td ${TEMP_OUTPUT_BASE}/*/ 2>/dev/null | head -1)
-        if [ -d "${LATEST_RUN}" ]; then
-            echo "Moving results from ${LATEST_RUN} to ${RUN_OUTPUT}/"
-            
-            # Copy results file if it exists
-            if [ -f "${LATEST_RUN}/all_results.csv" ]; then
-                # Append to consolidated CSV with run name and overlap
-                tail -n +2 "${LATEST_RUN}/all_results.csv" | while IFS=, read -r line; do
-                    echo "${RUN_NAME},${overlap},${line}" >> "${CONSOLIDATED_CSV}"
-                done
-            fi
-            
-            # Move all files
-            mv "${LATEST_RUN}"/* "${RUN_OUTPUT}/" 2>/dev/null || true
-            rmdir "${LATEST_RUN}" 2>/dev/null || true
+        # Append results to consolidated CSV
+        if [ -f "${RUN_OUTPUT}/all_results.csv" ]; then
+            # Append all data rows (skip header) with run name and overlap prefix
+            tail -n +2 "${RUN_OUTPUT}/all_results.csv" | while IFS=, read -r line; do
+                echo "${RUN_NAME},${overlap},${line}" >> "${CONSOLIDATED_CSV}"
+            done
+        else
+            echo "Warning: No results CSV found at ${RUN_OUTPUT}/all_results.csv"
         fi
         
         echo "✓ Completed ${RUN_NAME} with overlap=${overlap}px"

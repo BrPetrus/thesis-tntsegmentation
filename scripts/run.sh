@@ -13,7 +13,8 @@ MODE="eval"  # Options: train, eval, both
 # Training options
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
+OUTPUT_BASE=""  # Will be set via CLI or default
+DEFAULT_OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
 EPOCHS=1000
 WORKERS=4
 BATCH=32
@@ -43,9 +44,9 @@ PREDICTION_THRESHOLD=0.5
 RECALL_THRESHOLD=0.5
 MINIMUM_SIZE=100
 
-# Misc. options
-RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
-ENV_VAR="${OUTPUT_BASE}/env.txt"
+# Misc. options - will be updated after OUTPUT_BASE is set
+RESULTS_CSV=""
+ENV_VAR=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -56,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --model-dir)
             MODEL_DIR="$2"
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_BASE="$2"
             shift 2
             ;;
         --overlap_px)
@@ -91,6 +96,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --mode [train|eval|both]     What to run (default: both)"
             echo "  --model-dir PATH             Directory containing trained models (required for eval mode)"
+            echo "  --output-dir PATH            Custom output directory (default: ./output/output-train-all-quads/TIMESTAMP)"
             echo "  --overlap_px N               Tile overlap in pixels (default: 0)"
             echo "  --seed N                     Random seed for training"
             echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
@@ -107,6 +113,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --mode eval --model-dir ./models --overlap_px 40 # Evaluate with custom overlap"
             echo "  $0 --mode eval --model-dir ./models --run-postprocessing # Evaluate with postprocessing"
             echo "  $0 --mode eval --model-dir ./models --eval-same-quad-only # Evaluate only matching quads"
+            echo "  $0 --mode eval --model-dir ./models --output-dir /tmp/results # Custom output location"
             exit 0
             ;;
         *)
@@ -116,6 +123,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Set OUTPUT_BASE to default if not provided
+if [ -z "${OUTPUT_BASE}" ]; then
+    OUTPUT_BASE="${DEFAULT_OUTPUT_BASE}"
+fi
+
+# Set dependent paths
+RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
+ENV_VAR="${OUTPUT_BASE}/env.txt"
 
 # Validate arguments
 if [ "${MODE}" = "eval" ] && [ -z "${MODEL_DIR}" ]; then
