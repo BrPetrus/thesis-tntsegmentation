@@ -91,13 +91,13 @@ def create_performance_plots(csv_path, output_dir="./plots"):
             continue
 
         # The user guarantees exactly 4 quadrants with filled values -> use a 2x2 layout
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig, axes = plt.subplots(2, 2, figsize=(10, 10))
         axes = axes.flatten()
-        fig.suptitle(
-            f"{metric_name} by Architecture and Quadrant",
-            fontsize=16,
-            fontweight="bold",
-        )
+        # fig.suptitle(
+        #     f"{metric_name} by Architecture and Quadrant",
+        #     fontsize=16,
+        #     fontweight="bold",
+        # )
 
         std_col = f"{metric_col}_Std"
         has_std_col = std_col in data.columns
@@ -158,7 +158,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
                         f"{val:.3f}",
                         ha="center",
                         va="bottom",
-                        fontsize=8,
+                        fontsize=12,
                     )
 
             ax.set_title(str(quad).upper(), fontweight="bold")
@@ -168,12 +168,12 @@ def create_performance_plots(csv_path, output_dir="./plots"):
             ax.set_xticklabels(architectures, rotation=45, ha="right")
             ax.grid(True, alpha=0.3)
 
-            ax.set_ylim(0.0, 0.8)
+            ax.set_ylim(0.0, 1.0)
 
         plt.tight_layout()
         filename = metric_col.replace(" ", "_").lower()
         plot_path = output_dir / f"{filename}_by_quad_arch.png"
-        plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+        plt.savefig(plot_path, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved plot: {plot_path}")
 
@@ -429,4 +429,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # Set global font size
+    plt.rcParams['font.size'] = 14
     main()
