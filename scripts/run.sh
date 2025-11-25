@@ -9,7 +9,7 @@ export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 # CLI option
-MODE="eval"  # Options: train, eval, both
+MODE="both"  # Options: train, eval, both
 
 # Training options
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
@@ -20,12 +20,12 @@ WORKERS=4
 BATCH=32
 MLFLOW_SERVER_PORT=8800
 LR=0.0001
-MODEL=anisotropicunet_csam
+MODEL=anisotropicunet_usenet
 SEED=42
 MODEL_DEPTH=3
 WEIGHT_DECAY=0.0001
-HORIZONTAL_KERNEL="3,3,3"
-HORIZONTAL_PADDING="1,1,1"
+HORIZONTAL_KERNEL="1,3,3"
+HORIZONTAL_PADDING="0,1,1"
 DOWNSCALE_KERNEL="1,2,2"
 DOWNSCALE_STRIDE="1,2,2"
 UPSCALE_STRIDE="1,2,2"
