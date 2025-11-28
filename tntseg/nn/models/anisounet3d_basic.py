@@ -132,7 +132,7 @@ class AnisotropicUNet3D(nn.Module):
         return self.final_conv(x)
     
     def get_signature(self) -> str:
-        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}-dk{self.downsampling_kernel}"
+        return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}-dk{self.downsampling_kernel}".replace(',','_')
 
 
 def create_anisotropic_unet3d(config):
