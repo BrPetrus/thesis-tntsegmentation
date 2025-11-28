@@ -20,7 +20,7 @@ WORKERS=4
 BATCH=32
 MLFLOW_SERVER_PORT=8800
 LR=0.0001
-MODEL=anisotropicunet_usenet
+MODEL=anisotropicunet_csam
 SEED=42
 MODEL_DEPTH=3
 WEIGHT_DECAY=0.0001
@@ -33,7 +33,7 @@ UPSCALE_KERNEL="1,2,2"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
-TILE_OVERLAP=20
+TILE_OVERLAP=0
 MODEL_DIR="/home/xpetrus/DP/DP-WIP/scripts/output/output-train-all-quads/2025-10-28_20-02-21/"  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
 EVAL_SAME_QUAD_ONLY=false
