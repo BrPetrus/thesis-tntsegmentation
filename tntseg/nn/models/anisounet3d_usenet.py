@@ -81,9 +81,9 @@ class AnisotropicUSENet(AnisotropicUNet3D):
                     HorizontalBlock(
                         in_channels=in_chann,
                         out_channels=out_chann,
-                        kernel=(3,3,3),
+                        kernel=horizontal_kernel,
                         stride=horizontal_stride,
-                        padding=(1,1,1)
+                        padding=horizontal_padding
                     )
                 ])
             )

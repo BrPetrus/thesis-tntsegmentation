@@ -64,7 +64,12 @@ class AnisotropicUNet3DCSAM(AnisotropicUNet3D):
         x = self.neck(x)
 
         # Apply the Spatial Attention from CSNet paper
-        attention = self.affinity_attention(x)
+        # Note: that the authors of CSAM expected a different perumation of the dimensions
+        #       it should not really make a difference due to the symmetric nature of the CSAM
+        #       block, but just in case we are leaving this here.
+        x_perm = x.permute(0, 1, 3, 4, 2).contiguous()  # B,C,D,H,W ~> B,C,H,W,D
+        attention = self.affinity_attention(x_perm)
+        attention = attention.permute(0, 1, 4, 2, 3).contiguous()  # B,C,H,W,D ~> B,C,D,H,W
         x = x + attention
 
         # Expansive path

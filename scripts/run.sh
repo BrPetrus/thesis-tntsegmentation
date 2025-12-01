@@ -5,16 +5,16 @@
 TIME=$((10*3600))
 echo "Setting time limit to $(($TIME / 3600)) hours"
 ulimit -t $TIME
-export CUDA_VISIBLE_DEVICES=3
 echo "Currently visible CUDA capable devices: ${CUDA_VISIBLE_DEVICES}"
 
 # CLI option
-MODE="eval"  # Options: train, eval, both
+MODE="both"  # Options: train, eval, both
 
 # Training options
 INPUT_ROOT="/home/xpetrus/Desktop/DP/Datasets/TNT_data/annotations/2025-10-01"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
+OUTPUT_BASE=""  # Will be set via CLI or default
+DEFAULT_OUTPUT_BASE="./output/output-train-all-quads/${TIMESTAMP}"
 EPOCHS=1000
 WORKERS=4
 BATCH=32
@@ -24,8 +24,8 @@ MODEL=anisotropicunet_csam
 SEED=42
 MODEL_DEPTH=3
 WEIGHT_DECAY=0.0001
-HORIZONTAL_KERNEL="3,3,3"
-HORIZONTAL_PADDING="1,1,1"
+HORIZONTAL_KERNEL="1,3,3"
+HORIZONTAL_PADDING="0,1,1"
 DOWNSCALE_KERNEL="1,2,2"
 DOWNSCALE_STRIDE="1,2,2"
 UPSCALE_STRIDE="1,2,2"
@@ -33,9 +33,10 @@ UPSCALE_KERNEL="1,2,2"
 QUADS=(quad1 quad2 quad3 quad4)
 
 # Evaluation specific options
-TILE_OVERLAP=20
+TILE_OVERLAP=0
 MODEL_DIR="/home/xpetrus/DP/DP-WIP/scripts/output/output-train-all-quads/2025-10-28_20-02-21/"  # Must be provided for eval-only mode
 EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
+EVAL_SAME_QUAD_ONLY=false
 
 # Postprocessing options
 RUN_POSTPROCESSING=true
@@ -43,9 +44,9 @@ PREDICTION_THRESHOLD=0.5
 RECALL_THRESHOLD=0.5
 MINIMUM_SIZE=100
 
-# Misc. options
-RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
-ENV_VAR="${OUTPUT_BASE}/env.txt"
+# Misc. options - will be updated after OUTPUT_BASE is set
+RESULTS_CSV=""
+ENV_VAR=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -58,12 +59,20 @@ while [[ $# -gt 0 ]]; do
             MODEL_DIR="$2"
             shift 2
             ;;
+        --output-dir)
+            OUTPUT_BASE="$2"
+            shift 2
+            ;;
         --overlap_px)
             TILE_OVERLAP="$2"
             shift 2
             ;;
         --run-postprocessing)
             RUN_POSTPROCESSING=true
+            shift
+            ;;
+        --eval-same-quad-only)
+            EVAL_SAME_QUAD_ONLY=true
             shift
             ;;
         --seed)
@@ -87,9 +96,11 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --mode [train|eval|both]     What to run (default: both)"
             echo "  --model-dir PATH             Directory containing trained models (required for eval mode)"
+            echo "  --output-dir PATH            Custom output directory (default: ./output/output-train-all-quads/TIMESTAMP)"
             echo "  --overlap_px N               Tile overlap in pixels (default: 0)"
             echo "  --seed N                     Random seed for training"
             echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
+            echo "  --eval-same-quad-only        Only evaluate each model on its corresponding quadrant"
             echo "  --prediction-threshold F     Threshold for binarizing predictions (default: 0.5)"
             echo "  --recall-threshold F         Recall threshold for tunnel matching (default: 0.5)"
             echo "  --minimum-size N             Minimum size for connected components (default: 100)"
@@ -101,6 +112,8 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --mode both                                     # Train then evaluate"
             echo "  $0 --mode eval --model-dir ./models --overlap_px 40 # Evaluate with custom overlap"
             echo "  $0 --mode eval --model-dir ./models --run-postprocessing # Evaluate with postprocessing"
+            echo "  $0 --mode eval --model-dir ./models --eval-same-quad-only # Evaluate only matching quads"
+            echo "  $0 --mode eval --model-dir ./models --output-dir /tmp/results # Custom output location"
             exit 0
             ;;
         *)
@@ -110,6 +123,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Set OUTPUT_BASE to default if not provided
+if [ -z "${OUTPUT_BASE}" ]; then
+    OUTPUT_BASE="${DEFAULT_OUTPUT_BASE}"
+fi
+
+# Set dependent paths
+RESULTS_CSV="${OUTPUT_BASE}/all_results.csv"
+ENV_VAR="${OUTPUT_BASE}/env.txt"
 
 # Validate arguments
 if [ "${MODE}" = "eval" ] && [ -z "${MODEL_DIR}" ]; then
@@ -127,6 +149,7 @@ fi
 mkdir -p "${OUTPUT_BASE}"
 echo "Running in mode: ${MODE}" | tee "${OUTPUT_BASE}/run_mode.log"
 echo "Postprocessing enabled: ${RUN_POSTPROCESSING}" | tee -a "${OUTPUT_BASE}/run_mode.log"
+echo "Eval same quad only: ${EVAL_SAME_QUAD_ONLY}" | tee -a "${OUTPUT_BASE}/run_mode.log"
 
 # Training function
 run_training() {
@@ -208,9 +231,19 @@ run_evaluation() {
         
         echo "Evaluating model trained on ${TRAIN_QUAD} (${MODEL_PATH})..."
         
-        # Evaluate on all quadrants
-        for j in "${!QUADS[@]}"; do
-            TEST_QUAD=${QUADS[$j]}
+        # Determine which quadrants to evaluate on
+        if [ "${EVAL_SAME_QUAD_ONLY}" = true ]; then
+            # Only evaluate on the same quadrant
+            TEST_QUADS=("${TRAIN_QUAD}")
+            echo "  Evaluating only on matching quadrant: ${TRAIN_QUAD}"
+        else
+            # Evaluate on all quadrants
+            TEST_QUADS=("${QUADS[@]}")
+            echo "  Evaluating on all quadrants"
+        fi
+        
+        # Evaluate on selected quadrants
+        for TEST_QUAD in "${TEST_QUADS[@]}"; do
             TEST_DATA="${EVAL_ROOT}/${TEST_QUAD}"
             EVAL_OUTPUT="${OUTPUT_BASE}/${TRAIN_QUAD}_on_${TEST_QUAD}_overlap_${TILE_OVERLAP}"
             
@@ -315,6 +348,7 @@ echo "Timestamp: ${TIMESTAMP}"
 echo "Output directory: ${OUTPUT_BASE}"
 if [ "${MODE}" = "eval" ] || [ "${MODE}" = "both" ]; then
     echo "Tile overlap: ${TILE_OVERLAP}px"
+    echo "Eval same quad only: ${EVAL_SAME_QUAD_ONLY}"
     echo "Postprocessing: ${RUN_POSTPROCESSING}"
     if [ "${RUN_POSTPROCESSING}" = true ]; then
         echo "  Minimum size: ${MINIMUM_SIZE}"

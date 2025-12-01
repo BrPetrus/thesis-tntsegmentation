@@ -321,6 +321,11 @@ def detect_tunnels(
         output_folder / "processed_prediction_binary.tif", labeled_prediction != 0
     )
 
+    # TODO fix
+    if gt_labeled is None:
+        return
+
+
     binary_filtered_pred = labeled_prediction != 0
     binary_gt = gt_labeled != 0
 

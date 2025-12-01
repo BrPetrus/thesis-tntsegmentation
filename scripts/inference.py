@@ -149,7 +149,7 @@ def run_inference(
     
     # Tile the volume
     tiles_data, tiles_positions = tile_volume(
-        image_normalized, crop_size, overlap=tile_overlap
+        image_normalized, crop_size, overlap=tile_overlap,
     )
     
     tiles_dataset = TiledDataset(tiles_data, tiles_positions)
@@ -179,13 +179,15 @@ def run_inference(
     # Stitch predictions
     print("Stitching tiles...")
     all_predictions_tensor = torch.stack(all_predictions)
-    reconstructed_volume = stitch_volume(
+    # TODO revert
+    reconstructed_volume, rec = stitch_volume(
         all_predictions_tensor,
         all_positions,
         original_shape=image.shape,
         aggregation_method=AggregationMethod.Mean,
-        visualise_lines=False,
+        visualise_lines=True,
     )
+    tifffile.imwrite('stichlines.tif', rec)
     
     # Apply sigmoid to get probabilities
     probabilities = torch.sigmoid(reconstructed_volume).numpy()
@@ -212,8 +214,8 @@ def run_inference(
             # Note: Without ground truth, we pass None for GT mask
             tunnel_result = detect_tunnels(
                 probabilities,
-                gt_instance_mask=None,  # No ground truth available
-                original_image=image,
+                gt_labeled=None,  # No ground truth available
+                image=image,
                 config=postprocess_config,
                 output_folder=postproc_dir,
                 visualise=True

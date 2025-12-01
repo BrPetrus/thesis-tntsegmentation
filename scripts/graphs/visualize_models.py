@@ -186,8 +186,6 @@ def main():
     # Input sizes to test for basic_unet
     basic_unet_input_sizes = [
         (1, 1, 7, 64, 64),  # Small
-        # (1, 1, 32, 128, 128),  # Medium
-        # (1, 1, 64, 128, 128),  # Large
     ]
 
     print("=== MODEL VISUALIZATION GENERATOR ===")
@@ -247,11 +245,7 @@ def main():
                             f"Created {model_type}: {model.__class__.__name__} (depth={depth})"
                         )
 
-                        # Use appropriate input size based on configuration
-                        # if config_name == "basic":
                         input_size = (1, 1, 7, 64, 64)  # Anisotropic
-                        # else:
-                        #     input_size = (1, 1, 16, 64, 64)  # More isotropic
 
                         input_tensor = torch.randn(*input_size)
 
