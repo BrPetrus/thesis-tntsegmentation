@@ -1,0 +1,138 @@
+#!/bin/bash
+
+# Automated overlap study for diploma thesis
+# Evaluates all model runs in a directory with multiple tile overlaps
+
+set -e
+
+# Hardcoded configuration
+OVERLAPS=(0 10 20 30 40)
+EVAL_ROOT="/home/xpetrus/DP/Datasets/TNT_data/evaluations_datasets/"
+TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+
+# Get runs directory from argument
+RUNS_DIR="${1:-}"
+
+if [ -z "${RUNS_DIR}" ]; then
+    echo "Usage: $0 <runs_directory>"
+    echo ""
+    echo "Example: $0 ./output/output-train-all-quads/"
+    echo ""
+    echo "The script will find all subdirectories containing trained models and"
+    echo "evaluate each with overlaps: ${OVERLAPS[*]}"
+    exit 1
+fi
+
+if [ ! -d "${RUNS_DIR}" ]; then
+    echo "Error: Directory '${RUNS_DIR}' does not exist"
+    exit 1
+fi
+
+# Create output directory for this study
+OUTPUT_BASE="./output/overlap_study_diff_arch/overlap_study_${TIMESTAMP}"
+mkdir -p "${OUTPUT_BASE}"
+
+echo "==================================="
+echo "OVERLAP STUDY (MULTI-RUN)"
+echo "==================================="
+echo "Runs directory: ${RUNS_DIR}"
+echo "Output directory: ${OUTPUT_BASE}"
+echo "Overlaps to test: ${OVERLAPS[*]}"
+echo "Eval mode: Same quad only"
+echo "==================================="
+echo ""
+
+# Find all run directories (directories containing *_model subdirectories)
+echo "Scanning for run directories..."
+RUN_DIRS=()
+
+for dir in "${RUNS_DIR}"/*/ ; do
+    if [ -d "${dir}" ]; then
+        # Check if this directory has model subdirectories
+        if ls "${dir}"/*_model/model_final.pth 1> /dev/null 2>&1; then
+            RUN_DIRS+=("${dir}")
+            echo "  Found: $(basename ${dir})"
+        fi
+    fi
+done
+
+if [ ${#RUN_DIRS[@]} -eq 0 ]; then
+    echo "Error: No run directories with trained models found in ${RUNS_DIR}"
+    echo "Expected structure: ${RUNS_DIR}/*/quad*_model/model_final.pth"
+    exit 1
+fi
+
+echo ""
+echo "Found ${#RUN_DIRS[@]} run directories"
+echo "Total evaluations: $((${#RUN_DIRS[@]} * ${#OVERLAPS[@]}))"
+echo ""
+
+# Initialize consolidated results CSV
+CONSOLIDATED_CSV="${OUTPUT_BASE}/consolidated_results.csv"
+echo "Run_Name,Overlap,Database_Path,Run_Name_Internal,Run_ID,Model_Signature,Train_Dice,Train_Jaccard,Eval_Dice_Mean,Eval_Dice_Std,Eval_Jaccard_Mean,Eval_Jaccard_Std,Eval_Accuracy_Mean,Eval_Accuracy_Std,Eval_Precision_Mean,Eval_Precision_Std,Eval_Recall_Mean,Eval_Recall_Std,Eval_Tversky_Mean,Eval_Tversky_Std,Eval_Focal_Tversky_Mean,Eval_Focal_Tversky_Std,Postprocess_Overall_Dice,Postprocess_Overall_Jaccard,Postprocess_Overall_Precision,Postprocess_Overall_Recall,Postprocess_Matched_Dice,Postprocess_Matched_Jaccard,Postprocess_Matched_Precision,Postprocess_Matched_Recall,Postprocess_Clean_Matched_Dice,Postprocess_Clean_Matched_Jaccard,Postprocess_Clean_Matched_Precision,Postprocess_Clean_Matched_Recall,Tunnel_TP,Tunnel_FP,Tunnel_FN,Tunnel_Precision,Tunnel_Recall,Tunnel_Dice,Tunnel_Jaccard,Unmatched_Predictions,Unmatched_Labels,Train_Quad,Test_Quad,Tile_Overlap" > "${CONSOLIDATED_CSV}"
+
+# Counter for progress
+TOTAL_RUNS=$((${#RUN_DIRS[@]} * ${#OVERLAPS[@]}))
+CURRENT_RUN=0
+
+# Process each run directory
+for run_dir in "${RUN_DIRS[@]}"; do
+    RUN_NAME=$(basename "${run_dir}")
+    
+    echo "######################################"
+    echo "# Processing: ${RUN_NAME}"
+    echo "######################################"
+    echo ""
+    
+    # Run evaluation for each overlap
+    for overlap in "${OVERLAPS[@]}"; do
+        CURRENT_RUN=$((CURRENT_RUN + 1))
+        
+        echo ""
+        echo "[$CURRENT_RUN/$TOTAL_RUNS] ${RUN_NAME} with overlap=${overlap}px..."
+        echo "-----------------------------------"
+        
+        # Create output folder for this run and overlap
+        RUN_OUTPUT="${OUTPUT_BASE}/${RUN_NAME}_overlap_${overlap}"
+        mkdir -p "${RUN_OUTPUT}"
+        
+        # Run the evaluation using run.sh with custom output directory
+        ./run.sh \
+            --mode eval \
+            --model-dir "${run_dir}" \
+            --output-dir "${RUN_OUTPUT}" \
+            --overlap_px ${overlap} \
+            --eval-same-quad-only \
+            --run-postprocessing \
+            --prediction-threshold 0.5 \
+            --recall-threshold 0.5 \
+            --minimum-size 100
+        
+        # Append results to consolidated CSV
+        if [ -f "${RUN_OUTPUT}/all_results.csv" ]; then
+            # Append all data rows (skip header) with run name and overlap prefix
+            tail -n +2 "${RUN_OUTPUT}/all_results.csv" | while IFS=, read -r line; do
+                echo "${RUN_NAME},${overlap},${line}" >> "${CONSOLIDATED_CSV}"
+            done
+        else
+            echo "Warning: No results CSV found at ${RUN_OUTPUT}/all_results.csv"
+        fi
+        
+        echo "✓ Completed ${RUN_NAME} with overlap=${overlap}px"
+    done
+    
+    echo ""
+done
+
+echo ""
+echo "==================================="
+echo "OVERLAP STUDY COMPLETE"
+echo "==================================="
+echo "Processed ${#RUN_DIRS[@]} run directories"
+echo "Completed ${CURRENT_RUN} evaluations"
+echo "Results saved to: ${OUTPUT_BASE}"
+echo "Consolidated CSV: ${CONSOLIDATED_CSV}"
+echo ""
+
+# echo ""
+echo "Done!"

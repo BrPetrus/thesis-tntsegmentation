@@ -1,5 +1,6 @@
 from pathlib import Path
 import matplotlib
+from enum import StrEnum, auto
 from torch.utils.data import Dataset
 from torchvision import datasets
 from torchvision.transforms import ToTensor
@@ -9,6 +10,9 @@ import tifffile
 from typing import Optional, Tuple, List
 import numpy as np
 from numpy.typing import NDArray
+import torch
+import time
+from monai.utils import set_determinism
 
 
 def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) -> pd.DataFrame:
@@ -51,66 +55,98 @@ def load_dataset_metadata(img_folder: str, mask_folder: Optional[str] = None) ->
     df = pd.DataFrame(data)
     return df.sort_values('img_path').reset_index(drop=True)
 
+class MaskType(StrEnum):
+    binary = auto()
+    instance = auto()
 
-# TODO: add transformation pipeline option
 class TNTDataset(Dataset):
-    def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True, transforms: Optional[List] = None):
+    def __init__(self, dataframe: pd.DataFrame, load_masks: bool = True, transforms: Optional[List] = None, mask_type: MaskType = MaskType.binary):
+        """
+        Dataset for TNT segmentation.
+        
+        Args:
+            dataframe: DataFrame with columns ['img_path'] and optionally ['mask_path']
+            load_masks: Whether to load mask images
+            transforms: Albumentations transforms to apply
+            mask_type: 'binary' for training, 'instance' for evaluation
+        """
         self.dataframe = dataframe.copy()
         self.load_masks = load_masks
         self.transforms = transforms
+        self.mask_type = mask_type
 
         if self.load_masks and 'mask_path' not in self.dataframe.columns:
             raise ValueError("load_masks=True requires 'mask_path' column in dataframe")
-
+            
+        # Load and process the data
         self.data = []
         self.mask_data = []
-
+        
+        # Regular mode - load full images
+        self._load_full_images()
+    
+    def _load_full_images(self):
+        """Load full images"""
         for idx, row in self.dataframe.iterrows():
-            img = tifffile.imread(row['img_path'])  # NOTE: img_file shoud contain just the id + suffix
-            if img.dtype != np.uint16:
-                raise RuntimeError(f"Expected unsigned 16bit integer got {img.dtype} for image at path {row['img_path']}")
-            img = img.astype(np.float32)
+            img = tifffile.imread(row['img_path'])
             self.data.append(img)
 
             if self.load_masks:
-                # mask_full_path = mask_folder_path / img_file.name
                 mask = tifffile.imread(row['mask_path'])
                 if img.shape != mask.shape:
                     raise RuntimeError(f"Size mismatch {img.shape} != {mask.shape}: {row['img_path']} and {row['mask_path']}")
 
-                # Convert to boolean array
-                if mask.dtype == np.uint8 and not set(np.unique(mask)).issubset(set(0,255)):
-                    raise RuntimeError(f"Expected just 0 and 255 in file at {row['mask_path']}, got {np.unique(mask)}")
-                elif mask.dtype == np.uint8:
-                    mask //= 255
-
-                mask = mask.astype(np.float32)
+                # Process based on type
+                if self.mask_type == MaskType.binary:
+                    mask = self._process_binary_mask(mask)
+                elif self.mask_type == MaskType.instance:
+                    mask = self._process_instance_mask(mask)
+                else:
+                    assert False  # NOTE: this should never happen
                 self.mask_data.append(mask)
+    
+    def _process_binary_mask(self, mask):
+        # Convert to float32 (handle uint8 masks)
+        if mask.dtype != np.uint8 or not set(np.unique(mask)).issubset(set([0,255])):
+            raise RuntimeError(f"Expected just 0 and 255 values in 8bit unsigned integer")
+        return mask.astype(np.uint8) / 255.0
+    
+    def _process_instance_mask(self, mask):
+        if mask.dtype != np.uint8 and mask.dtype !=np.uint16:
+            raise RuntimeError(f"Expected 8/16bit unsigned integer mask. Got {mask.dtype}")
+        return mask
     
     def __len__(self) -> int:
         return len(self.data)
     
-    def __getitem__(self, idx: int) -> NDArray[np.uint16] | Tuple[NDArray[np.uint16], NDArray[np.bool]]:
+    def __getitem__(self, idx: int):
         if idx < 0 or idx >= len(self):
             raise ValueError(f"Index {idx} out of range [0, {len(self)})")
-        
-        data = self.data[idx]
-        data = (data - data.min()) / (data.max() - data.min())
 
+        data = self.data[idx]
+
+        # Use a combination of the current time and the sample index to ensure uniqueness
+        seed = int(time.time() * 1000) % (2**32) + idx
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        set_determinism(seed=seed)
+        self.transforms.set_random_state(seed)
+
+        # MONAI compatible dictionary
+        sample = {
+            'volume': torch.tensor(data[np.newaxis, ...], dtype=torch.float32)
+        }
+        
         if self.load_masks:
             mask = self.mask_data[idx]
-            transformed = self.transforms(volume=data, mask3d=mask)
+            sample['mask3d'] = torch.tensor(mask[np.newaxis, ...], dtype=torch.float32)
+            transformed = self.transforms(sample)
             return transformed['volume'], transformed['mask3d']
         else:
-            return self.transforms(volume=data)['volume']
-
-        # processed_data = self.transforms(data)
-        # if self.load_masks:
-        #     mask = self.mask_data[idx]
-        #     processed_mask = self.transforms(mask)
-        #     return processed_data, processed_mask
-        # return processed_data
-
+            transformed = self.transforms(sample)
+            return transformed['volume']
+    
+# TODO: check if this still works
 if __name__ == "__main__":
     import argparse
     import matplotlib.pyplot as plt

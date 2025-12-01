@@ -14,7 +14,8 @@ dependencies = [
     "imagecodecs>=2025.3.30",
     "ipython>=9.0.2",
     "matplotlib>=3.10.1",
-    "mlflow[torch-cpu]>=3.1.1",
+    "mlflow>=3.1.1",
+    "monai>=1.5.0",
     "numpy>=2.1.2",
     "pandas>=2.2.3",
     "pyqt5>=5.15.11",
@@ -39,7 +40,17 @@ torch-gpu = [
     "torch==2.6.0+cu124",
     "torchvision==0.21.0+cu124"
 ]
+jupyter = [
+    "jupyterlab>=4.1.6",
+]
 
 
 [tool.uv]
 extra-index-url = ["https://download.pytorch.org/whl/cu124"]
+
+[dependency-groups]
+dev = [
+    "autopep8>=2.3.2",
+    "flake8>=7.3.0",
+    "ruff>=0.14.1",
+]
