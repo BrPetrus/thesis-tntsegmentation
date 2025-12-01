@@ -27,7 +27,20 @@ def read_all_tiffs(directory_path):
 
 def plot_histogram(sizes):
     """Plot histogram of label sizes."""
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 4))
+
+    # Set larger font sizes for thesis readability
+    plt.rcParams.update(
+        {
+            "font.size": 14,
+            "axes.labelsize": 16,
+            "axes.titlesize": 18,
+            "xtick.labelsize": 14,
+            "ytick.labelsize": 14,
+            "legend.fontsize": 14,
+        }
+    )
+
     plt.hist(sizes, bins=50, alpha=0.7, color="skyblue", edgecolor="black")
     plt.xlabel("Label Size (pixels)")
     plt.ylabel("Frequency")
@@ -38,13 +51,16 @@ def plot_histogram(sizes):
     mean_size = np.mean(sizes)
     median_size = np.median(sizes)
 
-    plt.axvline(mean_size, color="red", linestyle="--", label=f"Mean: {mean_size:.1f}")
     plt.axvline(
-        median_size, color="orange", linestyle="--", label=f"Median: {median_size:.1f}"
+        mean_size, color="red", linestyle="--", linewidth=2, label=f"Mean: {mean_size:.1f}"
+    )
+    plt.axvline(
+        median_size, color="orange", linestyle="--", linewidth=2, label=f"Median: {median_size:.1f}"
     )
     plt.legend()
 
     plt.tight_layout()
+    plt.savefig("label_sizes.png")
     plt.show()
 
 
