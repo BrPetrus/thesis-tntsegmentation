@@ -13,6 +13,7 @@ A deep learning pipeline for segmenting tunnel-like structures in 3D microscopy 
   - [Evaluation](#evaluation)
 - [Reproducibility](#reproducibility)
 - [Project Structure](#project-structure)
+- [License](#license)
 
 ---
 
@@ -20,24 +21,35 @@ A deep learning pipeline for segmenting tunnel-like structures in 3D microscopy 
 
 ### Running Inference on New Images
 
-The fastest way to use a trained model:
+The fastest way to use a pre-trained model (included in the archive):
 
 ```bash
 # Setup environment (first time only)
 uv sync --extra torch-cpu  # or torch-gpu for CUDA support
 
-# Run inference
+# Run inference with included model (using CSAM 3D architecture, trained on quad 1)
 uv run python scripts/inference.py \
-    path/to/model.pth \
-    path/to/image.tif \
+    models/anisotropic_csam_3d/quad1_model/model_final.pth \
+    path/to/your/image.tif \
     results/ \
     --tile_overlap 10 \
     --postprocess
 ```
 
+**Tip:** Multiple architectures are available in both 2D and 3D versions:
+- `anisotropic_csam_2d` / `anisotropic_csam_3d` - With CSAM attention
+- `anisotropic_usenet_2d` / `anisotropic_usenet_3d` - With USE-Net modules
+- `anisotropic_basic_2d` / `anisotropic_basic_3d` - Basic anisotropic
+- `unet3d` - Standard 3D U-Net baseline
+
+Each architecture has models trained on all 4 quadrants.
+
+**Note:** The model's `config.json` file must be in the same directory as the `.pth` file. This file contains essential information about the model architecture and training parameters.
+
 This will generate:
 - `results/probability.tif` - Probability map (0-1 range)
 - `results/binary.tif` - Binary segmentation (threshold at 0.5)
+- `results/processed_prediction.tif` - Post-processed result (if `--postprocess` enabled)
 
 See [Inference Guide](#inference-quick-start) for details.
 
@@ -59,12 +71,20 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 pip install uv
 ```
 
-#### 2. Clone the Repository
+#### 2. Extract and Navigate to the Archive
 
 ```bash
-git clone <repository-url>
+# Extract the archive (if compressed)
+tar -xzf thesis-tntsegmentation.tar.gz  # or unzip thesis-tntsegmentation.zip
+
+# Navigate to the project directory
 cd thesis-tntsegmentation
 ```
+
+The archive includes:
+- `models/` - Pre-trained model checkpoints for all architectures (CSAM 2D/3D, USE-Net 2D/3D, Basic 2D/3D, 3D U-Net) trained on all quadrants
+- `data/` - Dataset and evaluation data
+- Source code and scripts
 
 #### 3. Install Dependencies
 
@@ -113,6 +133,8 @@ uv run python scripts/inference.py \
     results/ \
     --tile_overlap 10
 ```
+
+**Important:** The model directory must contain both `model.pth` and `config.json` files. The config file is automatically created during training and contains the model architecture and hyperparameters.
 
 #### Key Parameters
 
@@ -324,6 +346,35 @@ This will test overlaps: 0, 10, 20, 30, 40 pixels and generate comparative metri
 
 ```
 thesis-tntsegmentation/
+├── models/                           # Pre-trained model checkpoints
+│   ├── anisotropic_csam_2d/         # Anisotropic U-Net with CSAM (2D version)
+│   │   ├── quad1_model/             # Trained on quadrant 1
+│   │   │   ├── model_final.pth      # Model weights
+│   │   │   └── config.json          # Model configuration
+│   │   ├── quad2_model/             # Trained on quadrant 2
+│   │   ├── quad3_model/             # Trained on quadrant 3
+│   │   └── quad4_model/             # Trained on quadrant 4
+│   ├── anisotropic_csam_3d/         # Anisotropic U-Net with CSAM (3D version)
+│   │   └── ***
+│   ├── anisotropic_usenet_3d/       # Anisotropic U-Net with USE-Net (3D version)
+│   │   └── ***
+│   ├── anisotropic_usenet_2d/       # Anisotropic U-Net with USE-Net (2D version)
+│   │   └── ***
+│   ├── anisotropic_basic_2d/        # Basic Anisotropic U-Net (2D version)
+│   │   └── ***
+│   ├── anisotropic_basic_3d/        # Basic Anisotropic U-Net (3D version)
+│   │   └── ***
+│   └── unet3d/                      # Standard 3D U-Net (baseline)
+│   │   └── ***
+│
+├── data/                             # Dataset and evaluation data
+│   ├── raw/                         # Original raw data
+│   └── processed/                   # Processed quadrant splits
+│       ├── quad1/                   # Training/test split for quad 1
+│       ├── quad2/                   # Training/test split for quad 2
+│       ├── quad3/                   # Training/test split for quad 3
+│       └── quad4/                   # Training/test split for quad 4
+│
 ├── scripts/                          # Main scripts
 │   ├── inference.py                 # Run inference on new images
 │   ├── training.py                  # Train models
@@ -364,101 +415,8 @@ thesis-tntsegmentation/
 │           └── metrics_torch.py     # PyTorch-based metrics
 │
 ├── pyproject.toml                    # Project dependencies and metadata
-├── uv.lock                           # Locked dependency versions
 ├── LICENSE                           # License file
-├── README.md                         # This file
-└── .gitignore                        # Git ignore patterns
-```
-
----
-
-## Common Workflows
-
-### 1. Train and Evaluate a New Model
-
-```bash
-# 1. Split data
-uv run python -m tntseg.utilities.dataset.split_data \
-    data/raw/ data/processed/ --train_quad 1
-
-# 2. Start MLflow (optional)
-uv run mlflow ui --port 8800 &
-
-# 3. Train
-uv run python scripts/training.py \
-    --data data/processed/train/ \
-    --output-dir checkpoints/ \
-    --epochs 1000
-
-# 4. Evaluate
-uv run python scripts/evaluate_models.py \
-    --model-dir checkpoints/latest/quad1_model/ \
-    --data data/processed/test/ \
-    --output results/
-```
-
-### 2. Use Pretrained Model for Inference
-
-```bash
-# Just run inference - no ground truth needed
-uv run python scripts/inference.py \
-    pretrained/model.pth \
-    new_data/volume.tif \
-    predictions/ \
-    --tile_overlap 10 \
-    --postprocess
-```
-
-### 3. Reproduce Thesis Results
-
-```bash
-# Run complete pipeline with all quadrants
-cd scripts/
-bash run.sh
-
-# Then analyze overlap impact
-bash run_overlap_study.sh output/output-train-all-quads/
-```
-
----
-
-## Troubleshooting
-
-### CUDA Out of Memory
-
-Reduce batch size or crop size:
-```bash
---batch-size 16 --crop-size 8 128 128
-```
-
-### Dependencies Not Found
-
-Resync environment:
-```bash
-uv sync --reinstall
-```
-
-### MLflow Connection Issues
-
-Check server is running:
-```bash
-lsof -i :8800
-```
-
-Restart if needed:
-```bash
-pkill -f "mlflow"
-uv run mlflow ui --port 8800 &
-```
-
----
-
-## Citation
-
-If you use this code in your research, please cite:
-
-```
-[Your thesis citation]
+└── README.md                         # This file
 ```
 
 ---
