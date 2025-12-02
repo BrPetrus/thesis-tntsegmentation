@@ -310,6 +310,8 @@ Evaluation generates:
 
 ### Full Training Pipeline
 
+Many of the thesis results were generated using automated scripts that systematically train and evaluate models across all quadrants. These scripts call `training.py` and `evaluate_models.py` with different parameters in an automated fashion.
+
 Use the provided shell script to train on all quadrants with consistent settings:
 
 ```bash
@@ -324,21 +326,25 @@ Edit `run.sh` to configure:
 - Post-processing parameters
 
 The script will:
-1. Train a model for each quadrant (quad1-4)
-2. Evaluate each model on the corresponding test set
+1. Train a model for each quadrant (quad1-4) using `training.py`
+2. Evaluate each model on the corresponding test set using `evaluate_models.py`
 3. Save all results in timestamped directories
 4. Log experiments to MLflow
 
+**Note:** This script essentially automates the manual training and evaluation workflow by calling the same underlying scripts with different parameters. See `run.sh` for full implementation details.
+
 ### Overlap Study
 
-Evaluate models with different tile overlaps:
+The overlap study was used to systematically evaluate the impact of different tile overlap values on segmentation quality:
 
 ```bash
 cd scripts/
 bash run_overlap_study.sh path/to/trained/models/
 ```
 
-This will test overlaps: 0, 10, 20, 30, 40 pixels and generate comparative metrics.
+This script tests overlaps of 0, 10, 20, 30, 40 pixels by repeatedly calling `evaluate_models.py` with different `--tile_overlap` values, generating comparative metrics for analysis.
+
+**Note:** For full details on the automation logic and parameter combinations used, refer to the scripts themselves (`run.sh` and `run_overlap_study.sh`).
 
 ---
 
