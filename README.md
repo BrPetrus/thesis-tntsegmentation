@@ -28,11 +28,11 @@ uv sync --extra torch-cpu  # or torch-gpu for CUDA support
 
 # Run inference
 uv run python scripts/inference.py \
-    --model path/to/model.pth \
-    --image path/to/image.tif \
-    --output results/ \
-    --crop-size 16 256 256 \
-    --tile-overlap 10
+    path/to/model.pth \
+    path/to/image.tif \
+    results/ \
+    --tile_overlap 10 \
+    --postprocess
 ```
 
 This will generate:
@@ -108,41 +108,40 @@ Run trained models on new images without ground truth evaluation.
 
 ```bash
 uv run python scripts/inference.py \
-    --model checkpoints/model.pth \
-    --image data/volume.tif \
-    --output results/ \
-    --crop-size 16 256 256 \
-    --tile-overlap 10
+    checkpoints/model.pth \
+    data/volume.tif \
+    results/ \
+    --tile_overlap 10
 ```
 
 #### Key Parameters
 
-- `--model` - Path to trained model checkpoint (`.pth` file)
-- `--image` - Path to input 3D TIFF image
-- `--output` - Output directory for results
-- `--crop-size` - Tile size (Z Y X), e.g., `16 256 256`
-- `--tile-overlap` - Overlap between tiles in pixels (reduces boundary artifacts)
-- `--batch-size` - Batch size for inference (default: 4)
+- `model_path` - Path to trained model checkpoint (`.pth` file)
+- `image_path` - Path to input 3D TIFF image
+- `output_dir` - Output directory for results
+- `--tile_overlap` - Overlap between tiles in pixels (reduces boundary artifacts, default: 0)
+- `--batch_size` - Batch size for inference (default: 8)
 - `--device` - `cuda` or `cpu` (auto-detected by default)
+- `--no_probability` - Skip saving probability map
+- `--no_binary` - Skip saving binary prediction
 
 #### With Post-Processing
 
 ```bash
 uv run python scripts/inference.py \
-    --model checkpoints/model.pth \
-    --image data/volume.tif \
-    --output results/ \
-    --crop-size 16 256 256 \
-    --tile-overlap 10 \
-    --apply-postprocessing \
-    --prediction-threshold 0.5 \
-    --minimum-size 100
+    checkpoints/model.pth \
+    data/volume.tif \
+    results/ \
+    --tile_overlap 10 \
+    --postprocess \
+    --prediction_threshold 0.5 \
+    --minimum_size 100
 ```
 
 Post-processing options:
-- `--apply-postprocessing` - Enable morphological post-processing
-- `--prediction-threshold` - Threshold for binarization (default: 0.5)
-- `--minimum-size` - Remove objects smaller than this (in pixels)
+- `--postprocess` - Enable morphological post-processing
+- `--prediction_threshold` - Threshold for binarization (default: 0.5)
+- `--minimum_size` - Remove objects smaller than this in pixels (default: 100)
 
 #### Output Files
 
@@ -269,7 +268,7 @@ uv run python scripts/evaluate_models.py \
     --tile-overlap 10 \
     --run-postprocessing \
     --prediction-threshold 0.5 \
-    --recall-threshold 0.6 \
+    --recall-threshold 0.5 \
     --minimum-size 100
 ```
 
@@ -325,25 +324,50 @@ This will test overlaps: 0, 10, 20, 30, 40 pixels and generate comparative metri
 
 ```
 thesis-tntsegmentation/
-├── scripts/                      # Main scripts
-│   ├── inference.py             # Run inference on new images
-│   ├── training.py              # Train models
-│   ├── evaluate_models.py       # Evaluate with ground truth
-│   ├── postprocess.py           # Post-processing utilities
-│   ├── tilingutilities.py       # Tiling and stitching
-│   ├── run.sh                   # Full pipeline automation
-│   └── run_overlap_study.sh     # Overlap analysis
+├── scripts/                          # Main scripts
+│   ├── inference.py                 # Run inference on new images
+│   ├── training.py                  # Train models
+│   ├── evaluate_models.py           # Evaluate with ground truth
+│   ├── postprocess.py               # Post-processing utilities
+│   ├── tilingutilities.py           # Tiling and stitching functions
+│   ├── training_utils.py            # Training helper functions
+│   ├── config.py                    # Configuration utilities
+│   ├── run.sh                       # Full pipeline automation
+│   ├── run_overlap_study.sh         # Overlap analysis
+│   └── graphs/                      # Analysis and visualization scripts
+│       ├── aggregateanalysis.py     # Aggregate results analysis
+│       ├── archcomparisonquad.py    # Architecture comparison
+│       ├── quadbasedanalysis.py     # Quadrant-based analysis
+│       ├── visualize_models.py      # Model visualization
+│       ├── create_metric_tables.py  # Generate metric tables
+│       └── estimate_label_size.py   # Label size estimation
 │
-├── tntseg/                       # Main package
-│   ├── nn/                      # Neural network models
-│   │   └── models/              # U-Net architectures
-│   └── utilities/               # Utility modules
-│       └── dataset/             # Dataset handling
-│           └── split_data.py    # Data splitting script
+├── tntseg/                           # Main Python package
+│   ├── __init__.py
+│   ├── nn/                          # Neural network components
+│   │   ├── models/                  # Model architectures
+│   │   │   ├── anisounet3d_basic.py       # Basic anisotropic U-Net
+│   │   │   ├── anisounet3d_seblock.py     # With Squeeze-Excitation
+│   │   │   ├── anisounet3d_csnet.py       # With CSAM attention
+│   │   │   ├── anisounet3d_usenet.py      # With USE-Net modules
+│   │   │   └── unet3d_basic.py            # Standard 3D U-Net
+│   │   ├── modules.py               # Reusable network modules
+│   │   ├── squeeze_excitation.py    # SE block implementation
+│   │   └── csnet_affinity_modules.py # CSAM attention modules
+│   └── utilities/                   # Utility modules
+│       ├── dataset/                 # Dataset handling
+│       │   ├── split_data.py        # Quadrant-based data splitting
+│       │   ├── datasets.py          # PyTorch dataset classes
+│       │   └── analyze.py           # Dataset analysis tools
+│       └── metrics/                 # Evaluation metrics
+│           ├── metrics.py           # NumPy-based metrics
+│           └── metrics_torch.py     # PyTorch-based metrics
 │
-├── pyproject.toml               # Project dependencies
-├── uv.lock                      # Locked dependencies
-└── README.md                    # This file
+├── pyproject.toml                    # Project dependencies and metadata
+├── uv.lock                           # Locked dependency versions
+├── LICENSE                           # License file
+├── README.md                         # This file
+└── .gitignore                        # Git ignore patterns
 ```
 
 ---
@@ -378,10 +402,11 @@ uv run python scripts/evaluate_models.py \
 ```bash
 # Just run inference - no ground truth needed
 uv run python scripts/inference.py \
-    --model pretrained/model.pth \
-    --image new_data/volume.tif \
-    --output predictions/ \
-    --crop-size 16 256 256
+    pretrained/model.pth \
+    new_data/volume.tif \
+    predictions/ \
+    --tile_overlap 10 \
+    --postprocess
 ```
 
 ### 3. Reproduce Thesis Results
