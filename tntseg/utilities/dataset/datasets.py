@@ -146,45 +146,4 @@ class TNTDataset(Dataset):
             transformed = self.transforms(sample)
             return transformed['volume']
     
-# TODO: check if this still works
-if __name__ == "__main__":
-    import argparse
-    import matplotlib.pyplot as plt
-    matplotlib.use("QtAgg")
-
-    # Test the loading functionality
-    parser = argparse.ArgumentParser(description="Test TNTDataset loading and visualization.")
-    parser.add_argument("--img_folder", type=str, required=True, help="Path to the image folder.")
-    parser.add_argument("--mask_folder", type=str, default=None, help="Path to the mask folder (required for training).")
-    parser.add_argument("--is_training", action="store_true", help="Set this flag if loading training data (with masks).")
-    parser.add_argument("--num_samples", type=int, default=8, help="Number of random samples to visualize.")
-    parser.add_argument("--z_slice", type=int, default=4, help="Z-slice index to visualize.")
-
-    args = parser.parse_args()
-
-    # Load dataset
-    df = load_dataset_metadata(args.img_folder, args.mask_folder)
-    print(f"Loaded {len(df)} samples")
-    dataset = TNTDataset(df, load_masks=True)
-
-    num_samples = min(args.num_samples, len(dataset))
-    indices = np.random.choice(len(dataset), num_samples, replace=False)
-
-    for idx in indices:
-        if args.is_training:
-            img, mask = dataset[idx]
-        else:
-            img = dataset[idx]
-            mask = None
-
-        z = args.z_slice if img.ndim == 3 else 0
-        plt.figure(figsize=(10, 4))
-        plt.subplot(1, 2 if mask is not None else 1, 1)
-        plt.title(f"Image idx={idx}, z={z}")
-        plt.imshow(img[z], cmap="gray")
-        if mask is not None:
-            plt.subplot(1, 2, 2)
-            plt.title(f"Mask idx={idx}, z={z}")
-            plt.imshow(mask[z], cmap="gray")
-        plt.show()
 

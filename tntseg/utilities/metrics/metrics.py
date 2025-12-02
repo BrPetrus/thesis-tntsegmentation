@@ -124,8 +124,6 @@ def calculate_batch_stats(prediction_batch: NDArray[np.uint8 | np.bool], label_b
     if prediction_batch.dtype != label_batch.dtype:
         raise ValueError(f"Prediction {prediction_batch.dtype} and label {label_batch.dtype} have different types.")
 
-    # TODO: make it for binary imgs
-
     prediction = prediction_batch.flatten()
     label = label_batch.flatten()
 

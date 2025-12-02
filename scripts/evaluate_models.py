@@ -53,7 +53,6 @@ class TiledDataset(Dataset):
         return self.tiles_data[idx], self.tiles_positions[idx]
 
 
-# TODO: unify this with the training.py
 def create_model_from_args(
     model_type: str,
     model_depth: int,
@@ -156,7 +155,6 @@ def evaluate_predictions(
         binary_predictions, binary_ground_truth, negative_val=0, positive_val=255
     )
 
-    # TODO: automate
     # Calculate all metrics
     metrics = {
         "TP": int(TP),
@@ -533,7 +531,6 @@ def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
         raise argparse.ArgumentTypeError(f"Invalid {arg_name}: {arg_string}. {str(e)}")
 
 
-# TODO: reuse code from training utils
 def create_model_from_config(config: dict) -> torch.nn.Module:
     """Create a model based on loaded configuration."""
     try:
@@ -597,7 +594,7 @@ def create_model_from_config(config: dict) -> torch.nn.Module:
                 downscale_stride=tuple(config["downscale_stride"]),
                 squeeze_factor=config["reduction_factor"],
             )
-        elif model_type == "unet3d":  # TODO: is this still the right name?
+        elif model_type == "unet3d":
             return UNet3d(n_channels_in=1, n_classes_out=1)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
