@@ -100,14 +100,14 @@ def filter_just_1to1_mappings(
 ) -> Dict[int, Tuple[int, float]]:
     """
     Filter out mappings involving duplicate predictions to get clean 1-to-1 mappings.
-    
+
     Parameters
     ----------
     mapping : Dict[int, Tuple[int, float]]
         Full mapping from GT labels to (prediction label, overlap score).
     multimatched_predictions : Dict[int, List[Tuple[int, float]]]
         Dictionary of prediction labels that match multiple GT tunnels.
-    
+
     Returns
     -------
     Dict[int, Tuple[int, float]]
@@ -129,11 +129,11 @@ def calculate_matched_metrics(
 ) -> QualityMetrics:
     """
     Calculate pixel-level metrics for tunnels specified in the mapping.
-    
+
     This function computes confusion matrix metrics (TP, FP, FN, TN) and derived
     quality metrics (Dice, Jaccard, precision, recall) considering only the pixels
     within matched tunnel regions.
-    
+
     Parameters
     ----------
     gt_labeled : NDArray[np.uint8]
@@ -143,7 +143,7 @@ def calculate_matched_metrics(
     mapping : Dict[int, Tuple[int, float]]
         Mapping from GT labels to (prediction label, overlap score) pairs.
         Only tunnels in this mapping are considered for metrics calculation.
-    
+
     Returns
     -------
     QualityMetrics
@@ -177,12 +177,12 @@ def find_unmatched_and_multi_mapped(
 ):
     """
     Identify predictions matching multiple GT tunnels and unmatched regions.
-    
+
     Analyzes the bidirectional mapping between ground truth and predictions to find:
     1. Predictions that overlap with multiple GT tunnels (over-segmentation)
     2. GT tunnels with no matching prediction (false negatives)
     3. Predictions with no matching GT tunnel (false positives)
-    
+
     Parameters
     ----------
     gt_labeled : NDArray[np.uint8]
@@ -193,7 +193,7 @@ def find_unmatched_and_multi_mapped(
         GT-to-prediction mapping (GT label -> (pred label, overlap score)).
     pred_to_gt_mapping : Dict[int, List[Tuple[int, float]]]
         Prediction-to-GT mapping (pred label -> [(GT label, overlap score), ...]).
-    
+
     Returns
     -------
     multi_mapped_predictions : Dict[int, List[Tuple[int, float]]]
@@ -230,16 +230,16 @@ def find_unmatched_and_multi_mapped(
 def invert_mapping(mapping):
     """
     Invert GT-to-prediction mapping to create prediction-to-GT mapping.
-    
+
     Converts a one-to-one or many-to-one mapping (GT -> prediction) into a
     one-to-many mapping (prediction -> [GT tunnels]) to identify cases where
     a single prediction matches multiple GT tunnels.
-    
+
     Parameters
     ----------
     mapping : Dict[int, Tuple[int, float]]
         GT-to-prediction mapping (GT label -> (pred label, overlap score)).
-    
+
     Returns
     -------
     Dict[int, List[Tuple[int, float]]]
@@ -261,11 +261,11 @@ def map_tunnels_gt_to_pred(
 ) -> Dict[int, Tuple[int, int]]:
     """
     Map ground truth tunnels to predicted tunnels based on overlap.
-    
+
     For each GT tunnel, finds the prediction with the highest recall (i.e., the
     prediction that covers the most of the GT tunnel). Only predictions with
     recall above the threshold are considered matches.
-    
+
     Parameters
     ----------
     labeled_gt : NDArray[np.uint8]
@@ -275,13 +275,13 @@ def map_tunnels_gt_to_pred(
     recall_threshold : float, default=0.5
         Minimum fraction of GT tunnel that must be covered by a prediction
         to consider it a match. Range: [0, 1].
-    
+
     Returns
     -------
     Dict[int, Tuple[int, float]]
         Mapping from GT label to (prediction label, recall score) for the
         best matching prediction. Only includes matches above threshold.
-        
+
     Notes
     -----
     - Recall is defined as: (overlap pixels) / (total GT pixels)
@@ -328,11 +328,11 @@ def analyze_tunnel_mappings(
 ) -> TunnelMappingResult:
     """
     Comprehensive analysis of mappings between ground truth and predicted tunnels.
-    
+
     Performs bidirectional mapping analysis to identify matched, unmatched, and
     ambiguous tunnel correspondences. This is essential for understanding both
     correct detections and different types of errors.
-    
+
     Parameters
     ----------
     gt_labeled : NDArray[np.uint8]
@@ -341,7 +341,7 @@ def analyze_tunnel_mappings(
         3D array with labeled prediction instances (0 = background).
     recall_threshold : float
         Minimum recall threshold for considering a match. Range: [0, 1].
-    
+
     Returns
     -------
     TunnelMappingResult
@@ -351,14 +351,14 @@ def analyze_tunnel_mappings(
         - multimatched_predictions : Predictions matching multiple GT tunnels
         - unmatched_gt_labels : GT tunnels with no prediction (false negatives)
         - unmatched_predictions : Predictions with no GT match (false positives)
-    
+
     Notes
     -----
     The analysis reveals three types of mapping issues:
     1. Missed detections: GT tunnels with no matching prediction
     2. False positives: Predictions with no matching GT tunnel
     3. Over-segmentation: Single prediction matching multiple GT tunnels
-    
+
     Examples
     --------
     >>> result = analyze_tunnel_mappings(gt, pred, recall_threshold=0.6)
@@ -412,11 +412,11 @@ def calculate_all_metrics(
 ) -> Tuple[QualityMetrics, QualityMetrics, QualityMetrics, QualityMetrics]:
     """
     Calculate comprehensive metrics at different granularities.
-    
+
     Computes four sets of quality metrics to evaluate tunnel detection performance
     from different perspectives: overall pixel accuracy, matched region quality,
     clean 1-to-1 match quality, and instance-level detection accuracy.
-    
+
     Parameters
     ----------
     gt_labeled : NDArray[np.uint8]
@@ -429,7 +429,7 @@ def calculate_all_metrics(
         Binary prediction mask (True = tunnel, False = background).
     mapping_result : TunnelMappingResult
         Complete mapping analysis from analyze_tunnel_mappings().
-    
+
     Returns
     -------
     overall_metrics : QualityMetrics
@@ -445,16 +445,16 @@ def calculate_all_metrics(
         Instance-level detection metrics treating each tunnel as a single unit.
         TP = detected tunnels, FP = false detections, FN = missed tunnels.
         Reflects detection capability independent of segmentation quality.
-    
+
     Notes
     -----
     The four metric types serve different purposes:
-    
+
     1. Overall: Global segmentation performance, useful for pixel-wise comparisons
     2. Matched: Quality of detected regions, excluding missed/false detections
     3. Clean: Best-case quality on unambiguous matches
     4. Tunnel: Detection rate as a classification task (detected vs missed)
-    
+
     Examples
     --------
     >>> overall, matched, clean, tunnel = calculate_all_metrics(
@@ -503,10 +503,10 @@ def detect_tunnels(
 ) -> TunnelDetectionResult | None:
     """
     Main tunnel detection pipeline with optional ground truth comparison.
-    
+
     Processes predicted probability maps to detect tunnel-like structures,
     optionally comparing them against ground truth labels to compute accuracy metrics.
-    
+
     Parameters
     ----------
     prediction : NDArray[np.float32]
@@ -528,30 +528,30 @@ def detect_tunnels(
         Directory to save intermediate results and visualizations.
     visualise : bool, default=False
         If True, generate visualization images of the results.
-    
+
     Returns
     -------
     TunnelDetectionResult or None
         Complete detection results containing all metrics and mapping information
-        if gt_labeled is provided, otherwise None. Intermediate post-processed 
+        if gt_labeled is provided, otherwise None. Intermediate post-processed
         results are always saved to disk.
-        
+
         The result includes:
         - metrics_overall : Overall pixel-level segmentation metrics
         - metrics_all_matches : Metrics for all matched tunnel regions
         - metrics_one_on_one : Metrics for clean 1-to-1 matches only
         - metrics_on_tunnels : Instance-level detection metrics
         - mapping_result : Complete mapping analysis (matches, errors, etc.)
-    
+
     Notes
     -----
     The pipeline consists of the following steps:
-    
+
     1. Preprocessing: Stretch image contrast, threshold predictions
     2. Post-processing: Remove small objects, create labeled instances
     3. Evaluation (if GT provided): Map predictions to GT, calculate metrics
     4. Visualization (if enabled): Create overlay images showing matches/errors
-    
+
     Intermediate files saved to output_folder:
     - processed_prediction.tif : Labeled prediction instances
     - processed_prediction_binary.tif : Binary prediction mask
@@ -559,7 +559,7 @@ def detect_tunnels(
     - matched_tunnels_overlay.tif : Color-coded matches (if visualise=True)
     - unmatched_regions_overlay.tif : Missed/false detections (if visualise=True)
     - duplicate_mappings_overlay.tif : Over-segmentation cases (if visualise=True)
-    
+
     Examples
     --------
     >>> config = PostprocessConfig(
@@ -578,7 +578,7 @@ def detect_tunnels(
     >>> if result:
     ...     print(f"Overall Dice: {result.metrics_overall.dice:.3f}")
     ...     print(f"Detected: {result.metrics_on_tunnels.tp} tunnels")
-    
+
     See Also
     --------
     analyze_tunnel_mappings : Performs the GT-to-prediction mapping
@@ -600,7 +600,9 @@ def detect_tunnels(
 
     # If no ground truth provided, just return after saving post-processed results
     if gt_labeled is None:
-        print("No ground truth provided - post-processing complete, skipping evaluation.")
+        print(
+            "No ground truth provided - post-processing complete, skipping evaluation."
+        )
         return None
 
     binary_filtered_pred = labeled_prediction != 0
@@ -889,9 +891,17 @@ if __name__ == "__main__":
         "--min-size", type=int, default=100, help="Minimum object size in pixels"
     )
     parser.add_argument(
-        "--recall_threshold", type=float, default=0.ť, help="Recall threshold for tunnel matching"
+        "--recall_threshold",
+        type=float,
+        default=0.5,
+        help="Recall threshold for tunnel matching",
     )
-    parser.add_argument("--prediction_threshold", type=float, default=0.5, help="Threshold for binary prediction")
+    parser.add_argument(
+        "--prediction_threshold",
+        type=float,
+        default=0.5,
+        help="Threshold for binary prediction",
+    )
     args = parser.parse_args()
 
     output_folder = Path(args.output)
