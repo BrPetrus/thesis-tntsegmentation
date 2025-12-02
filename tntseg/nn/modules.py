@@ -49,10 +49,10 @@ class UpscaleBlock(nn.Module):
     def forward(self, x1, x2):
         x1 = self.up(x1)
 
-        # Fix problem when x1 is not even
+        # Fix problem when x1 is not even. The dims are (B,C,D,H,W)
+        # NOTE: We are considering just the D dimension to be not divisble by 2
         if x1.shape[2] != x2.shape[2]:
             x1 = F.pad(x1, (0, 0, 0, 0, 0, 1), 'constant', 0)  # Pad z-dim by 1 at the end
-            # TODO: make this generic
 
         # Concatonation
         x = torch.concat([x1, x2], dim=1)
@@ -68,9 +68,9 @@ class UpscaleBlockSE(UpscaleBlock):
         x1 = self.se_block(x1)
 
         # Fix problem when x1 is not even
+        # See method forward() of UpscaleBlock class
         if x1.shape[2] != x2.shape[2]:
             x1 = F.pad(x1, (0, 0, 0, 0, 0, 1), 'constant', 0)  # Pad z-dim by 1 at the end
-            # TODO: make this generic
 
         # Concatonation
         x = torch.concat([x1, x2], dim=1)

@@ -182,7 +182,6 @@ def _prepare_datasets(
     return train_dataloader, test_dataloader, valid_dataloader
 
 
-# TODO: think abou treplacing with batchstats from utlities metrics
 def _calculate_metrics(
     nn: torch.nn.Module,
     dataloader: DataLoader,
@@ -346,7 +345,7 @@ def _train(
             epoch,
             "val",
             output_folder,
-            save_results=epoch % 100 == 0,
+            save_results=epoch % 100 == 0,  # TODO: add global saving flag
         )
         # Calculate metrics
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
@@ -804,7 +803,6 @@ if __name__ == "__main__":
     model_type = model_type_map[args.model]
     logging.info(f"Got {model_type} model")
 
-    # TODO: code duplication
     # Create appropriate config based on model type
     if (
         model_type == ModelType.AnisotropicUNetSE

@@ -132,7 +132,96 @@ def run_inference(
     save_probability: bool = True,
     save_binary: bool = True,
 ) -> None:
-    """Run inference on a single image."""
+    """
+    Run inference on a 3D image volume using a PyTorch model, stitch tiled predictions,
+    optionally save probability / binary maps, and run optional post-processing.
+
+    This function performs the following high-level steps:
+    1. Ensures the output directory exists.
+    2. Loads an image from `image_path` (expected to be TIFF-readable via tifffile) and
+        converts it to float32.
+    3. Normalizes the image using `dataset_mean` and `dataset_std` values from `config`
+        (defaults: mean=0.0, std=1.0).
+    4. Tiles the normalized volume with the given `crop_size` and `tile_overlap`.
+    5. Creates a DataLoader over the tiled patches and runs model inference (model.eval(),
+        torch.no_grad()) on the specified `device`.
+    6. Collects model outputs (assumed to be logits), stitches the tiled predictions back
+        into the original volume shape using `stitch_volume` with mean aggregation, and
+        writes a visualization of stitch lines to 'stichlines.tif' (in the current working directory).
+    7. Applies a sigmoid to the stitched logits to produce probability values, saves the
+        probability map (float32) and a binary mask (uint8, 0/255) obtained by thresholding
+        probabilities at 0.5, if requested.
+    8. Optionally runs post-processing (via `detect_tunnels`) on the probability map and
+        stores results under an output subdirectory for the image stem. Any exceptions
+        raised during post-processing are caught and printed.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+         The trained PyTorch model used for inference. The model should accept input
+         tensors with a channel dimension and output raw logits (not probabilities).
+    image_path : pathlib.Path
+         Path to the input image file. Must be readable by tifffile.imread.
+    output_dir : pathlib.Path
+         Directory where output files (probability map, binary map, postprocessing
+         results) will be written. The directory is created if it does not exist.
+    config : dict
+         Configuration dictionary. Expected keys (optional):
+            - "dataset_mean": float (default 0.0)
+            - "dataset_std": float (default 1.0)
+    crop_size : tuple
+         Patch/crop size used for tiling. This is (D, H, W)
+    tile_overlap : int
+         Number of pixels/voxels of overlap between adjacent tiles.
+    batch_size : int
+         Batch size for the DataLoader used during inference.
+    device : str
+         Device string for inference, e.g. 'cpu' or 'cuda:0'.
+    apply_postprocessing : bool, optional
+         If True and `postprocess_config` is provided, runs post-processing on the
+         produced probability map (default: False).
+    postprocess_config : PostprocessConfig or None, optional
+         Configuration object passed to the post-processing routine (detect_tunnels).
+         Only used if `apply_postprocessing` is True.
+    save_probability : bool, optional
+         If True, saves the probability map to output_dir as "{image_stem}_probability.tif".
+         The saved dtype is float32. (default: True)
+    save_binary : bool, optional
+         If True, saves a binary mask obtained by thresholding probabilities at 0.5
+         to output_dir as "{image_stem}_binary.tif". Binary values are 0 or 255 (uint8).
+         (default: True)
+
+    Returns
+    -------
+    None
+         This function writes output files to disk and prints progress; it does not
+         return values.
+
+    Side effects and outputs
+    ------------------------
+    - Creates `output_dir` if it does not exist.
+    - Writes a stitch-lines visualization to "stichlines.tif" in the current working directory.
+    - Writes probability map "{image_stem}_probability.tif" (float32) to `output_dir` if
+      save_probability is True.
+    - Writes binary mask "{image_stem}_binary.tif" (uint8, values 0/255) to `output_dir` if
+      save_binary is True.
+    - If post-processing runs, writes results to a directory named "{image_stem}_postprocessed"
+      inside `output_dir` and prints status. Exceptions during post-processing are caught and printed.
+
+    Notes and assumptions
+    ---------------------
+    - The model is expected to output raw logits (a sigmoid is applied internally to obtain probabilities).
+    - The following functions / classes must be available in scope: tile_volume, TiledDataset,
+      stitch_volume, AggregationMethod, detect_tunnels, and tifffile.
+    - The implementation assumes tiling utilities return consistent tile data and positional
+      metadata required for stitching (depth/row/col tuples).
+    - Thresholding for binary masks is fixed at 0.5; adjust externally if a different threshold is needed.
+
+    Example
+    -------
+    # Pseudocode usage
+    # run_inference(model, Path("img.tif"), Path("out"), config, (7,64,64), 10, 32, "cuda")
+    """
     
     output_dir.mkdir(parents=True, exist_ok=True)
     

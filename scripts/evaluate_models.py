@@ -308,7 +308,7 @@ def main(
                 
                 # Print detailed results for this volume
                 print(f"\nPostprocessing Results for Volume {i + 1}:")
-                print_detailed_results(tunnel_result)  # TODO fix
+                print_detailed_results(tunnel_result)
                 
                 # Store results
                 postprocess_results.append({
