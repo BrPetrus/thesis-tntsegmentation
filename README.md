@@ -63,7 +63,7 @@ pip install uv
 
 ```bash
 git clone <repository-url>
-cd DP-WIP
+cd thesis-tntsegmentation
 ```
 
 #### 3. Install Dependencies
@@ -171,8 +171,8 @@ uv run python -m tntseg.utilities.dataset.split_data \
 - `input_folder` - Folder containing `IMG/*.tif` and `GT_MERGED_LABELS/*.tif`
 - `output_folder` - Output folder for split data
 - `--train_quad` - Quadrant for training (1-4):
-  - 1 = top-right
-  - 2 = top-left
+  - 1 = top-left
+  - 2 = top-right
   - 3 = bottom-left
   - 4 = bottom-right
 - `--min_size` - Minimum patch size in Z Y X (default: `7 32 32`)
@@ -324,7 +324,7 @@ This will test overlaps: 0, 10, 20, 30, 40 pixels and generate comparative metri
 ## Project Structure
 
 ```
-DP-WIP/
+thesis-tntsegmentation/
 ├── scripts/                      # Main scripts
 │   ├── inference.py             # Run inference on new images
 │   ├── training.py              # Train models

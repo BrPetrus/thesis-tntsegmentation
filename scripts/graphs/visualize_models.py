@@ -7,8 +7,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import sys
 
-# Add the project root to the path
-sys.path.append("/home/bruno/DP/DP-WIP")
+# Add the project root to the path (if running outside of package context)
+project_root = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 from tntseg.nn.models.anisounet3d_basic import AnisotropicUNet3D
 from tntseg.nn.models.anisounet3d_seblock import AnisotropicUNet3DSE
