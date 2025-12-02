@@ -261,7 +261,7 @@ def _calculate_metrics(
 
 
 def _train_single_epoch(
-    nn, optimizer, criterion, train_dataloader, config, epoch, output_folder: Path
+    nn, optimizer, criterion, train_dataloader, config, epoch, output_folder: Path, save_predictions: bool = False
 ):
     epoch_loss = 0.0
     for batch_idx, batch in enumerate(
@@ -279,7 +279,7 @@ def _train_single_epoch(
         epoch_loss += loss.item()
 
         # Save predictions, inputs, and masks for the first batch of each epoch
-        if batch_idx == 0 and epoch % 100 == 0:
+        if save_predictions and batch_idx == 0 and epoch % 100 == 0:
             predictions = torch.sigmoid(outputs).cpu().detach().numpy()
             inputs_np = inputs.cpu().detach().numpy()
             masks_np = masks.cpu().detach().numpy()
@@ -336,7 +336,7 @@ def _train(
     for epoch in range(config.epochs):
         nn.train()
         epoch_loss = _train_single_epoch(
-            nn, optimizer, criterion, train_dataloader, config, epoch, output_folder
+            nn, optimizer, criterion, train_dataloader, config, epoch, output_folder, save_predictions=save_results
         )
 
         TP, TN, FP, FN, val_loss = _calculate_metrics(
@@ -774,10 +774,10 @@ if __name__ == "__main__":
         help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16",
     )
     parser.add_argument(
-        "--save_metrics_results",
+        "--save_results",
         type=bool,
         default=False,
-        help="Saves the results of training evaluations. Default: False"
+        help="During training save various debug images and results. Default: False"
     )
 
     args = parser.parse_args()
@@ -891,5 +891,5 @@ if __name__ == "__main__":
         config,
         args.mlflow_address,
         args.mlflow_port,
-        save_results_metrics=args.save_metrics_results
+        save_results=args.save_results
     )
