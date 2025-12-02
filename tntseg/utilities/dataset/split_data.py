@@ -334,7 +334,7 @@ def generate_random_crop(
     """
     if non_training_limits["z"] != (0, 7):
         raise ValueError(
-            "Limits on z dimenstion is not supported for creating random crops"
+            "Limits on z dimension is not supported for creating random crops"
         )
     possible_crop_mask = np.ones(
         image.shape[1:], dtype=bool

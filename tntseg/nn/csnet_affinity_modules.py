@@ -1,7 +1,7 @@
 """
-The following module containst SpatialAttention and ChannelAttention modules as described in the
+The following module contains SpatialAttention and ChannelAttention modules as described in the
 paper CS2-Net: Deep Learning Segmentation of Curvilinear Structures in Medical Imaging by Lei
-et al. [arXiv:2010.07486]. The code was copied from their oficial implementation available at their
+et al. [arXiv:2010.07486]. The code was copied from their official implementation available at their
 GitHub repository.
 """
 
