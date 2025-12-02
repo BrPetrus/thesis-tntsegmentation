@@ -577,7 +577,7 @@ def main(
     config: BaseConfig,
     mlflow_address: str = "localhost",
     mlflow_port: str = "800",
-    save_results_metrics: bool = False,
+    save_results: bool = False,
 ) -> None:
     set_all_seeds(config.seed)
 
@@ -599,11 +599,12 @@ def main(
     train_dataloader, test_dataloader, valid_dataloader = _prepare_datasets(
         input_folder, config.seed, config
     )
-    visualize_transform_effects(
-        train_dataloader,
-        num_samples=5,
-        output_folder=output_folder_path / "transform_check",
-    )
+    if save_results:
+        visualize_transform_effects(
+            train_dataloader,
+            num_samples=5,
+            output_folder=output_folder_path / "transform_check",
+        )
 
     # Create net
     nn = create_neural_network(config, 1, 1).to(config.device)
@@ -626,7 +627,7 @@ def main(
             valid_dataloader,
             config,
             output_folder,
-            save_results=save_results_metrics,
+            save_results=save_results,
         )
 
         # Run testing
