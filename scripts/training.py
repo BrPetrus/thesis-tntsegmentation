@@ -261,7 +261,14 @@ def _calculate_metrics(
 
 
 def _train_single_epoch(
-    nn, optimizer, criterion, train_dataloader, config, epoch, output_folder: Path, save_predictions: bool = False
+    nn,
+    optimizer,
+    criterion,
+    train_dataloader,
+    config,
+    epoch,
+    output_folder: Path,
+    save_predictions: bool = False,
 ):
     epoch_loss = 0.0
     for batch_idx, batch in enumerate(
@@ -327,7 +334,7 @@ def _train(
     valid_dataloader: DataLoader,
     config: BaseConfig,
     output_folder: Path,
-    save_results: bool = False
+    save_results: bool = False,
 ) -> None:
     # Last time that the eval loss improved
     epochs_since_last_improvement = 0
@@ -336,7 +343,14 @@ def _train(
     for epoch in range(config.epochs):
         nn.train()
         epoch_loss = _train_single_epoch(
-            nn, optimizer, criterion, train_dataloader, config, epoch, output_folder, save_predictions=save_results
+            nn,
+            optimizer,
+            criterion,
+            train_dataloader,
+            config,
+            epoch,
+            output_folder,
+            save_predictions=save_results,
         )
 
         TP, TN, FP, FN, val_loss = _calculate_metrics(
@@ -612,11 +626,13 @@ def main(
             valid_dataloader,
             config,
             output_folder,
-            save_results=save_results_metrics
+            save_results=save_results_metrics,
         )
 
         # Run testing
-        test_metrics = _test(nn, test_dataloader, config, output_folder, logger, config.epochs - 1)
+        test_metrics = _test(
+            nn, test_dataloader, config, output_folder, logger, config.epochs - 1
+        )
 
         # After training, log the final model
         with torch.no_grad():
@@ -641,9 +657,9 @@ def main(
             config_dict = asdict(config)
             config_dict["mlflow_run_name"] = run.info.run_name
             config_dict["mlflow_run_id"] = run.info.run_id
-            config_dict["model_signature"] = nn.get_signature() 
-            config_dict["test_dice"] = test_metrics['test/dice']
-            config_dict["test_jaccard"] = test_metrics['test/jaccard']
+            config_dict["model_signature"] = nn.get_signature()
+            config_dict["test_dice"] = test_metrics["test/dice"]
+            config_dict["test_jaccard"] = test_metrics["test/jaccard"]
             json.dump(config_dict, jsonfile, indent=2, default=str)
 
 
@@ -777,7 +793,7 @@ if __name__ == "__main__":
         "--save_results",
         type=bool,
         default=False,
-        help="During training save various debug images and results. Default: False"
+        help="During training save various debug images and results. Default: False",
     )
 
     args = parser.parse_args()
@@ -891,5 +907,5 @@ if __name__ == "__main__":
         config,
         args.mlflow_address,
         args.mlflow_port,
-        save_results=args.save_results
+        save_results=args.save_results,
     )

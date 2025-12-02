@@ -1,17 +1,19 @@
 """
 metrics.py
 
-This module provides functions for calculating various metrics commonly used in binary classification 
-and segmentation tasks. These metrics include Jaccard Index, Dice Coefficient, Tversky Index, and 
-Focal Tversky Loss. Additionally, it includes a utility function for calculating batch statistics 
+This module provides functions for calculating various metrics commonly used in binary classification
+and segmentation tasks. These metrics include Jaccard Index, Dice Coefficient, Tversky Index, and
+Focal Tversky Loss. Additionally, it includes a utility function for calculating batch statistics
 such as true positives, false positives, false negatives, and true negatives.
-""" 
+"""
 
 import numpy as np
 from numpy.typing import NDArray
 from typing import TypeVar, Tuple
 
 Stats = Tuple[int, int, int, int]
+
+
 def jaccard_index(tp: int, fp: int, fn: int) -> float:
     """
     Compute the Jaccard Index (Intersection over Union).
@@ -42,7 +44,9 @@ def dice_coefficient(tp: int, fp: int, fn: int) -> float:
     return 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn > 0 else 0.0
 
 
-def tversky_index(tp: int, fp: int, fn: int, alpha: float = 0.5, beta: float = 0.5) -> float:
+def tversky_index(
+    tp: int, fp: int, fn: int, alpha: float = 0.5, beta: float = 0.5
+) -> float:
     """
     Compute the Tversky Index.
 
@@ -56,10 +60,14 @@ def tversky_index(tp: int, fp: int, fn: int, alpha: float = 0.5, beta: float = 0
     Returns:
         float: Tversky Index.
     """
-    return tp / (tp + alpha * fp + beta * fn) if tp + alpha * fp + beta * fn > 0 else 0.0
+    return (
+        tp / (tp + alpha * fp + beta * fn) if tp + alpha * fp + beta * fn > 0 else 0.0
+    )
 
 
-def focal_tversky_loss(tp: int, fp: int, fn: int, alpha: float = 0.5, beta: float = 0.5, gamma: float = 1.0) -> float:
+def focal_tversky_loss(
+    tp: int, fp: int, fn: int, alpha: float = 0.5, beta: float = 0.5, gamma: float = 1.0
+) -> float:
     """
     Compute the Focal Tversky Loss.
 
@@ -77,15 +85,25 @@ def focal_tversky_loss(tp: int, fp: int, fn: int, alpha: float = 0.5, beta: floa
     tversky = tversky_index(tp, fp, fn, alpha, beta)
     return (1 - tversky) ** gamma
 
+
 def accuracy(tp: int, fp: int, fn: int, tn: int) -> float:
-    return (tp + tn) / (tp+fp+fn+tn)
+    return (tp + tn) / (tp + fp + fn + tn)
+
+
 def precision(tp: int, fp: int) -> float:
-    return (tp) / (tp+fp) if tp+fp > 0 else 0.
+    return (tp) / (tp + fp) if tp + fp > 0 else 0.0
+
+
 def recall(tp: int, fn: int) -> float:
-    return tp / (tp+fn) if tp+fn > 0 else 0.
+    return tp / (tp + fn) if tp + fn > 0 else 0.0
 
 
-def calculate_batch_stats(prediction_batch: NDArray[np.uint8 | np.bool], label_batch: NDArray[np.uint8 | np.bool], negative_val: int = 0, positive_val: int = 255) -> Stats:
+def calculate_batch_stats(
+    prediction_batch: NDArray[np.uint8 | np.bool],
+    label_batch: NDArray[np.uint8 | np.bool],
+    negative_val: int = 0,
+    positive_val: int = 255,
+) -> Stats:
     """
     Calculate batch statistics for binary classification metrics.
 
@@ -118,11 +136,17 @@ def calculate_batch_stats(prediction_batch: NDArray[np.uint8 | np.bool], label_b
 
     """
     if prediction_batch.dtype != np.uint8 and prediction_batch.dtype != np.bool:
-        raise ValueError(f"Expected unsigned 8bit integer type (np.uint8) or boolean, got {prediction_batch.dtype} for the prediction")
+        raise ValueError(
+            f"Expected unsigned 8bit integer type (np.uint8) or boolean, got {prediction_batch.dtype} for the prediction"
+        )
     if label_batch.dtype != np.uint8 and label_batch.dtype != np.bool:
-        raise ValueError(f"Expected unsigned 8bit integer type or boolean, got {label_batch.dtype} for the label_batch")
+        raise ValueError(
+            f"Expected unsigned 8bit integer type or boolean, got {label_batch.dtype} for the label_batch"
+        )
     if prediction_batch.dtype != label_batch.dtype:
-        raise ValueError(f"Prediction {prediction_batch.dtype} and label {label_batch.dtype} have different types.")
+        raise ValueError(
+            f"Prediction {prediction_batch.dtype} and label {label_batch.dtype} have different types."
+        )
 
     prediction = prediction_batch.flatten()
     label = label_batch.flatten()
@@ -132,6 +156,8 @@ def calculate_batch_stats(prediction_batch: NDArray[np.uint8 | np.bool], label_b
     FN = np.sum((prediction == negative_val) & (label == positive_val))
     TN = np.sum((prediction == negative_val) & (label == negative_val))
     total = prediction.size
-    assert total == TP+FP+FN+TN, "Sum of TP, FP, FN, TN does not match total elements"
+    assert total == TP + FP + FN + TN, (
+        "Sum of TP, FP, FN, TN does not match total elements"
+    )
 
     return TP, FP, FN, TN

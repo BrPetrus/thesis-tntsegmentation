@@ -466,9 +466,7 @@ Examples:
 
 
 if __name__ == "__main__":
-
     # Set global font size
-    plt.rcParams['font.size'] = 14
-
+    plt.rcParams["font.size"] = 14
 
     main()

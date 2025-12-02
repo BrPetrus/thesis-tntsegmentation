@@ -52,10 +52,18 @@ def plot_histogram(sizes):
     median_size = np.median(sizes)
 
     plt.axvline(
-        mean_size, color="red", linestyle="--", linewidth=2, label=f"Mean: {mean_size:.1f}"
+        mean_size,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Mean: {mean_size:.1f}",
     )
     plt.axvline(
-        median_size, color="orange", linestyle="--", linewidth=2, label=f"Median: {median_size:.1f}"
+        median_size,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        label=f"Median: {median_size:.1f}",
     )
     plt.legend()
 

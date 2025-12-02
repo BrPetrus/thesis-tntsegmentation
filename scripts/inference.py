@@ -25,6 +25,7 @@ from postprocess import PostprocessConfig, detect_tunnels, print_detailed_result
 
 class TiledDataset:
     """Dataset that preserves tile positions with data."""
+
     def __init__(self, tiles_data, tiles_positions):
         self.tiles_data = tiles_data
         self.tiles_positions = tiles_positions
@@ -48,7 +49,9 @@ def load_training_config(model_path: str) -> dict:
         config = json.load(f)
 
     print(f"Loaded configuration from {config_path}")
-    print(f"Dataset mean: {config.get('dataset_mean', 'N/A')}, Std: {config.get('dataset_std', 'N/A')}")
+    print(
+        f"Dataset mean: {config.get('dataset_mean', 'N/A')}, Std: {config.get('dataset_std', 'N/A')}"
+    )
     print(f"Model type: {config.get('model_type', 'N/A')}")
 
     return config
@@ -60,7 +63,8 @@ def create_model_from_config(config: dict) -> torch.nn.Module:
 
     if model_type == "anisotropicunet":
         return AnisotropicUNet3D(
-            n_channels_in=1, n_classes_out=1,
+            n_channels_in=1,
+            n_classes_out=1,
             depth=config["model_depth"],
             base_channels=config["base_channels"],
             channel_growth=config["channel_growth"],
@@ -73,7 +77,8 @@ def create_model_from_config(config: dict) -> torch.nn.Module:
         )
     elif model_type == "anisotropicunet_se":
         return AnisotropicUNet3DSE(
-            n_channels_in=1, n_classes_out=1,
+            n_channels_in=1,
+            n_classes_out=1,
             depth=config["model_depth"],
             base_channels=config["base_channels"],
             channel_growth=config["channel_growth"],
@@ -87,7 +92,8 @@ def create_model_from_config(config: dict) -> torch.nn.Module:
         )
     elif model_type == "anisotropicunet_csam":
         return AnisotropicUNet3DCSAM(
-            n_channels_in=1, n_classes_out=1,
+            n_channels_in=1,
+            n_classes_out=1,
             depth=config["model_depth"],
             base_channels=config["base_channels"],
             channel_growth=config["channel_growth"],
@@ -100,7 +106,8 @@ def create_model_from_config(config: dict) -> torch.nn.Module:
         )
     elif model_type == "anisotropicunet_usenet":
         return AnisotropicUSENet(
-            n_channels_in=1, n_classes_out=1,
+            n_channels_in=1,
+            n_classes_out=1,
             depth=config["model_depth"],
             base_channels=config["base_channels"],
             channel_growth=config["channel_growth"],
@@ -222,41 +229,43 @@ def run_inference(
     # Pseudocode usage
     # run_inference(model, Path("img.tif"), Path("out"), config, (7,64,64), 10, 32, "cuda")
     """
-    
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     print(f"Loading image from {image_path}")
     image = tifffile.imread(image_path).astype(np.float32)
-    
+
     # Normalize image
     mean = config.get("dataset_mean", 0.0)
     std = config.get("dataset_std", 1.0)
     image_normalized = (image - mean) / std
-    
+
     print(f"Image shape: {image.shape}")
     print(f"Tiling with overlap: {tile_overlap}px, crop size: {crop_size}")
-    
+
     # Tile the volume
     tiles_data, tiles_positions = tile_volume(
-        image_normalized, crop_size, overlap=tile_overlap,
+        image_normalized,
+        crop_size,
+        overlap=tile_overlap,
     )
-    
+
     tiles_dataset = TiledDataset(tiles_data, tiles_positions)
-    tiles_dataloader = DataLoader(
-        tiles_dataset, batch_size=batch_size, shuffle=False
-    )
-    
+    tiles_dataloader = DataLoader(tiles_dataset, batch_size=batch_size, shuffle=False)
+
     # Run inference
     all_predictions = []
     all_positions = []
-    
+
     model.eval()
     with torch.no_grad():
-        for batch_data, batch_positions in tqdm.tqdm(tiles_dataloader, desc="Running inference"):
+        for batch_data, batch_positions in tqdm.tqdm(
+            tiles_dataloader, desc="Running inference"
+        ):
             batch_data = batch_data[:, None, ...]  # Add channel dimension
             batch_data = batch_data.to(device)
             predictions = model(batch_data).detach().cpu()
-            
+
             all_predictions.extend(predictions)
             depths = batch_positions[0]
             rows = batch_positions[1]
@@ -264,7 +273,7 @@ def run_inference(
             all_positions.extend(
                 [(depths[i], rows[i], cols[i]) for i in range(len(depths))]
             )
-    
+
     # Stitch predictions
     print("Stitching tiles...")
     all_predictions_tensor = torch.stack(all_predictions)
@@ -275,29 +284,29 @@ def run_inference(
         aggregation_method=AggregationMethod.Mean,
         visualise_lines=True,
     )
-    tifffile.imwrite('stichlines.tif', rec)
-    
+    tifffile.imwrite("stichlines.tif", rec)
+
     # Apply sigmoid to get probabilities
     probabilities = torch.sigmoid(reconstructed_volume).numpy()
-    
+
     # Save probability map
     if save_probability:
         prob_path = output_dir / f"{image_path.stem}_probability.tif"
         tifffile.imwrite(prob_path, probabilities.astype(np.float32))
         print(f"Saved probability map to {prob_path}")
-    
+
     # Threshold for binary predictions
     if save_binary:
         binary = (probabilities > 0.5).astype(np.uint8) * 255
         binary_path = output_dir / f"{image_path.stem}_binary.tif"
         tifffile.imwrite(binary_path, binary)
         print(f"Saved binary prediction to {binary_path}")
-    
+
     # Run postprocessing if requested
     if apply_postprocessing and postprocess_config is not None:
         print("\nRunning postprocessing...")
         postproc_dir = output_dir / f"{image_path.stem}_postprocessed"
-        
+
         try:
             # Note: Without ground truth, we pass None for GT mask
             tunnel_result = detect_tunnels(
@@ -306,12 +315,12 @@ def run_inference(
                 image=image,
                 config=postprocess_config,
                 output_folder=postproc_dir,
-                visualise=True
+                visualise=True,
             )
-            
+
             print("\nPostprocessing completed")
             print(f"Results saved to {postproc_dir}")
-            
+
         except Exception as e:
             print(f"Error in postprocessing: {e}")
 
@@ -320,94 +329,84 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run inference on images using a trained model"
     )
-    
+
     parser.add_argument(
-        "model_path",
-        type=str,
-        help="Path to model checkpoint (.pth file)"
+        "model_path", type=str, help="Path to model checkpoint (.pth file)"
     )
     parser.add_argument(
-        "image_path",
-        type=str,
-        help="Path to input image (TIFF format)"
+        "image_path", type=str, help="Path to input image (TIFF format)"
     )
-    parser.add_argument(
-        "output_dir",
-        type=str,
-        help="Output directory for predictions"
-    )
-    
+    parser.add_argument("output_dir", type=str, help="Output directory for predictions")
+
     # Optional arguments
     parser.add_argument(
         "--tile_overlap",
         type=int,
         default=20,
-        help="Tile overlap in pixels (default: 20)"
+        help="Tile overlap in pixels (default: 20)",
     )
     parser.add_argument(
         "--batch_size",
         type=int,
         default=8,
-        help="Batch size for inference (default: 8)"
+        help="Batch size for inference (default: 8)",
     )
     parser.add_argument(
         "--device",
         type=str,
         default=None,
-        help="Device (cuda/cpu). Auto-detects if not specified"
+        help="Device (cuda/cpu). Auto-detects if not specified",
     )
     parser.add_argument(
-        "--no_probability",
-        action="store_true",
-        help="Don't save probability map"
+        "--no_probability", action="store_true", help="Don't save probability map"
     )
     parser.add_argument(
-        "--no_binary",
-        action="store_true",
-        help="Don't save binary prediction"
+        "--no_binary", action="store_true", help="Don't save binary prediction"
     )
-    
+
     # Postprocessing arguments
     parser.add_argument(
         "--postprocess",
         action="store_true",
-        help="Apply postprocessing to clean up predictions"
+        help="Apply postprocessing to clean up predictions",
     )
     parser.add_argument(
         "--prediction_threshold",
         type=float,
         default=0.5,
-        help="Threshold for binarization (default: 0.5)"
+        help="Threshold for binarization (default: 0.5)",
     )
     parser.add_argument(
         "--minimum_size",
         type=int,
         default=100,
-        help="Minimum component size in pixels (default: 100)"
+        help="Minimum component size in pixels (default: 100)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Load configuration
     print("Loading model configuration...")
     config = load_training_config(args.model_path)
-    
+
     # Determine device
-    device = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    device = (
+        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
     print(f"Using device: {device}")
-    
+
     # Create model
     print("Creating model...")
     model = create_model_from_config(config)
     model = model.to(device)
-    
+
     # Load weights
     print(f"Loading model weights from {args.model_path}")
     model.load_state_dict(torch.load(args.model_path, map_location=device))
-    
+
     # Get crop size from config
     crop_size = tuple(config.get("crop_size", [7, 64, 64]))
-    
+
     # Create postprocess config if needed
     postprocess_config = None
     if args.postprocess:
@@ -416,7 +415,7 @@ def main():
             minimum_size_px=args.minimum_size,
             recall_threshold=0.5,  # Not used without ground truth
         )
-    
+
     # Run inference
     run_inference(
         model=model,
@@ -432,7 +431,7 @@ def main():
         save_probability=not args.no_probability,
         save_binary=not args.no_binary,
     )
-    
+
     print("\nInference complete!")
 
 
