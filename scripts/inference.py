@@ -268,7 +268,6 @@ def run_inference(
     # Stitch predictions
     print("Stitching tiles...")
     all_predictions_tensor = torch.stack(all_predictions)
-    # TODO revert
     reconstructed_volume, rec = stitch_volume(
         all_predictions_tensor,
         all_positions,

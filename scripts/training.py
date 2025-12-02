@@ -327,6 +327,7 @@ def _train(
     valid_dataloader: DataLoader,
     config: BaseConfig,
     output_folder: Path,
+    save_results: bool = False
 ) -> None:
     # Last time that the eval loss improved
     epochs_since_last_improvement = 0
@@ -345,7 +346,7 @@ def _train(
             epoch,
             "val",
             output_folder,
-            save_results=epoch % 100 == 0,  # TODO: add global saving flag
+            save_results=save_results and epoch % 100 == 0,
         )
         # Calculate metrics
         accuracy = tntmetrics.accuracy(TP, FP, FN, TN)
@@ -562,6 +563,7 @@ def main(
     config: BaseConfig,
     mlflow_address: str = "localhost",
     mlflow_port: str = "800",
+    save_results_metrics: bool = False,
 ) -> None:
     set_all_seeds(config.seed)
 
@@ -610,6 +612,7 @@ def main(
             valid_dataloader,
             config,
             output_folder,
+            save_results=save_results_metrics
         )
 
         # Run testing
@@ -770,6 +773,12 @@ if __name__ == "__main__":
         default=16,
         help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16",
     )
+    parser.add_argument(
+        "--save_metrics_results",
+        type=bool,
+        default=False,
+        help="Saves the results of training evaluations. Default: False"
+    )
 
     args = parser.parse_args()
 
@@ -882,4 +891,5 @@ if __name__ == "__main__":
         config,
         args.mlflow_address,
         args.mlflow_port,
+        save_results_metrics=args.save_metrics_results
     )
