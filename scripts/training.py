@@ -787,12 +787,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--reduction_factor",
         action="store_true",
-        default=16,
+        default=16,  # TODO: investigate
         help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16",
     )
     parser.add_argument(
         "--save_results",
-        type=bool,
+        action="store_true",
         default=False,
         help="During training save various debug images and results. Default: False",
     )
