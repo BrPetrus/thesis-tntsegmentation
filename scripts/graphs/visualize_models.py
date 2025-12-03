@@ -43,6 +43,17 @@ def create_model_configs():
             "upscale_kernel": (1, 2, 2),
             "upscale_stride": (1, 2, 2),
         },
+        "basicunetlike": {
+            "depths": [2],
+            "base_channels": 64,
+            "channel_growth": 2,
+            "horizontal_kernel": (3, 3, 3),
+            "horizontal_padding": (1, 1, 1),
+            "downscale_kernel": (2, 2, 2),
+            "downscale_stride": (2, 2, 2),
+            "upscale_kernel": (2, 2, 2),
+            "upscale_stride": (2, 2, 2),
+        }
     }
     return configs
 
