@@ -1,3 +1,34 @@
+"""
+Dataset splitting and patch extraction utilities for 3D TNT segmentation.
+
+This module provides functionality to split 3D image volumes into spatially-separated
+training and test sets using quadrant-based cross-validation. It extracts patches
+containing tunnels and saves them for model training and evaluation.
+
+Key Features
+------------
+- Quadrant-based spatial cross-validation (4-fold)
+- Automatic tunnel detection and patch extraction
+- Minimum size padding for patches
+- Random crop generation for augmentation
+- Overlap threshold control to prevent data leakage between folds
+- Comprehensive logging and visualization
+
+Quadrant Layout
+---------------
+    |
+ 1  |  2  (1=top-left, 2=top-right)
+----+----
+ 3  |  4  (3=bottom-left, 4=bottom-right)
+    |
+
+Usage
+-----
+>>> python split_data.py input_folder output_folder --train_quad 1
+This holds out quadrant 1 for testing and extracts training patches from quads 2,3,4.
+
+"""
+
 from pathlib import Path
 from matplotlib import pyplot as plt
 import numpy as np
@@ -20,12 +51,33 @@ def load_images(gt_path: Path, orig_path: Path) -> Tuple[NDArray, NDArray, List[
     """
     Load ground truth and original images from specified paths.
 
-    Args:
-        gt_path: Path to the ground truth masks
-        orig_path: Path to the original images
+    Parameters
+    ----------
+    gt_path : pathlib.Path
+        Path to the ground truth masks directory containing files named "mask<id>.tif"
+    orig_path : pathlib.Path
+        Path to the original images directory containing files named "t<id>.tif"
 
-    Returns:
-        Tuple of (gt_array, img_array, time_points)
+    Returns
+    -------
+    gt_array : ndarray
+        Ground truth segmentation masks with shape (num_timepoints, depth, height, width)
+    img_array : ndarray
+        Original image data with shape (num_timepoints, depth, height, width)
+    time_points : list of int
+        List of time indices corresponding to loaded image pairs
+
+    Raises
+    ------
+    ValueError
+        If no valid image pairs are found in the provided directories
+    RuntimeError
+        If ground truth and original image shapes are incompatible
+
+    Notes
+    -----
+    Files are matched by their numeric identifiers. For example, "mask123.tif" is paired
+    with "t123.tif".
     """
     gt_images = []
     orig_images = []
@@ -83,20 +135,38 @@ def get_quadrant_limits(
     """
     Get the z, row, and column limits for the specified quadrant.
 
-    Args:
-        quadrant: Quadrant number (1-4)
-        image_shape: Shape of the image (z, rows, cols)
+    Parameters
+    ----------
+    quadrant : int
+        Quadrant number (1-4), where:
+        - 1 = top-left
+        - 2 = top-right
+        - 3 = bottom-left
+        - 4 = bottom-right
+    image_shape : tuple of int
+        Shape of the image as (depth, height, width)
 
-    Returns:
-        Dictionary with 'z', 'r', and 'c' keys mapping to (min, max) tuples
+    Returns
+    -------
+    limits : dict
+        Dictionary with keys 'z', 'r', and 'c' mapping to (min, max) tuples
+        representing the coordinate ranges for the quadrant
 
-    Note:
-        Quadrants are arranged as:
-           |
-        1  |  2
-        ---+---
-        3  |  4
-           |
+    Raises
+    ------
+    ValueError
+        If quadrant is not in range [1, 2, 3, 4]
+
+    Notes
+    -----
+    Quadrant layout:
+        |
+     1  |  2
+    ----+----
+     3  |  4
+        |
+
+    The z (depth) dimension is always the full range [0, depth).
     """
     z_depth, rows, cols = image_shape
     half_rows, half_cols = rows // 2, cols // 2
@@ -127,11 +197,20 @@ def bbox_3d(img: NDArray) -> List[Tuple[int, int]]:
     """
     Compute the 3D bounding box of a binary image.
 
-    Args:
-        img: Binary image
+    Parameters
+    ----------
+    img : ndarray
+        Binary 3D image array
 
-    Returns:
-        List of (min, max) tuples for each dimension (z, row, col)
+    Returns
+    -------
+    bbox : list of tuple
+        List of (min, max) tuples for each dimension in order (z, row, col)
+
+    Raises
+    ------
+    ValueError
+        If the image contains no non-zero voxels
     """
     # Get non-zero voxel coordinates
     coords = np.where(img)
@@ -151,14 +230,25 @@ def compute_overlap_percentage(
     mask: NDArray, limits: Dict[str, Tuple[int, int]]
 ) -> float:
     """
-    Compute the percentage of a mask that falls within the specified limits and return the number of pixels in overlap.
+    Compute the percentage of a mask that falls within specified region limits.
 
-    Args:
-        mask: Binary mask
-        limits: Dictionary with 'z', 'r', and 'c' keys mapping to (min, max) tuples
+    Parameters
+    ----------
+    mask : ndarray
+        Binary 3D mask
+    limits : dict
+        Dictionary with 'z', 'r', and 'c' keys mapping to (min, max) coordinate tuples
 
-    Returns:
-        Percentage of mask voxels within limits (0.0 to 1.0)
+    Returns
+    -------
+    overlap_percentage : float
+        Fraction of mask voxels within the specified region (0.0 to 1.0)
+    overlap_voxels : int
+        Number of voxels in the overlap region
+
+    Notes
+    -----
+    Returns (0.0, 0) if the mask contains no non-zero voxels.
     """
     total_voxels = np.sum(mask)
     if total_voxels == 0:
@@ -182,16 +272,36 @@ def extract_patch_with_padding(
     image: NDArray, bbox: List[Tuple[int, int]], min_size: Tuple[int, int, int]
 ) -> Tuple[NDArray, List[Tuple[int, int]]]:
     """
-    Extract a patch from an image using the bounding box and ensure it meets the minimum size.
+    Extract a patch from an image using bounding box with minimum size padding.
 
-    Args:
-        image: Input image
-        bbox: Bounding box as [(z_min, z_max), (r_min, r_max), (c_min, c_max)]
-        min_size: Minimum size (z, rows, cols)
+    Extracts a patch around a bounding box and ensures it meets minimum size requirements
+    by padding. Padding is applied symmetrically first, then expanded asymmetrically if needed.
+    If padding exceeds image boundaries, mirror padding is applied.
 
-    Returns:
-        Tuple of (extracted_patch, extraction_coords)
-        Where extraction_coords is [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+    Parameters
+    ----------
+    image : ndarray
+        3D input image array
+    bbox : list of tuple
+        Bounding box as [(z_min, z_max), (r_min, r_max), (c_min, c_max)]
+    min_size : tuple of int
+        Minimum required size as (z_size, height, width)
+
+    Returns
+    -------
+    patch : ndarray
+        Extracted patch with shape at least min_size
+    extraction_coords : list of tuple
+        Actual extraction coordinates as [(z_start, z_end), (r_start, r_end), (c_start, c_end)]
+
+    Notes
+    -----
+    The function ensures the extracted patch respects image boundaries while meeting
+    minimum size requirements through the following strategy:
+    1. Calculate required padding
+    2. Apply symmetric padding first
+    3. Expand asymmetrically if needed
+    4. Use mirror padding for remaining deficiencies
     """
     # Extract the original bounds
     (z_min, z_max), (r_min, r_max), (c_min, c_max) = bbox
@@ -319,18 +429,40 @@ def generate_random_crop(
     invert_training_limits: bool = False,
 ) -> Optional[Tuple[NDArray, NDArray, Dict[str, Tuple[int, int]]]]:
     """
-    Generate a completely random crop from the non-training region.
+    Generate a completely random crop from specified region.
 
-    Args:
-        image: Original image
-        gt_image: Ground truth image
-        min_size: Minimum crop size (z, rows, cols)
-        non_training_limits: Limits of the non-training region
-        invert_training_limits: Invert the meaning of training limits
+    Generates random crops that stay within specified region limits, useful for
+    data augmentation while preventing overlap between training and test regions.
 
-    Returns:
-        Tuple of (gt_crop, img_crop, crop_coords) where crop_coords is a dict object holding the bbox coordinates
-        Returns None if crop is not possible
+    Parameters
+    ----------
+    image : ndarray
+        Original 3D image
+    gt_image : ndarray
+        Ground truth 3D segmentation image
+    min_size : tuple of int
+        Minimum crop size as (z_size, height, width)
+    non_training_limits : dict
+        Dictionary with 'z', 'r', 'c' keys mapping to (min, max) region limits
+    invert_training_limits : bool, optional
+        If True, invert the region selection logic. Default is False.
+
+    Returns
+    -------
+    crop_tuple : tuple or None
+        Tuple of (gt_crop, img_crop, crop_coords) where crop_coords is a dictionary
+        with 'z', 'r', 'c' keys mapping to (start, end) tuples.
+        Returns None if crop generation is not possible.
+
+    Raises
+    ------
+    ValueError
+        If z-dimension limits are not the full volume (not supported for random crops)
+
+    Notes
+    -----
+    The function generates crops that satisfy size constraints while staying within
+    allowed regions. Crops are skipped if they would cross boundaries incompatibly.
     """
     if non_training_limits["z"] != (0, 7):
         raise ValueError(
@@ -410,18 +542,44 @@ def extract_patches(
     num_random_crops: int = 0,
 ) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
-    Extract patches containing tunnels from the non-training quadrant.
+    Extract training patches from non-test quadrants.
 
-    Args:
-        gt: Ground truth images
-        imgs: Original images
-        min_size: Minimum patch size (z, rows, cols)
-        train_quad: Quadrant to use for training (1-4)
-        overlap_threshold: Threshold for determining if a tunnel is in the training quadrant
-        num_random_crops: Number of random crops to add
+    Extracts patches containing segmented tunnels from all quadrants except the
+    held-out test quadrant. This implements the training phase of quadrant-based
+    cross-validation.
 
-    Returns:
-        List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples
+    Parameters
+    ----------
+    gt : ndarray
+        Ground truth segmentation with shape (num_timepoints, depth, height, width)
+    imgs : ndarray
+        Original images with same shape as gt
+    min_size : tuple of int
+        Minimum patch size as (z_size, height, width)
+    train_quad : int
+        Test quadrant to HOLD OUT (1-4). Training uses the OTHER 3 quadrants.
+    overlap_threshold : float, optional
+        Fraction threshold (0-1) for excluding tunnels mostly in test quadrant. Default is 0.5
+    overlap_threshold_abs : int, optional
+        Absolute voxel count threshold. Default is 100
+    num_random_crops : int, optional
+        Number of random crops to augment training set. Default is 0
+
+    Returns
+    -------
+    patches : list of tuple
+        List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples where:
+        - gt_patch, img_patch: ndarray patches
+        - patch_id: string identifier
+        - bbox: original bounding box coordinates
+        - extraction_coords: actual extraction coordinates after padding
+
+    Notes
+    -----
+    - Tunnels are excluded if >50% (by default) overlap with the test quadrant
+    - Patches are padded to meet min_size requirements
+    - Random crops are added if num_random_crops > 0
+    - Detailed statistics are logged
     """
     logger.info(f"Overlap threshold set to {overlap_threshold}")
     extracted_patches = []
@@ -435,7 +593,7 @@ def extract_patches(
         "total": 0,
     }
 
-    # Calculate non-training quadrant limits (we want tunnels NOT in the training quadrant)
+    # Get the test/hold-out quadrant limits - we EXCLUDE these from training patches
     train_limits = get_quadrant_limits(train_quad, gt.shape[1:])
 
     # Process each time frame
@@ -569,22 +727,49 @@ def extract_test_patches(
     min_size: Tuple[int, int, int],
     train_quad: int,
     overlap_threshold_perc: float = 0.5,
-    overlap_threshold_size: int = 100,
+    overlap_threshold_size: int = 100,  # TODO: remove
     num_random_crops: int = 0,
 ) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
-    Extract test patches from the training quadrant.
+    Extract test/evaluation patches from held-out quadrant.
 
-    Args:
-        gt: Ground truth images
-        imgs: Original images
-        min_size: Minimum patch size (z, rows, cols)
-        train_quad: Quadrant to use for training/testing (1-4)
-        overlap_threshold: Threshold for determining if a tunnel is in the training quadrant
-        num_random_crops: Number of random crops to add
+    Extracts patches containing segmented tunnels from the test quadrant that is
+    held out during training. This implements the test phase of quadrant-based
+    cross-validation.
 
-    Returns:
-        List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples from the test quadrant
+    Parameters
+    ----------
+    gt : ndarray
+        Ground truth segmentation with shape (num_timepoints, depth, height, width)
+    imgs : ndarray
+        Original images with same shape as gt
+    min_size : tuple of int
+        Minimum patch size as (z_size, height, width)
+    train_quad : int
+        Test quadrant from which to extract patches (1-4). This is the HELD-OUT quadrant
+        during training.
+    overlap_threshold_perc : float, optional
+        Fraction threshold (0-1) for including tunnels in test quadrant. Default is 0.5
+    overlap_threshold_size : int, optional
+        Absolute voxel count threshold (deprecated). Default is 100
+    num_random_crops : int, optional
+        Number of random crops to augment test set. Default is 0
+
+    Returns
+    -------
+    patches : list of tuple
+        List of (gt_patch, img_patch, patch_id, bbox, extraction_coords) tuples where:
+        - gt_patch, img_patch: ndarray patches
+        - patch_id: string identifier
+        - bbox: original bounding box coordinates
+        - extraction_coords: actual extraction coordinates after padding
+
+    Notes
+    -----
+    - Only tunnels mostly (>50% by default) in the test quadrant are included
+    - Patches are padded to meet min_size requirements
+    - Random crops are added if num_random_crops > 0
+    - Detailed statistics are logged
     """
     extracted_patches = []
     patch_stats = {
@@ -597,10 +782,10 @@ def extract_test_patches(
         "total": 0,
     }
 
-    # Get the training quadrant limits - this is our test region
+    # Get the test quadrant limits
     test_limits = get_quadrant_limits(train_quad, gt.shape[1:])
 
-    logger.info(f"Extracting test patches from quadrant {train_quad}")
+    logger.info(f"Extracting TEST patches from quadrant {train_quad}")
 
     # Process each time frame
     for t_idx in range(gt.shape[0]):
@@ -738,17 +923,66 @@ def main(
     overlap_threshold_px: int = 100,
 ) -> None:
     """
-    Main function to extract and save training and testing patches.
+    Main function to extract and save training and testing patches from image volumes.
 
-    Args:
-        input_folder: Path to input folder
-        output_folder: Path to output folder
-        min_size: Minimum patch size [z, rows, cols]
-        train_quad: Quadrant to use for training (1-4)
-        overwrite: Whether to overwrite existing output
-        num_random_crops_train: Number of random crops to add to the training set
-        num_random_crops_test: Number of random crops to add to the testing set
-        overlap_threshold: Threshold for determining if a tunnel is in the training quadrant
+    Splits a 3D image volume into spatially-separated training and test sets using
+    quadrant-based cross-validation. Extracts patches containing tunnels and saves
+    them with corresponding metadata. Also generates visualizations of the train/test split.
+
+    Parameters
+    ----------
+    input_folder : str
+        Path to input folder containing raw image data
+    output_folder : str
+        Path to output folder where train/test splits will be saved
+    min_size : list of int
+        Minimum patch size as [z_size, height, width]
+    train_quad : int
+        Test quadrant to HOLD OUT (1-4). Training patches extracted from OTHER 3 quadrants.
+    overwrite : bool, optional
+        Whether to overwrite existing output folder. Default is False
+    num_random_crops_train : int, optional
+        Number of random crops to add to training set. Default is 0
+    num_random_crops_test : int, optional
+        Number of random crops to add to test set. Default is 0
+    overlap_threshold : float, optional
+        Overlap threshold for quadrant assignment (0-1). Default is 0.5
+    overlap_threshold_px : int, optional
+        Absolute overlap threshold in pixels. Default is 100
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If min_size doesn't have exactly 3 dimensions or output folder already exists
+    RuntimeError
+        If required input paths don't exist
+
+    Side Effects
+    -----------
+    - Creates train/test subdirectories with GT and IMG folders
+    - Saves extracted patches as TIFF files
+    - Generates visualizations in visualizations/ subdirectory
+    - Logs detailed information to dataset_split.log
+
+    Notes
+    -----
+    Output structure:
+        output_folder/
+        ├── train/
+        │   ├── GT/
+        │   ├── IMG/
+        │   └── GT_MERGED_LABELS/
+        ├── test/
+        │   ├── GT/
+        │   ├── IMG/
+        │   └── GT_MERGED_LABELS/
+        ├── visualizations/
+        ├── random_crops_vis/
+        └── dataset_split.log
     """
     if len(min_size) != 3:
         raise ValueError(f"Invalid minimum patch size. Expected 3 dimensions!")
@@ -770,7 +1004,8 @@ def main(
     logger.addHandler(fh)
 
     logger.info(f"Using minimum patch size: {min_size}")
-    logger.info(f"Using training quadrant: {train_quad}")
+    logger.info(f"Using test/hold-out quadrant: {train_quad}")
+    logger.info(f"Training will use patches from the OTHER 3 quadrants")
 
     # Training directories
     train_path = output_folder_path / "train"
@@ -973,7 +1208,7 @@ if __name__ == "__main__":
         type=int,
         choices=[1, 2, 3, 4],
         default=1,
-        help="Quadrant to use for training (1=top-right, 2=top-left, 3=bottom-left, 4=bottom-right)",
+        help="Quadrant to HOLD OUT for testing (1=top-left, 2=top-right, 3=bottom-left, 4=bottom-right). Training patches come from the OTHER 3 quadrants.",
     )
     parser.add_argument(
         "--overwrite", action="store_true", help="Overwrite output folder if it exists"

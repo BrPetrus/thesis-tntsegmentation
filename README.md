@@ -191,11 +191,11 @@ uv run python -m tntseg.utilities.dataset.split_data \
 
 - `input_folder` - Folder containing `IMG/*.tif` and `GT_MERGED_LABELS/*.tif`
 - `output_folder` - Output folder for split data
-- `--train_quad` - Quadrant for training (1-4):
-  - 1 = top-left
-  - 2 = top-right
-  - 3 = bottom-left
-  - 4 = bottom-right
+- `--train_quad` - Quadrant to HOLD OUT for testing (1-4). Training patches come from OTHER 3 quadrants:
+  - 1 = top-left (trains on top-right, bottom-left, bottom-right)
+  - 2 = top-right (trains on top-left, bottom-left, bottom-right)
+  - 3 = bottom-left (trains on top-left, top-right, bottom-right)
+  - 4 = bottom-right (trains on top-left, top-right, bottom-left)
 - `--min_size` - Minimum patch size in Z Y X (default: `7 32 32`)
 - `--random_crops_train` - Additional random crops for training (default: 0)
 - `--random_crops_test` - Additional random crops for testing (default: 0)
