@@ -5,10 +5,7 @@ import numpy as np
 import tifffile
 from pathlib import Path
 import argparse
-import pandas as pd
-from typing import Tuple, Dict, List, Optional
-import sys
-import os
+from typing import Tuple, Dict, Optional
 import tqdm
 
 from torch.utils.data import Dataset
@@ -30,10 +27,6 @@ import tntseg.utilities.metrics.metrics as tntmetrics
 from tilingutilities import AggregationMethod, stitch_volume, tile_volume
 from postprocess import (
     PostprocessConfig,
-    QualityMetrics,
-    TunnelDetectionResult,
-    TunnelMappingResult,
-    create_quality_metrics,
     detect_tunnels,
     print_detailed_results,
 )
@@ -210,16 +203,12 @@ def main(
     print(f"Found {len(dataset)} images.")
 
     all_metrics = []  # Store metrics for each volume
-    # volume_results = []  # Store detailed volume results
     postprocess_results = []  # Store postprocessing results
 
     # Split the data
     for i in range(len(dataset)):
         data, mask = dataset[i]
         print(f"\nProcessing volume {i + 1}/{len(dataset)}")
-
-        # # Get volume info for postprocessing
-        # volume_info = dataset.dataframe.iloc[i]
 
         # Split the volume into tiles
         tiles_data, tiles_positions = tile_volume(
