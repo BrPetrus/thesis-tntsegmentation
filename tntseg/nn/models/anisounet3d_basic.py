@@ -1,3 +1,30 @@
+"""
+Anisotropic 3D UNet Implementation with Configurable Depth.
+
+This module provides a 3D UNet architecture specifically designed for anisotropic data
+where spatial dimensions may have different resolutions. The network allows configuration
+of kernel sizes, strides, and channel growth.
+
+Key Differences from Isotropic UNet:
+- Supports non-cubic (anisotropic) convolution kernels and strides
+- Example: kernel=(1, 3, 3) with stride=(1, 2, 2) applies different processing to
+  the z-dimension (depth) vs x,y-dimensions (height, width)
+- Useful for medical imaging where z-resolution differs from x,y resolution
+
+Channel Flow:
+- Encoder doubles channels at each level (growth factor applied exponentially)
+- Neck layer increases channels by growth factor
+- Decoder halves channels back to original resolution
+- Skip connections preserve spatial information from encoder
+
+Notes
+-----
+The channel configuration is constructed dynamically:
+- down_channels: [(in_ch, out_ch), ...] for each encoder layer
+- up_channels: [(in_ch, out_ch), ...] for each decoder layer
+- The in_channels of each decoder layer includes concatenated skip connections
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +33,84 @@ from tntseg.nn.modules import DownscaleBlock, HorizontalBlock, UpscaleBlock
 
 
 class AnisotropicUNet3D(nn.Module):
+    """
+    Anisotropic 3D UNet with fully configurable depth and channel architecture.
+
+    This is a flexible UNet implementation that supports:
+    - Arbitrary network depth (number of encoder/decoder levels)
+    - Configurable channel growth strategy
+    - Anisotropic kernels and strides (different values for each spatial dimension)
+    - Dynamic channel configuration based on depth and growth factor
+
+    Parameters
+    ----------
+    n_channels_in : int, optional
+        Number of input channels. Default is 1.
+    n_classes_out : int, optional
+        Number of output classes (segmentation targets). Default is 1.
+    depth : int, optional
+        Network depth: number of downsampling/upsampling blocks. Default is 3.
+    base_channels : int, optional
+        Number of channels in first encoder layer. Default is 64.
+    channel_growth : int or float, optional
+        Factor to multiply channels by at each depth level. Default is 2.
+        Example: base=64, growth=2 → 64, 128, 256, ...
+    horizontal_kernel : tuple of int, optional
+        Kernel size for horizontal convolutions. Default is (1, 3, 3).
+    horizontal_padding : tuple of int, optional
+        Padding for horizontal convolutions. Default is (0, 1, 1).
+    horizontal_stride : tuple of int, optional
+        Stride for horizontal convolutions. Default is (1, 1, 1).
+    downscale_kernel : tuple of int, optional
+        Kernel size for downsampling (max pooling). Default is (1, 2, 2).
+    downscale_stride : tuple of int, optional
+        Stride for downsampling. Default is (1, 2, 2).
+    upscale_kernel : tuple of int, optional
+        Kernel size for upsampling (transposed convolution). Default is (1, 2, 2).
+    upscale_stride : tuple of int, optional
+        Stride for upsampling. Default is (1, 2, 2).
+
+    Attributes
+    ----------
+    n_channels_in : int
+        Number of input channels
+    n_classes_out : int
+        Number of output classes
+    depth : int
+        Network depth (number of encoder/decoder levels)
+    horizontal_kernel : tuple
+        Kernel size for horizontal convolutions
+    downsampling_kernel : tuple
+        Kernel size for downsampling
+    up_channels : list of tuple
+        Channel configuration for decoder layers
+
+
+    Notes
+    -----
+    Channel Flow Example (depth=3, base_channels=64, growth=2):
+    
+    **Encoder:**
+    - Input: (B, 1, D, H, W)
+    - Layer 0: HorizontalBlock(1→64) + Downscale → (B, 64, D', H', W')
+    - Layer 1: HorizontalBlock(64→128) + Downscale → (B, 128, D'', H'', W'')
+    - Layer 2: HorizontalBlock(128→256) + Downscale → (B, 256, D''', H''', W''')
+    
+    **Neck:**
+    - HorizontalBlock(256→512)
+    
+    **Decoder:**
+    - Layer 0: Upscale(512→256) + Skip concat → (B, 512, D'', H'', W'')
+             HorizontalBlock(512→256)
+    - Layer 1: Upscale(256→128) + Skip concat → (B, 256, D', H', W')
+             HorizontalBlock(256→128)
+    - Layer 2: Upscale(128→64) + Skip concat → (B, 128, D, H, W)
+             HorizontalBlock(128→64)
+    
+    **Output:**
+    - Conv3d(64→n_classes_out) → (B, n_classes_out, D, H, W)
+    """
+
     def __init__(
         self,
         n_channels_in=1,
@@ -21,23 +126,7 @@ class AnisotropicUNet3D(nn.Module):
         upscale_kernel=(1, 2, 2),
         upscale_stride=(1, 2, 2),
     ) -> None:
-        """
-        Anisotropic 3D UNet with configurable depth.
-
-        Args:
-            n_channels_in: Number of input channels
-            n_classes_out: Number of output classes
-            depth: Number of downsampling/upsampling blocks
-            base_channels: Number of channels in first layer
-            channel_growth: Factor to multiply channels by at each depth
-            horizontal_kernel: Kernel size for horizontal convolutions
-            horizontal_padding: Padding for horizontal convolutions
-            horizontal_stride: Stride for horizontal convolutions
-            downscale_kernel: Kernel size for downscaling
-            downscale_stride: Stride for downscaling
-            upscale_kernel: Kernel size for upscaling
-            upscale_stride: Stride for upscaling
-        """
+        """Initialize the AnisotropicUNet3D network."""
         super().__init__()
         self.n_channels_in = n_channels_in
         self.n_classes_out = n_classes_out
@@ -122,6 +211,19 @@ class AnisotropicUNet3D(nn.Module):
         self.final_conv = nn.Conv3d(self.up_channels[-1][1], self.n_classes_out, 1)
 
     def forward(self, x):
+        """
+        Forward pass through the network.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (B, n_channels_in, D, H, W)
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (B, n_classes_out, D, H, W)
+        """
         x_values = []
 
         # Contracting path
@@ -143,6 +245,14 @@ class AnisotropicUNet3D(nn.Module):
         return self.final_conv(x)
 
     def get_signature(self) -> str:
+        """
+        Get a string identifier for the model architecture.
+
+        Returns
+        -------
+        str
+            Model signature including depth and kernel configuration
+        """
         return f"AnisotropicUNet3D-d{self.depth}-hk{self.horizontal_kernel}-dk{self.downsampling_kernel}".replace(
             ",", "_"
         )
