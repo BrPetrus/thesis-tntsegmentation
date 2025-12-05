@@ -1,3 +1,18 @@
+"""
+Training script for 3D UNet-based segmentation models (PyTorch/MONAI).
+
+Implements a complete training pipeline for volumetric segmentation with:
+- Multi-fold cross-validation support
+- Dataset statistics computation
+- Train/validation/test split
+- Early stopping with best model weight tracking
+- MLflow experiment tracking and logging
+- Configurable loss functions and model architectures
+- Optional debug visualization and result saving
+
+The script supports multiple UNet variants and can be configured via command-line arguments.
+"""
+
 from tntseg.utilities.dataset.datasets import TNTDataset, load_dataset_metadata
 import numpy as np
 import torch
@@ -28,7 +43,13 @@ from config import AnisotropicUNetConfig, AnisotropicUNetSEConfig, BaseConfig, M
 
 
 def set_all_seeds(seed: int):
-    """Set seeds for all random number generators"""
+    """Set seeds for reproducibility across all random number generators.
+    
+    Parameters
+    ----------
+    seed : int
+        Seed value for all RNGs (Python, NumPy, PyTorch, MONAI).
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -38,7 +59,13 @@ def set_all_seeds(seed: int):
 
 
 def worker_init_fn(worker_id):
-    """Initialise worker with different seed"""
+    """Initialize worker process with deterministic seeding.
+    
+    Parameters
+    ----------
+    worker_id : int
+        Worker process ID assigned by DataLoader.
+    """
     worker_seed = torch.initial_seed() % (2**32) + worker_id
 
     # Set seeds for all relevant libraries
@@ -49,7 +76,25 @@ def worker_init_fn(worker_id):
 
 
 def _analyze_dataset_stats(input_folder: Path) -> Tuple[float, float]:
-    """Analyze dataset to calculate mean and std"""
+    """Analyze training data to compute dataset mean and standard deviation.
+    
+    Loads all training images and computes pixel-level statistics for normalization.
+    
+    Parameters
+    ----------
+    input_folder : Path
+        Root dataset directory containing 'train' subfolder.
+    
+    Returns
+    -------
+    tuple of float
+        (mean, std) of training data pixel values.
+    
+    Raises
+    ------
+    ValueError
+        If 'train' subfolder is not found.
+    """
     logging.info("Analyzing dataset")
 
     # Load only training data
@@ -81,6 +126,32 @@ def _analyze_dataset_stats(input_folder: Path) -> Tuple[float, float]:
 def _prepare_datasets(
     input_folder: Path, seed: int, config: BaseConfig, validation_ratio=1 / 3.0
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    """Create train/validation/test DataLoaders with standard transforms.
+    
+    Loads dataset metadata, computes statistics, splits into train/val/test,
+    applies MONAI transforms, and creates DataLoaders.
+    
+    Parameters
+    ----------
+    input_folder : Path
+        Root dataset directory with 'train' and 'test' subfolders.
+    seed : int
+        Random seed for train/validation split.
+    config : BaseConfig
+        Model configuration containing batch size, crop size, etc.
+    validation_ratio : float, optional
+        Fraction of training data for validation (default: 1/3.0).
+    
+    Returns
+    -------
+    tuple of DataLoader
+        (train_dataloader, test_dataloader, valid_dataloader).
+    
+    Raises
+    ------
+    RuntimeError
+        If 'train' or 'test' subfolders not found.
+    """
     # Load metadata
     input_folder_train = input_folder / "train"
     if not input_folder_train.exists():
@@ -191,6 +262,30 @@ def _calculate_metrics(
     output_folder: Path,
     save_results: bool = False,
 ) -> Tuple[int, int, int, int, float]:
+    """Compute metrics and loss on a validation/test set.
+    
+    Parameters
+    ----------
+    nn : torch.nn.Module
+        Model in eval mode.
+    dataloader : DataLoader
+        Validation/test data.
+    criterion : torch.nn.Module
+        Loss function.
+    epoch : int
+        Current epoch (for logging).
+    prefix : str
+        Prefix for saved files ('val' or 'test').
+    output_folder : Path
+        Directory to optionally save debug visualizations.
+    save_results : bool, optional
+        If True, save first batch predictions (default: False).
+    
+    Returns
+    -------
+    tuple
+        (TP, TN, FP, FN, total_loss).
+    """
     # Run evaluation on validation set
     with torch.no_grad():
         nn.eval()
@@ -270,6 +365,32 @@ def _train_single_epoch(
     output_folder: Path,
     save_predictions: bool = False,
 ):
+    """Execute one training epoch.
+    
+    Parameters
+    ----------
+    nn : torch.nn.Module
+        Model in train mode.
+    optimizer : torch.optim.Optimizer
+        Optimizer (e.g., AdamW).
+    criterion : torch.nn.Module
+        Loss function.
+    train_dataloader : DataLoader
+        Training data.
+    config : BaseConfig
+        Configuration.
+    epoch : int
+        Current epoch index.
+    output_folder : Path
+        Directory for debug saves.
+    save_predictions : bool, optional
+        If True, save predictions every 100 epochs (default: False).
+    
+    Returns
+    -------
+    float
+        Average loss for the epoch.
+    """
     epoch_loss = 0.0
     for batch_idx, batch in enumerate(
         tqdm(train_dataloader, desc=f"Epoch {epoch + 1}/{config.epochs}")
@@ -336,6 +457,30 @@ def _train(
     output_folder: Path,
     save_results: bool = False,
 ) -> None:
+    """Execute full training loop with early stopping.
+    
+    Trains model on training data and validates on validation set.
+    Saves best model weights based on validation loss.
+    
+    Parameters
+    ----------
+    nn : torch.nn.Module
+        Model to train.
+    optimizer : torch.optim.Optimizer
+        Optimizer.
+    criterion : torch.nn.Module
+        Loss function.
+    train_dataloader : DataLoader
+        Training data.
+    valid_dataloader : DataLoader
+        Validation data.
+    config : BaseConfig
+        Configuration with epochs, early stopping tolerance.
+    output_folder : Path
+        Directory for debug saves.
+    save_results : bool, optional
+        If True, save debug visualizations (default: False).
+    """
     # Last time that the eval loss improved
     epochs_since_last_improvement = 0
     last_better_eval_loss = np.inf
@@ -579,6 +724,28 @@ def main(
     mlflow_port: str = "800",
     save_results: bool = False,
 ) -> None:
+    """Execute complete training pipeline.
+    
+    Prepares datasets, creates model, runs training with MLflow logging,
+    evaluates on test set, and saves model and configuration.
+    
+    Parameters
+    ----------
+    input_folder : Path
+        Dataset root directory.
+    output_folder : Path
+        Directory for outputs (model, logs, config).
+    logger : logging.Logger
+        Logger instance.
+    config : BaseConfig
+        Model and training configuration.
+    mlflow_address : str, optional
+        MLflow tracking server address (default: 'localhost').
+    mlflow_port : str, optional
+        MLflow tracking server port (default: '800').
+    save_results : bool, optional
+        If True, save debug visualizations (default: False).
+    """
     set_all_seeds(config.seed)
 
     output_folder_path = Path(output_folder)
@@ -665,7 +832,25 @@ def main(
 
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
-    """Parse comma-separated string into tuple of integers."""
+    """Parse comma-separated string into tuple of 3 integers.
+    
+    Parameters
+    ----------
+    arg_string : str
+        Comma-separated values (e.g., '1,2,3').
+    arg_name : str
+        Argument name for error messages.
+    
+    Returns
+    -------
+    tuple of int
+        Tuple of exactly 3 integers.
+    
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If parsing fails or values != 3.
+    """
     try:
         values = [int(x.strip()) for x in arg_string.split(",")]
         if len(values) != 3:
@@ -896,7 +1081,7 @@ if __name__ == "__main__":
         )
     else:
         # NOTE: this should never happen
-        assert "Unknown model type"
+        raise ValueError(f"Unknown model type: {model_type}")
 
     print(f"Shuffle: {config.shuffle}")
 
