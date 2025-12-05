@@ -38,8 +38,6 @@ from typing import List, Tuple, Optional, Dict
 from numpy.typing import NDArray
 import logging
 
-from torch.distributions.constraints import positive_integer
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -727,7 +725,7 @@ def extract_test_patches(
     min_size: Tuple[int, int, int],
     train_quad: int,
     overlap_threshold_perc: float = 0.5,
-    overlap_threshold_size: int = 100,  # TODO: remove
+    overlap_threshold_size: int = 100,
     num_random_crops: int = 0,
 ) -> List[Tuple[NDArray, NDArray, str, List[Tuple[int, int]], List[Tuple[int, int]]]]:
     """
@@ -1133,11 +1131,6 @@ def main(
                 # Extract tunnel ID from patch_id
                 tunnel_id = int(patch_id.split("_id")[1])
                 vis_gt[gt[t_idx] == tunnel_id] = 256
-
-                plt.figure()
-                plt.imshow(np.max(vis_img, axis=0))
-                plt.savefig(f"output-debug/t{t_idx}-p{patch_id}")
-                plt.close()
 
         # Save visualization for each z-slice
         vis_path = output_folder_path / "visualizations"
