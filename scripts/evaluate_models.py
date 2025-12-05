@@ -1,3 +1,35 @@
+"""
+Evaluation script for 3D UNet-based segmentation models (PyTorch/MONAI).
+
+This module provides a robust pipeline for evaluating volumetric segmentation models
+on tiled datasets, supporting multiple UNet variants and postprocessing analysis.
+
+Features
+--------
+- Loads trained model weights and configuration from disk
+- Performs tiled inference and reconstructs full-volume predictions
+- Computes standard segmentation metrics (Dice, Jaccard, accuracy, precision, recall, Tversky)
+- Supports binary segmentation with 1-channel output.
+- Optionally runs tunnel-level postprocessing and instance detection
+- Saves results to CSV and visualization files for statistical analysis
+- Includes comprehensive NumPy-style docstrings for all major functions and classes
+- Handles configuration loading, device selection, and batch size overrides
+
+Usage
+-----
+Run as a standalone script with command-line arguments:
+
+    python evaluate_models.py <model.pth> <database_dir> <output_dir> [options]
+
+Options include batch size, device, tiling overlap, postprocessing, and more.
+See argparse help for details.
+
+Notes
+-----
+- The script expects a config.json file in the same directory as the model weights.
+- DataLoader shuffling is disabled to preserve tile/position alignment.
+"""
+
 from dataclasses import dataclass
 import json
 import torch
@@ -47,7 +79,27 @@ config = EvaluationConfig()
 
 
 class TiledDataset(Dataset):
-    """Dataset that preserves tile positions with data."""
+    """Dataset that preserves tile positions with data.
+    
+    This dataset wrapper maintains the spatial positions of tiles during
+    batch processing, enabling proper reconstruction of the full volume
+    after inference.
+    
+    Parameters
+    ----------
+    tiles_data : list of torch.Tensor
+        List of tile tensors extracted from the volume.
+    tiles_positions : list of tuple
+        List of (depth, row, col) tuples indicating the position of each tile
+        in the original volume coordinate system.
+    
+    Attributes
+    ----------
+    tiles_data : list of torch.Tensor
+        List of tile tensors.
+    tiles_positions : list of tuple
+        List of position tuples for each tile.
+    """
 
     def __init__(self, tiles_data, tiles_positions):
         self.tiles_data = tiles_data
@@ -73,7 +125,48 @@ def create_model_from_args(
     upscale_stride,
     reduction_factor: int = 16,
 ) -> torch.nn.Module:
-    """Create a model based on command line arguments."""
+    """Create a model based on command line arguments.
+    
+    Instantiates a 3D segmentation model with the specified architecture
+    and hyperparameters. Supports multiple UNet variants including basic,
+    anisotropic, squeeze-excitation, and attention-based architectures.
+    
+    Parameters
+    ----------
+    model_type : str
+        Type of model to create. Options: 'anisotropicunet', 'anisotropicunet_se',
+        'anisotropicunet_csam', 'anisotropicunet_usenet', 'basicunet'.
+    model_depth : int
+        Depth of the encoder/decoder path (number of downsampling levels).
+    base_channels : int
+        Number of channels in the first convolutional layer.
+    channel_growth : int
+        Factor to multiply channels by at each depth level.
+    horizontal_kernel : tuple of int
+        Kernel size for horizontal (feature) convolutions as (depth, height, width).
+    horizontal_padding : tuple of int
+        Padding for horizontal convolutions as (depth, height, width).
+    downscale_kernel : tuple of int
+        Kernel size for downsampling operations as (depth, height, width).
+    downscale_stride : tuple of int
+        Stride for downsampling operations as (depth, height, width).
+    upscale_kernel : tuple of int
+        Kernel size for upsampling operations as (depth, height, width).
+    upscale_stride : tuple of int
+        Stride for upsampling operations as (depth, height, width).
+    reduction_factor : int, optional
+        Reduction factor for SE/attention blocks (default: 16).
+    
+    Returns
+    -------
+    torch.nn.Module
+        Instantiated 3D segmentation model.
+    
+    Raises
+    ------
+    ValueError
+        If model_type is not recognized.
+    """
 
     if model_type == "anisotropicunet":
         return AnisotropicUNet3D(
@@ -142,16 +235,44 @@ def create_model_from_args(
 def evaluate_predictions(
     predictions: np.ndarray, ground_truth: np.ndarray, threshold: float = 0.5
 ) -> dict:
-    """
-    Evaluate predictions against ground truth using tntseg metrics.
-
-    Args:
-        predictions: Raw model predictions (probabilities)
-        ground_truth: Ground truth masks
-        threshold: Threshold for binarizing predictions
-
-    Returns:
-        Dictionary containing all calculated metrics
+    """Evaluate predictions against ground truth using tntseg metrics.
+    
+    Computes a comprehensive set of segmentation metrics including Dice,
+    Jaccard, accuracy, precision, recall, and Tversky indices. Predictions
+    are binarized using the specified threshold before metric calculation.
+    
+    Parameters
+    ----------
+    predictions : np.ndarray
+        Raw model predictions (probabilities) in range [0, 1].
+        Shape: (depth, height, width).
+    ground_truth : np.ndarray
+        Ground truth binary masks. Shape: (depth, height, width).
+    threshold : float, optional
+        Threshold for binarizing predictions. Predictions > threshold are
+        classified as positive class (default: 0.5).
+    
+    Returns
+    -------
+    dict
+        Dictionary containing the following metrics:
+        
+        - 'TP' (int): True positive count
+        - 'FP' (int): False positive count
+        - 'FN' (int): False negative count
+        - 'TN' (int): True negative count
+        - 'jaccard' (float): Jaccard index (Intersection over Union)
+        - 'dice' (float): Dice coefficient (F1 score for segmentation)
+        - 'accuracy' (float): Overall accuracy (TP + TN) / all
+        - 'precision' (float): Precision = TP / (TP + FP)
+        - 'recall' (float): Recall = TP / (TP + FN)
+        - 'tversky' (float): Tversky index with alpha=0.5, beta=0.5
+        - 'focal_tversky' (float): Focal Tversky loss with gamma=1.0
+    
+    Notes
+    -----
+    Predictions are converted to uint8 format (0-255) after thresholding
+    to match the tntseg metrics interface.
     """
     # Threshold predictions to binary
     binary_predictions = (predictions > threshold).astype(np.uint8) * 255
@@ -193,6 +314,58 @@ def main(
     postprocess_config: Optional[PostprocessConfig] = None,
     training_config: Dict[str, str] = dict(),
 ) -> None:
+    """Run comprehensive evaluation of a 3D segmentation model on a dataset.
+    
+    Performs tiled inference on volumetric data, reconstructs predictions,
+    computes segmentation metrics, optionally runs postprocessing analysis,
+    and saves results to CSV and visualization files.
+    
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Trained 3D segmentation model in eval mode.
+    database_path : str
+        Path to dataset directory containing 'IMG' and 'GT' subdirectories.
+    output_dir : str or Path
+        Directory for saving evaluation results, metrics, and visualizations.
+    store_predictions : bool
+        If True, save raw predictions and thresholded masks as TIFF files.
+    tile_overlap : int
+        Number of pixels of overlap between tiles during tiling and stitching.
+        Overlapping regions are aggregated using mean pooling.
+    visualise_tiling_lines : bool, optional
+        If True, save visualization showing tiling boundaries and stitching
+        lines (default: False).
+    run_postprocessing : bool, optional
+        If True, run tunnel-level postprocessing and instance detection
+        (default: False).
+    postprocess_config : PostprocessConfig, optional
+        Configuration for postprocessing pipeline. Required if run_postprocessing=True
+        (default: None).
+    training_config : dict, optional
+        Dictionary containing training metadata (model_signature, test metrics, etc.)
+        to include in the evaluation results CSV (default: empty dict).
+    
+    Returns
+    -------
+    None
+        Results are saved to disk in output_dir.
+    
+    Notes
+    -----
+    The function processes each volume in the dataset as follows:
+    
+    1. Tile the volume into smaller patches
+    2. Run batched inference on tiles
+    3. Stitch tiles back together using specified aggregation method
+    4. Apply sigmoid and thresholding
+    5. Compute metrics (Dice, Jaccard, precision, recall, etc.)
+    6. Optionally run postprocessing for instance-level analysis
+    7. Save results to CSV with per-volume and aggregate statistics
+    
+    The output CSV contains both evaluation metrics and postprocessing results
+    across all volumes, enabling statistical analysis of model performance.
+    """
     if not isinstance(output_dir, str) and not isinstance(output_dir, Path):
         raise ValueError("Invalid output_dir. Expected string or Path type")
     if isinstance(output_dir, str):
@@ -516,7 +689,37 @@ def main(
 
 
 def load_training_config(model_path: str) -> dict:
-    """Load training configuration to get dataset statistics and model parameters."""
+    """Load training configuration from model directory.
+    
+    Loads the training configuration JSON file stored in the same directory
+    as the model weights. This includes dataset statistics, model architecture
+    parameters, and training hyperparameters.
+    
+    Parameters
+    ----------
+    model_path : str
+        Path to model weights file (.pth). Configuration is expected in
+        'config.json' in the same directory.
+    
+    Returns
+    -------
+    dict
+        Dictionary containing training configuration, including:
+        
+        - 'dataset_mean' (float): Mean pixel value of training data
+        - 'dataset_std' (float): Standard deviation of training data
+        - 'model_type' (str): Architecture type
+        - 'model_depth' (int): Number of encoder/decoder levels
+        - 'base_channels' (int): Initial channel count
+        - Other model-specific parameters
+    
+    Notes
+    -----
+    Returns empty dict if config.json is not found, with a warning message.
+    
+    Despite the parameter name 'model_path', this function loads the configuration
+    file only. The model weights are loaded separately using torch.load().
+    """
     model_dir = Path(model_path).parent
     config_path = model_dir / "config.json"
 
@@ -537,8 +740,31 @@ def load_training_config(model_path: str) -> dict:
 
 
 def create_dataset(database_path: str | Path) -> Dataset:
-    if isinstance(database_path, str):
-        database_path = Path(database_path)
+    """Create a TNTDataset with standard normalization and transforms.
+    
+    Loads dataset metadata from disk and creates a Dataset object with
+    preprocessing transforms including intensity normalization using
+    dataset statistics.
+    
+    Parameters
+    ----------
+    database_path : str or Path
+        Path to dataset directory containing:
+        
+        - 'IMG' subdirectory: Input image files
+        - 'GT' subdirectory: Ground truth segmentation masks
+    
+    Returns
+    -------
+    Dataset
+        TNTDataset instance with instance segmentation masks and
+        intensity normalization transforms.
+    
+    Notes
+    -----
+    Normalization uses the global config.dataset_mean and config.dataset_std
+    values. These should be set prior to calling this function.
+    """
 
     # Load the dataset
     df = load_dataset_metadata(database_path / "IMG", database_path / "GT")
@@ -564,7 +790,33 @@ def create_dataset(database_path: str | Path) -> Dataset:
 
 
 def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
-    """Parse comma-separated string into tuple of integers."""
+    """Parse comma-separated string into tuple of integers.
+    
+    Converts a string of comma-separated values into a tuple of integers,
+    with validation that exactly 3 values are provided (for spatial dimensions).
+    
+    Parameters
+    ----------
+    arg_string : str
+        Comma-separated integer values, e.g., "1,3,3".
+    arg_name : str
+        Name of the argument for error messages.
+    
+    Returns
+    -------
+    tuple of int
+        Tuple of exactly 3 integers.
+    
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If the string cannot be parsed or doesn't contain exactly 3 values.
+    
+    Examples
+    --------
+    >>> parse_tuple_arg("1,2,3", "kernel")
+    (1, 2, 3)
+    """
     try:
         values = [int(x.strip()) for x in arg_string.split(",")]
         if len(values) != 3:
@@ -575,7 +827,40 @@ def parse_tuple_arg(arg_string: str, arg_name: str) -> tuple:
 
 
 def create_model_from_config(config: dict) -> torch.nn.Module:
-    """Create a model based on loaded configuration."""
+    """Create a model based on loaded configuration dictionary.
+    
+    Instantiates a 3D segmentation model using parameters from a training
+    configuration dictionary. Automatically handles different model types
+    and their specific hyperparameters.
+    
+    Parameters
+    ----------
+    config : dict
+        Configuration dictionary containing:
+        
+        - 'model_type' (str): Model architecture type
+        - 'model_depth' (int): Encoder/decoder depth
+        - 'base_channels' (int): Initial channel count
+        - 'channel_growth' (int): Channel multiplication factor
+        - 'horizontal_kernel' (list): Feature convolution kernel
+        - 'horizontal_padding' (list): Feature convolution padding
+        - 'downscale_kernel' (list): Downsampling kernel
+        - 'downscale_stride' (list): Downsampling stride
+        - 'upscale_kernel' (list): Upsampling kernel
+        - 'upscale_stride' (list): Upsampling stride
+        - 'reduction_factor' (int, optional): SE/attention block reduction
+    
+    Returns
+    -------
+    torch.nn.Module or None
+        Instantiated model, or None if model creation fails.
+    
+    Notes
+    -----
+    Prints error messages to console if model creation fails.
+    All kernel/padding/stride parameters should be lists of 3 integers
+    representing (depth, height, width) dimensions.
+    """
     try:
         model_type = config["model_type"]
 
