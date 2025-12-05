@@ -1,3 +1,10 @@
+"""
+Training utilities for 3D UNet-based segmentation models.
+
+Provides model creation, loss function setup, and transform visualization
+for PyTorch/MONAI workflows. Supports multiple UNet variants and combined loss functions.
+"""
+
 from torch import nn
 from config import BaseConfig, AnisotropicUNetConfig, AnisotropicUNetSEConfig
 import torch
@@ -25,6 +32,27 @@ logger = logging.getLogger()
 def create_neural_network(
     config: BaseConfig, in_channels: int, out_channels: int
 ) -> nn.Module:
+    """Instantiate a segmentation model from configuration.
+
+    Parameters
+    ----------
+    config : BaseConfig
+        Model configuration dataclass (architecture, hyperparameters).
+    in_channels : int
+        Number of input channels.
+    out_channels : int
+        Number of output channels.
+
+    Returns
+    -------
+    nn.Module
+        Instantiated segmentation model.
+
+    Raises
+    ------
+    ValueError
+        If config type does not match model type or is unknown.
+    """
     match config.model_type:
         case ModelType.AnisotropicUNet:
             if not isinstance(config, AnisotropicUNetConfig):
@@ -111,6 +139,18 @@ def create_neural_network(
 
 
 def create_loss_criterion(config: BaseConfig) -> nn.Module:
+    """Create a combined loss function from configuration.
+
+    Parameters
+    ----------
+    config : BaseConfig
+        Model configuration with loss settings and weights.
+
+    Returns
+    -------
+    nn.Module
+        Combined loss function (BCE, Dice, Focal Tversky, etc.).
+    """
     loss_functions = []
     weights = []
 
@@ -139,6 +179,21 @@ def create_loss_criterion(config: BaseConfig) -> nn.Module:
 
 
 class CombinedLoss(nn.Module):
+    """Weighted sum of multiple loss functions.
+
+    Parameters
+    ----------
+    loss_functions : list of nn.Module
+        List of loss functions to combine.
+    loss_weights : list of float
+        Corresponding weights for each loss function.
+
+    Methods
+    -------
+    forward(pred, mask)
+        Compute weighted sum of losses for prediction and mask.
+    """
+
     def __init__(self, loss_functions: List[nn.Module], loss_weights: List[float]):
         super().__init__()
         if len(loss_functions) != len(loss_weights):
@@ -159,7 +214,22 @@ class CombinedLoss(nn.Module):
 
 
 def visualize_transform_effects(dataloader, num_samples=3, output_folder=None):
-    """Save before/after images to verify transformations are working"""
+    """Save before/after images to verify dataset transformations.
+
+    Parameters
+    ----------
+    dataloader : torch.utils.data.DataLoader
+        DataLoader for the dataset to visualize.
+    num_samples : int, optional
+        Number of samples to visualize (default: 3).
+    output_folder : str or Path, optional
+        Directory to save TIFF images (default: None).
+
+    Returns
+    -------
+    None
+        Images and masks are saved to disk if output_folder is provided.
+    """
     if output_folder:
         output_path = Path(output_folder)
         output_path.mkdir(exist_ok=True, parents=True)
