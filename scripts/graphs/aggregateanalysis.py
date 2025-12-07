@@ -1,8 +1,6 @@
 import pandas as pd
-import numpy as np
 from pathlib import Path
 import argparse
-import os
 
 
 def aggregate_csv_files(directory_path, output_path, overlap_filter=None):
@@ -115,11 +113,9 @@ def aggregate_csv_files(directory_path, output_path, overlap_filter=None):
     if overlap_filter is not None:
         # If overlap is filtered, group only by Architecture and Quad
         grouped = filtered_df.groupby(["Architecture", "Quad"])
-        grouping_cols = ["Architecture", "Quad"]
     else:
         # If no overlap filter, group by Architecture, Quad, and Overlap
         grouped = filtered_df.groupby(["Architecture", "Quad", "Overlap"])
-        grouping_cols = ["Architecture", "Quad", "Overlap"]
 
     # Calculate means and standard deviations separately
     means = grouped[numeric_columns].mean().reset_index()
@@ -308,10 +304,8 @@ def aggregate_csv_files_across_quads(directory_path, output_path, overlap_filter
     # Group ONLY by Architecture (across all quadrants)
     if overlap_filter is not None:
         grouped = filtered_df.groupby(["Architecture"])
-        grouping_cols = ["Architecture"]
     else:
         grouped = filtered_df.groupby(["Architecture", "Overlap"])
-        grouping_cols = ["Architecture", "Overlap"]
 
     # Calculate means and standard deviations across quadrants
     means = grouped[numeric_columns].mean().reset_index()
@@ -466,7 +460,4 @@ Examples:
 
 
 if __name__ == "__main__":
-    # Set global font size
-    plt.rcParams["font.size"] = 14
-
     main()
