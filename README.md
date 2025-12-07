@@ -346,6 +346,41 @@ This script tests overlaps of 0, 10, 20, 30, 40 pixels by repeatedly calling `ev
 
 **Note:** For full details on the automation logic and parameter combinations used, refer to the scripts themselves (`run.sh` and `run_overlap_study.sh`).
 
+### Results Analysis and Aggregation
+
+After running evaluations, aggregate results and generate comparison plots:
+
+#### Aggregate Results Across Quadrants
+
+Combine CSV results from multiple evaluations:
+
+```bash
+cd scripts/graphs/
+
+# Aggregate all results (groups by Architecture, Quad, and Overlap)
+uv run python aggregateanalysis.py /path/to/results/ -o aggregated.csv
+
+# Aggregate only specific overlap (e.g., 20px)
+uv run python aggregateanalysis.py /path/to/results/ -o overlap20.csv --overlap 20
+
+# Aggregate across quadrants (overall architecture performance)
+uv run python aggregateanalysis.py /path/to/results/ -o arch_comparison.csv --overlap 20 --across-quads
+```
+
+#### Compare Architectures
+
+After aggregation, generate comparison visualizations:
+
+```bash
+# Per-quadrant comparison (one plot per quadrant)
+uv run python quadbasedanalysis.py aggregated.csv
+
+# Cross-quadrant comparison (overall architecture performance)
+uv run python archcomparisonquad.py arch_comparison.csv
+```
+
+These scripts generate plots comparing Dice, Jaccard, precision, recall across architectures and tile overlaps.
+
 ---
 
 ## Project Structure
