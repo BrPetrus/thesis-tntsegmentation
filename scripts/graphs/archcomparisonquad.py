@@ -99,7 +99,7 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
                 )
 
         # Create the plot
-        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+        fig, ax = plt.subplots(1, 1, figsize=(6, 4))
 
         means = [stat["Mean"] for stat in arch_stats]
         stds = [stat["Std"] for stat in arch_stats]
@@ -138,16 +138,17 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
                 )
 
         ax.set_title(
-            f"{metric_name} - Architecture Comparison (Across All Quadrants)",
-            fontsize=14,
+            f"{metric_name}",
+            # fontsize=14,
             fontweight="bold",
+            y=0.9
         )
-        ax.set_ylabel("Score")
-        ax.set_xlabel("Architecture")
+        # ax.set_ylabel("Score")
+        # ax.set_xlabel("Architecture")
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(short_labels, rotation=45, ha="right", fontsize=10)
+        ax.set_xticklabels(short_labels, rotation=20, ha="right")
         ax.grid(True, alpha=0.3, axis="y")
-        ax.set_ylim(0, 0.8)
+        ax.set_ylim(0, 1.0)
 
         plt.tight_layout()
 

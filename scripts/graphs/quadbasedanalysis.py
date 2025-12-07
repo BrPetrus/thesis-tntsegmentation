@@ -145,6 +145,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
                 yerr=errors if show_errors else None,
                 capsize=3,
                 label=metric_name,
+                color=plt.cm.Set3(np.linspace(0, 1, len(architectures))),
             )
 
             # Label bars
