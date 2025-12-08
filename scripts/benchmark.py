@@ -208,7 +208,7 @@ def benchmark_memory(
     inference_times = []
 
     with torch.no_grad():
-        # Warm-up run (discarded)
+        # Warm-up run and initial cache clear
         if device.type == "cuda":
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats(device)
@@ -220,21 +220,20 @@ def benchmark_memory(
         )
         _ = model(dummy_input)
         
-        # Actual benchmark runs
-        for _ in range(num_runs):
-            # Clear cache and reset stats before each run
+        # Actual benchmark runs (without cache clearing between runs)
+        for i in range(num_runs):
+            # Only reset stats at the beginning of each run, don't empty cache
             if device.type == "cuda":
-                torch.cuda.empty_cache()
                 torch.cuda.reset_peak_memory_stats(device)
 
-            # Create dummy input
+            # Create dummy input (before timing)
             dummy_input = torch.randn(
                 batch_size, channels, depth, height, width,
                 device=device,
                 dtype=torch.float32
             )
 
-            # Benchmark inference
+            # Benchmark inference only (not tensor creation)
             start_time = time.perf_counter()
             _ = model(dummy_input)
             end_time = time.perf_counter()
