@@ -173,7 +173,7 @@ def benchmark_memory(
     height: int = 64,
     width: int = 64,
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    num_runs: int = 5,
+    num_runs: int = 200,
 ) -> Dict[str, float]:
     """Benchmark peak VRAM usage for a model.
     
