@@ -194,7 +194,7 @@ def benchmark_memory(
     device : torch.device, optional
         Device to run benchmark on, by default CUDA if available
     num_runs : int, optional
-        Number of runs to average over (excluding warm-up), by default 5
+        Number of runs to average over (excluding warm-up), by default 200
         
     Returns
     -------
