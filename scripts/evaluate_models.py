@@ -765,6 +765,8 @@ def create_dataset(database_path: str | Path) -> Dataset:
     Normalization uses the global config.dataset_mean and config.dataset_std
     values. These should be set prior to calling this function.
     """
+    if isinstance(database_path, str):
+        database_path = Path(database_path)
 
     # Load the dataset
     df = load_dataset_metadata(database_path / "IMG", database_path / "GT")
