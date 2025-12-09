@@ -100,7 +100,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --overlap_px N               Tile overlap in pixels (default: 0)"
             echo "  --seed N                     Random seed for training"
             echo "  --run-postprocessing         Enable tunnel-level postprocessing analysis"
-            echo "  --eval-same-quad-only        Only evaluate each model on its corresponding quadrant"
+            echo "  --eval-same-quad-only        Only evaluate each model on its corresponding TEST quadrant (in-distribution)"
             echo "  --prediction-threshold F     Threshold for binarizing predictions (default: 0.5)"
             echo "  --recall-threshold F         Recall threshold for tunnel matching (default: 0.5)"
             echo "  --minimum-size N             Minimum size for connected components (default: 100)"
@@ -160,7 +160,7 @@ run_training() {
         INPUT_FOLDER="${INPUT_ROOT}/${QUAD}"
         OUTPUT_FOLDER="${OUTPUT_BASE}/${QUAD}_model"
 
-        echo "Training model for ${QUAD}..."
+        echo "Training model using quadrant ${QUAD} as TEST set (trains on other 3 quads)..."
         echo "Input: ${INPUT_FOLDER}"
         echo "Output: ${OUTPUT_FOLDER}"
         mkdir -p "${OUTPUT_FOLDER}"
@@ -229,17 +229,18 @@ run_evaluation() {
             continue
         fi
         
-        echo "Evaluating model trained on ${TRAIN_QUAD} (${MODEL_PATH})..."
+        # Note: This model was trained on quads OTHER THAN ${TRAIN_QUAD} and has ${TRAIN_QUAD} as its test set
+        echo "Evaluating model trained on [all quads except ${TRAIN_QUAD}] (${MODEL_PATH})..."
         
         # Determine which quadrants to evaluate on
         if [ "${EVAL_SAME_QUAD_ONLY}" = true ]; then
-            # Only evaluate on the same quadrant
+            # Only evaluate on the quadrant this model was trained for (in-distribution test)
             TEST_QUADS=("${TRAIN_QUAD}")
-            echo "  Evaluating only on matching quadrant: ${TRAIN_QUAD}"
+            echo "  Evaluating only on in-distribution test set (${TRAIN_QUAD})"
         else
-            # Evaluate on all quadrants
+            # Evaluate on all quadrants (includes out-of-distribution evaluations)
             TEST_QUADS=("${QUADS[@]}")
-            echo "  Evaluating on all quadrants"
+            echo "  Evaluating on all quadrants (cross-validation)"
         fi
         
         # Evaluate on selected quadrants

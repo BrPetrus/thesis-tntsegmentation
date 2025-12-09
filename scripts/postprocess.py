@@ -1,3 +1,47 @@
+"""Post-processing and evaluation of tunnel detection predictions.
+
+This module provides a comprehensive pipeline for post-processing neural network
+predictions of tunnel structures in 3D microscopy images. It includes:
+
+1. Binary thresholding and connected component labeling
+2. Instance-level quality metrics (Dice, Jaccard, precision, recall)
+3. Bidirectional mapping between ground truth and predicted instances
+4. Detection of over-segmentation and false positives
+5. Visualization overlays for quality assessment
+
+Key Functions
+-------------
+detect_tunnels : Main pipeline for tunnel detection and evaluation
+analyze_tunnel_mappings : Bidirectional GT-to-prediction mapping analysis
+calculate_all_metrics : Comprehensive multi-scale quality metrics
+visualise_mapping_results : Generate visualization overlays
+
+Data Classes
+------------
+PostprocessConfig : Configuration for post-processing parameters
+QualityMetrics : Container for pixel-level and instance-level metrics
+TunnelMappingResult : Complete mapping analysis results
+TunnelDetectionResult : Final detection results with all metrics
+
+Examples
+--------
+>>> config = PostprocessConfig(
+...     minimum_size_px=100,
+...     recall_threshold=0.5,
+...     prediction_threshold=0.5
+... )
+>>> result = detect_tunnels(
+...     prediction=predictions_array,
+...     gt_labeled=ground_truth_array,
+...     image=raw_image_array,
+...     config=config,
+...     output_folder=Path("output/"),
+...     visualise=True
+... )
+>>> if result:
+...     print(f"Detection Recall: {result.metrics_on_tunnels.recall:.3f}")
+"""
+
 from dataclasses import dataclass
 from numpy.typing import NDArray
 from pathlib import Path
@@ -12,6 +56,20 @@ import tntseg.utilities.metrics.metrics as tntmetrics
 
 @dataclass(frozen=True)
 class PostprocessConfig:
+    """Configuration parameters for tunnel post-processing.
+    
+    Attributes
+    ----------
+    minimum_size_px : int
+        Minimum size in pixels for connected components to be retained after
+        labeling. Smaller components are filtered out as noise.
+    recall_threshold : float
+        Minimum recall (overlap fraction) for considering a prediction-GT
+        correspondence as a match. Range: [0, 1].
+    prediction_threshold : float
+        Threshold for binarizing continuous prediction probabilities.
+        Predictions above this value are considered positive. Range: [0, 1].
+    """
     minimum_size_px: int
     recall_threshold: float
     prediction_threshold: float
@@ -19,6 +77,29 @@ class PostprocessConfig:
 
 @dataclass(frozen=True)
 class QualityMetrics:
+    """Comprehensive quality metrics for tunnel detection and segmentation.
+    
+    Attributes
+    ----------
+    tp : int
+        True positive count (pixels or instances depending on context).
+    fp : int
+        False positive count.
+    tn : int
+        True negative count.
+    fn : int
+        False negative count.
+    jaccard : float
+        Jaccard index (IoU), range [0, 1].
+    dice : float
+        Dice coefficient (F1 score), range [0, 1].
+    recall : float
+        Recall (sensitivity), range [0, 1]. TP / (TP + FN).
+    prec : float
+        Precision, range [0, 1]. TP / (TP + FP).
+    accuracy : float
+        Overall accuracy, range [0, 1]. (TP + TN) / (TP + FP + FN + TN).
+    """
     tp: int
     fp: int
     tn: int
@@ -32,7 +113,27 @@ class QualityMetrics:
 
 @dataclass(frozen=True)
 class TunnelMappingResult:
-    """Results from tunnel mapping analysis."""
+    """Results from tunnel mapping analysis.
+    
+    Complete analysis of correspondences between ground truth and predicted
+    tunnel instances, including detection of over-segmentation and unmatched regions.
+    
+    Attributes
+    ----------
+    mapping : Dict[int, Tuple[int, float]]
+        GT-to-prediction mapping. GT label -> (prediction label, overlap score).
+        Each GT tunnel maps to at most one prediction (best recall match).
+    clean_mapping : Dict[int, Tuple[int, float]]
+        Filtered 1-to-1 mappings only. Excludes predictions matching multiple
+        GT tunnels (over-segmentation cases).
+    multimatched_predictions : Dict[int, List[Tuple[int, float]]]
+        Predictions matching multiple GT tunnels. Maps prediction label to list
+        of (GT label, overlap score) pairs. Indicates over-segmentation.
+    unmatched_gt_labels : List[int]
+        GT tunnel labels with no matching prediction (false negatives).
+    unmatched_predictions : List[int]
+        Prediction labels with no matching GT tunnel (false positives).
+    """
 
     mapping: Dict[int, Tuple[int, float]]  # gt_label -> (pred_label, overlap_score)
     clean_mapping: Dict[int, Tuple[int, float]]  # Only 1-to-1 mappings
@@ -45,19 +146,63 @@ class TunnelMappingResult:
 
 @dataclass(frozen=True)
 class TunnelDetectionResult:
-    """Complete tunnel detection results."""
+    """Complete tunnel detection results.
+    
+    Final output from the detection pipeline containing all quality metrics
+    at different granularities and the complete mapping analysis.
+    
+    Attributes
+    ----------
+    metrics_overall : QualityMetrics
+        Pixel-level metrics across entire volume (all pixels weighted equally).
+    metrics_one_on_one : QualityMetrics
+        Pixel-level metrics for only 1-to-1 matched tunnel pairs.
+    metrics_all_matches : QualityMetrics
+        Pixel-level metrics for all matched tunnel regions (including
+        over-segmented cases).
+    metrics_on_tunnels : QualityMetrics
+        Instance-level detection metrics (treat each tunnel as unit).
+        TP=detected, FP=false detections, FN=missed, TN=0.
+    mapping_result : TunnelMappingResult
+        Complete bidirectional mapping analysis with error categorization.
+    """
 
     metrics_overall: QualityMetrics
     metrics_one_on_one: QualityMetrics
     metrics_all_matches: QualityMetrics
     metrics_on_tunnels: QualityMetrics
-    mapping_result: TunnelMappingResult  # Add this
+    mapping_result: TunnelMappingResult
 
 
 def post_process_output(
-    predictions: NDArray[np.bool], config: PostprocessConfig
-) -> List[Dict]:
-    if not np.issubdtype(predictions.dtype, np.bool):
+    predictions: NDArray[np.bool_], config: PostprocessConfig
+) -> Tuple[List[Any], NDArray[np.uint8]]:
+    """Filter and label connected components in binary predictions.
+    
+    Identifies connected components in binary predictions and removes
+    components smaller than the configured threshold. Returns both the
+    regionprops objects and labeled image.
+
+    Parameters
+    ----------
+    predictions : NDArray[np.bool_]
+        3D binary array of predictions (True = positive, False = background).
+    config : PostprocessConfig
+        Configuration containing minimum_size_px threshold.
+
+    Returns
+    -------
+    big_regions : List[Any]
+        List of regionprops objects for components above size threshold.
+    labeled_regions : NDArray[np.uint8]
+        3D labeled image with only retained components (background = 0).
+
+    Raises
+    ------
+    ValueError
+        If input is not a boolean array or not 3D.
+    """
+    if not np.issubdtype(predictions.dtype, np.bool_):
         raise ValueError("Expected a boolean array.")
     if predictions.ndim != 3:
         raise ValueError("Expected 3D data")
@@ -79,6 +224,32 @@ def post_process_output(
 
 
 def create_quality_metrics(tp: int, fp: int, tn: int, fn: int) -> QualityMetrics:
+    """Calculate quality metrics from confusion matrix values.
+    
+    Computes standard metrics (Dice, Jaccard, precision, recall, accuracy)
+    from raw confusion matrix counts using the metrics module.
+
+    Parameters
+    ----------
+    tp : int
+        True positive count.
+    fp : int
+        False positive count.
+    tn : int
+        True negative count.
+    fn : int
+        False negative count.
+
+    Returns
+    -------
+    QualityMetrics
+        Container with all computed metrics.
+
+    Raises
+    ------
+    ValueError
+        If any value is negative.
+    """
     if min([tp, fp, tn, fn]) < 0:
         raise ValueError("Arguments must be nonnegative!")
     return QualityMetrics(
@@ -258,9 +429,8 @@ def map_tunnels_gt_to_pred(
     labeled_gt: NDArray[np.uint8],
     labeled_prediction: NDArray[np.uint8],
     recall_threshold: float = 0.5,
-) -> Dict[int, Tuple[int, int]]:
-    """
-    Map ground truth tunnels to predicted tunnels based on overlap.
+) -> Dict[int, Tuple[int, float]]:
+    """Map ground truth tunnels to predicted tunnels based on overlap.
 
     For each GT tunnel, finds the prediction with the highest recall (i.e., the
     prediction that covers the most of the GT tunnel). Only predictions with
@@ -309,12 +479,43 @@ def map_tunnels_gt_to_pred(
     return mapping
 
 
-def percentile_stretch(image, low_quantile=0.03, high_quantile=0.97):
-    img_q3 = np.quantile(image, low_quantile)
-    img_q97 = np.quantile(image, high_quantile)
+def percentile_stretch(
+    image: NDArray, low_quantile: float = 0.03, high_quantile: float = 0.97
+) -> NDArray[np.uint8]:
+    """Stretch image contrast using percentile clipping.
+    
+    Normalizes image intensity by clipping extreme values and rescaling to
+    [0, 255]. Useful for preprocessing before visualization.
+
+    Parameters
+    ----------
+    image : NDArray
+        Input image array (any numeric dtype).
+    low_quantile : float, default=0.03
+        Lower quantile for clipping. Range: [0, 1].
+    high_quantile : float, default=0.97
+        Upper quantile for clipping. Range: [0, 1].
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        Stretched image scaled to [0, 255] as uint8.
+
+    Notes
+    -----
+    If image is constant (min == max), returns array of zeros to avoid
+    division by zero.
+    """
+    img_q_low = np.quantile(image, low_quantile)
+    img_q_high = np.quantile(image, high_quantile)
     image = image.copy()
-    image[image <= img_q3] = img_q3
-    image[image >= img_q97] = img_q97
+    image[image <= img_q_low] = img_q_low
+    image[image >= img_q_high] = img_q_high
+    
+    # Avoid division by zero for constant images
+    if image.max() == image.min():
+        return np.zeros_like(image, dtype=np.uint8)
+    
     image = (image - image.min()) / (image.max() - image.min())
     image = image * 255
     image = image.astype(np.uint8)
@@ -653,18 +854,48 @@ def detect_tunnels(
 
 
 def visualise_matching(
-    gt_labeled,
-    image,
-    output_folder,
-    labeled_prediction,
-    binary_filtered_pred,
-    binary_gt,
-    mapping,
-    duplicate_predictions,
-    unmatched_labels,
-    unmatched_predictions,
-):
-    """Restore the full visualization function that was accidentally removed."""
+    gt_labeled: NDArray[np.uint8],
+    image: NDArray,
+    output_folder: Path,
+    labeled_prediction: NDArray[np.uint8],
+    binary_filtered_pred: NDArray[np.bool_],
+    binary_gt: NDArray[np.bool_],
+    mapping: Dict[int, Tuple[int, float]],
+    duplicate_predictions: Dict[int, List[Tuple[int, float]]],
+    unmatched_labels: List[int],
+    unmatched_predictions: List[int],
+) -> None:
+    """Create detailed visualization overlays of detection results.
+    
+    Generates multiple TIFF images showing:
+    1. Confusion matrix overlay (TP/FP/FN in different colors)
+    2. Matched tunnels with color-coded correspondences
+    3. Unmatched regions (missed GT and false positives)
+    4. Over-segmented predictions (one prediction matching multiple GT)
+
+    Parameters
+    ----------
+    gt_labeled : NDArray[np.uint8]
+        3D labeled ground truth instances.
+    image : NDArray
+        3D original microscopy image (used as background).
+    output_folder : Path
+        Directory to save visualization images.
+    labeled_prediction : NDArray[np.uint8]
+        3D labeled prediction instances.
+    binary_filtered_pred : NDArray[np.bool_]
+        3D binary prediction mask.
+    binary_gt : NDArray[np.bool_]
+        3D binary ground truth mask.
+    mapping : Dict[int, Tuple[int, float]]
+        GT-to-prediction mapping.
+    duplicate_predictions : Dict[int, List[Tuple[int, float]]]
+        Predictions matching multiple GT tunnels.
+    unmatched_labels : List[int]
+        Unmatched GT tunnel labels.
+    unmatched_predictions : List[int]
+        Unmatched prediction labels.
+    """
     if image.dtype == np.float32 or image.dtype == np.float64:
         # Normalize to 0-255
         img_min, img_max = image.min(), image.max()
@@ -810,15 +1041,36 @@ def visualise_matching(
 
 
 def visualise_mapping_results(
-    gt_labeled,
-    image,
-    output_folder,
-    labeled_prediction,
-    binary_filtered_pred,
-    binary_gt,
+    gt_labeled: NDArray[np.uint8],
+    image: NDArray,
+    output_folder: Path,
+    labeled_prediction: NDArray[np.uint8],
+    binary_filtered_pred: NDArray[np.bool_],
+    binary_gt: NDArray[np.bool_],
     mapping_result: TunnelMappingResult,
-):
-    """Updated visualization function that uses the mapping result."""
+) -> None:
+    """Create all visualization overlays from mapping result.
+    
+    Wrapper that extracts mapping components and calls visualise_matching
+    to generate all visualization TIFF files.
+
+    Parameters
+    ----------
+    gt_labeled : NDArray[np.uint8]
+        3D labeled ground truth instances.
+    image : NDArray
+        3D original microscopy image.
+    output_folder : Path
+        Directory to save visualization files.
+    labeled_prediction : NDArray[np.uint8]
+        3D labeled prediction instances.
+    binary_filtered_pred : NDArray[np.bool_]
+        3D binary prediction mask.
+    binary_gt : NDArray[np.bool_]
+        3D binary ground truth mask.
+    mapping_result : TunnelMappingResult
+        Complete mapping analysis result.
+    """
     visualise_matching(
         gt_labeled,
         image,
@@ -833,8 +1085,17 @@ def visualise_mapping_results(
     )
 
 
-def print_detailed_results(result: TunnelDetectionResult):
-    """Clean function to print all results."""
+def print_detailed_results(result: TunnelDetectionResult) -> None:
+    """Print comprehensive detection and segmentation results.
+    
+    Displays four sets of metrics with detailed breakdowns of detection
+    performance, segmentation quality, and error analysis.
+
+    Parameters
+    ----------
+    result : TunnelDetectionResult
+        Complete detection results from detect_tunnels pipeline.
+    """
     mapping = result.mapping_result.mapping
     clean_mapping = result.mapping_result.clean_mapping
     unmatched_labels = result.mapping_result.unmatched_gt_labels
