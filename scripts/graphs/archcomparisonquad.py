@@ -26,19 +26,26 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
         "Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D4",
         "Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D5",
         "Anisotropicunet3D-D6-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D6",
-        # 'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)': 'AnisoUNet-3D',
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)": "AnisoUNet-2D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam": "AnisoUNet-CSAM-3D",
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam": "AnisoUNet-CSAM-2D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUNet-UseNet-3D",
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUNet-UseNet-2D",
-        # 'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)': 'AnisoUNet-D3-2D',
-        # 'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-2D',
-        # 'Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16': 'AnisoUSENet-2D',
-        # 'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam': 'AnisoUNet-CSAM-3D',
-        # 'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16': 'AnisoUSENet-3D'
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet": "AnisoUSENet-2D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet": "AnisoUSENet-3D",
+
+        # For diff arch use different
+        "UNet3d-BasicUNet": "BasicUNet3D",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)" : "AnisoUNet(2D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)" : "AnisoUNet(3D)",
+        "AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)": "AnisoUNet(3D)",
+        "AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-D3",
+        "AnisotropicUNet3DSE-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-SE",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)": "AnisoUNet(2D)",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet": "USENet(2D)",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16": "USEnet(2D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet": "USENet(3D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "USENet(3D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "USENet(3D)",
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)_Usenet': "USENet(3D)",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam": "CSAM(2D)",
+        'Anisotropicunet3D-D3-Hk(1_ 3_ 3)-Dk(1_ 2_ 2)-Csam': "CSAM(2D)",
+        'Anisotropicunet3D-D3-Hk(3_ 3_ 3)-Dk(1_ 2_ 2)-Csam': "CSAM(3D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam": "CSAM(3D)",
+        "AnisotropicUNet3DCSAM-d2-hk(3-3-3)-dk(1-2-2)": "CSAM(3D)",
     }
     df["Architecture"] = df["Architecture"].replace(architecture_name_mapping)
     print(f"Found architectures: {sorted(df['Architecture'].unique())}")
@@ -133,7 +140,7 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
                     f"{mean:.3f}±{std:.3f}",
                     ha="center",
                     va="bottom",
-                    fontsize=9,
+                    fontsize=6,
                     fontweight="bold",
                 )
 
