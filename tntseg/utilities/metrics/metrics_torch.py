@@ -196,6 +196,5 @@ class DiceLoss(nn.Module):
             Dice Loss value (1 - Dice coefficient), scalar tensor
         """
         numerator = 2 * torch.sum(pred * label)
-        # squared version is more commonly used for binary segmentation
         denom = torch.sum(torch.pow(pred, 2)) + torch.sum(torch.pow(label, 2)) + eta
         return 1 - numerator / (denom)
