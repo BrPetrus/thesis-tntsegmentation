@@ -191,11 +191,11 @@ uv run python -m tntseg.utilities.dataset.split_data \
 
 - `input_folder` - Folder containing `IMG/*.tif` and `GT_MERGED_LABELS/*.tif`
 - `output_folder` - Output folder for split data
-- `--train_quad` - Quadrant for training (1-4):
-  - 1 = top-left
-  - 2 = top-right
-  - 3 = bottom-left
-  - 4 = bottom-right
+- `--train_quad` - Quadrant to HOLD OUT for testing (1-4). Training patches come from OTHER 3 quadrants:
+  - 1 = top-left (trains on top-right, bottom-left, bottom-right)
+  - 2 = top-right (trains on top-left, bottom-left, bottom-right)
+  - 3 = bottom-left (trains on top-left, top-right, bottom-right)
+  - 4 = bottom-right (trains on top-left, top-right, bottom-left)
 - `--min_size` - Minimum patch size in Z Y X (default: `7 32 32`)
 - `--random_crops_train` - Additional random crops for training (default: 0)
 - `--random_crops_test` - Additional random crops for testing (default: 0)
@@ -345,6 +345,41 @@ bash run_overlap_study.sh path/to/trained/models/
 This script tests overlaps of 0, 10, 20, 30, 40 pixels by repeatedly calling `evaluate_models.py` with different `--tile_overlap` values, generating comparative metrics for analysis.
 
 **Note:** For full details on the automation logic and parameter combinations used, refer to the scripts themselves (`run.sh` and `run_overlap_study.sh`).
+
+### Results Analysis and Aggregation
+
+After running evaluations, aggregate results and generate comparison plots:
+
+#### Aggregate Results Across Quadrants
+
+Combine CSV results from multiple evaluations:
+
+```bash
+cd scripts/graphs/
+
+# Aggregate all results (groups by Architecture, Quad, and Overlap)
+uv run python aggregateanalysis.py /path/to/results/ -o aggregated.csv
+
+# Aggregate only specific overlap (e.g., 20px)
+uv run python aggregateanalysis.py /path/to/results/ -o overlap20.csv --overlap 20
+
+# Aggregate across quadrants (overall architecture performance)
+uv run python aggregateanalysis.py /path/to/results/ -o arch_comparison.csv --overlap 20 --across-quads
+```
+
+#### Compare Architectures
+
+After aggregation, generate comparison visualizations:
+
+```bash
+# Per-quadrant comparison (one plot per quadrant)
+uv run python quadbasedanalysis.py aggregated.csv
+
+# Cross-quadrant comparison (overall architecture performance)
+uv run python archcomparisonquad.py arch_comparison.csv
+```
+
+These scripts generate plots comparing Dice, Jaccard, precision, recall across architectures and tile overlaps.
 
 ---
 

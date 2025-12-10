@@ -55,18 +55,18 @@ def create_metric_tables(csv_path, output_dir="./tables"):
 
     print(f"Creating tables for {len(available_metrics)} metrics")
 
-    # Average for each Architecture-Overlap combination
-    grouped = df.groupby(["Architecture", "Overlap"])
-
     for metric_col, metric_name in available_metrics.items():
         print(f"\nCreating table for: {metric_name}")
 
-        agg_data = grouped[metric_col].mean().reset_index()
-
-        # Create pivot table
-        pivot_table = agg_data.pivot_table(
-            values=metric_col, index="Architecture", columns="Overlap", aggfunc="first"
+        # Create pivot table - aggregate across all quads for each (Architecture, Overlap)
+        pivot_table = df.pivot_table(
+            values=metric_col, index="Architecture", columns="Overlap", aggfunc="mean"
         )
+
+        # Print the table
+        print(f"\n{metric_name}:")
+        print(pivot_table.to_string())
+        print()
 
         # Create heatmap
         create_heatmap(pivot_table, metric_name, output_dir, metric_col)
@@ -79,10 +79,7 @@ def create_heatmap(pivot_table, metric_name, output_dir, metric_col):
     """Create heatmap with mean values and highlight best architecture for each overlap."""
 
     plt.figure(
-        figsize=(
-            max(12, len(pivot_table.columns) * 1.5),
-            max(8, len(pivot_table.index) * 0.6),
-        )
+        figsize=(5, 4)
     )
 
     # Create heatmap
@@ -133,17 +130,20 @@ def create_heatmap(pivot_table, metric_name, output_dir, metric_col):
                 plt.text(j, i, txt, ha="center", va="center", fontsize=8)
 
     plt.title(
-        f"{metric_name} - Architecture vs Overlap", fontsize=14, fontweight="bold"
+        f"{metric_name}", fontsize=14, fontweight="bold"
     )
-    plt.xlabel("Overlap (pixels)", fontsize=12)
-    plt.ylabel("Architecture", fontsize=12)
+    plt.xlabel("Overlap", fontsize=10)
+    # plt.ylabel("Architecture", fontsize=10)
     plt.tight_layout()
 
     # Save
-    plot_path = output_dir / f"{metric_col.lower()}_heatmap.png"
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plot_path_png = output_dir / f"{metric_col.lower()}_heatmap.png"
+    plot_path_svg = output_dir / f"{metric_col.lower()}_heatmap.svg"
+    plt.savefig(plot_path_png, dpi=300, bbox_inches="tight")
+    plt.savefig(plot_path_svg, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"  Saved: {plot_path}")
+    print(f"  Saved: {plot_path_png}")
+    print(f"  Saved: {plot_path_svg}")
 
 
 def main():
@@ -173,4 +173,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # plt.rcParams["font.size"] = 14
     main()

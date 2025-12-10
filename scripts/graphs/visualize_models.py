@@ -22,7 +22,7 @@ def create_model_configs():
     """Create different model configurations to test."""
     configs = {
         "basic": {
-            "depths": [2, 3, 4],
+            "depths": [3],
             "base_channels": 64,
             "channel_growth": 2,
             "horizontal_kernel": (1, 3, 3),
@@ -33,7 +33,7 @@ def create_model_configs():
             "upscale_stride": (1, 2, 2),
         },
         "3d": {
-            "depths": [2, 3, 4],
+            "depths": [3],
             "base_channels": 64,
             "channel_growth": 2,
             "horizontal_kernel": (3, 3, 3),

@@ -31,18 +31,27 @@ def create_performance_plots(csv_path, output_dir="./plots"):
         "Anisotropicunet3D-D4-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D4",
         "Anisotropicunet3D-D5-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D5",
         "Anisotropicunet3D-D6-Hk(3-3-3)-Dk(1-2-2)": "AnisoUNet-D6",
+
+        # For diff arch use different
         "UNet3d-BasicUNet": "BasicUNet3D",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)" : "AnisoUNet(2D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)" : "AnisoUNet(3D)",
+        "AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)": "AnisoUNet(3D)",
+        "AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-D3",
         "AnisotropicUNet3DSE-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-SE",
-        "AnisotropicUNet3DCSAM-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUNet-CSAM",
-        "AnisotropicUSENet-d2-hk(3-3-3)-dk(1-2-2)": "AnisoUSENet",
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)": "AnisoUNet-D3-2D",
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam": "AnisoUNet-CSAM-2D",
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUSENet-2D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam": "AnisoUNet-CSAM-3D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUSENet-3D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "AnisoUSENet-3D",
-        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet": "AnisoUSENet-2D",
-        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet": "AnisoUSENet-3D",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)": "AnisoUNet(2D)",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet": "USENet(2D)",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Usenet-Sf16": "USEnet(2D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet": "USENet(3D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "USENet(3D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Usenet-Sf16": "USENet(3D)",
+        'Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)_Usenet': "USENet(3D)",
+        "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)-Csam": "CSAM(2D)",
+        'Anisotropicunet3D-D3-Hk(1_ 3_ 3)-Dk(1_ 2_ 2)-Csam': "CSAM(2D)",
+        'Anisotropicunet3D-D3-Hk(3_ 3_ 3)-Dk(1_ 2_ 2)-Csam': "CSAM(3D)",
+        "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)-Csam": "CSAM(3D)",
+        "AnisotropicUNet3DCSAM-d2-hk(3-3-3)-dk(1-2-2)": "CSAM(3D)",
+
     }
     df["Architecture"] = df["Architecture"].replace(architecture_name_mapping)
     print(f"Found architectures: {sorted(df['Architecture'].unique())}")
@@ -91,7 +100,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
             continue
 
         # The user guarantees exactly 4 quadrants with filled values -> use a 2x2 layout
-        fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+        fig, axes = plt.subplots(2, 2, figsize=(6, 6))
         axes = axes.flatten()
         # fig.suptitle(
         #     f"{metric_name} by Architecture and Quadrant",
@@ -145,6 +154,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
                 yerr=errors if show_errors else None,
                 capsize=3,
                 label=metric_name,
+                color=plt.cm.Set3(np.linspace(0, 1, len(architectures))),
             )
 
             # Label bars
@@ -158,14 +168,15 @@ def create_performance_plots(csv_path, output_dir="./plots"):
                         f"{val:.3f}",
                         ha="center",
                         va="bottom",
-                        fontsize=12,
+                        fontsize=8
+                        # fontsize=12,
                     )
 
             ax.set_title(str(quad).upper(), fontweight="bold")
-            ax.set_xlabel("Architecture")
-            ax.set_ylabel("Score")
+            # ax.set_xlabel("Architecture")
+            # ax.set_ylabel("Score")
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(architectures, rotation=45, ha="right")
+            ax.set_xticklabels(architectures, rotation=45, ha="right", fontsize=9)
             ax.grid(True, alpha=0.3)
 
             ax.set_ylim(0.0, 1.0)
@@ -430,5 +441,5 @@ def main():
 
 if __name__ == "__main__":
     # Set global font size
-    plt.rcParams["font.size"] = 14
+    # plt.rcParams["font.size"] = 14
     main()
