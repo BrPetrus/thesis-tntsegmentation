@@ -459,16 +459,20 @@ thesis-tntsegmentation/
 │   ├── anisotropic_basic_3d/        # Basic Anisotropic U-Net (3D version)
 │   │   └── ***
 │   └── unet3d/                      # Standard 3D U-Net (baseline)
-│   │   └── ***
+│       └── ***
 │
 ├── data/                             # Dataset and evaluation data
 │   ├── raw/                         # Original raw data
-│   └── processed/                   # Processed quadrant splits
-│       ├── quad1/                   # Training/test split for quad 1
-│       ├── quad2/                   # Training/test split for quad 2
-│       ├── quad3/                   # Training/test split for quad 3
-│       └── quad4/                   # Training/test split for quad 4
-│
+│   ├── processed/                   # Processed quadrant splits
+│   │   ├── quad1/                   # Training/test split for quad 1
+│   │   ├── quad2/                   # Training/test split for quad 2
+│   │   ├── quad3/                   # Training/test split for quad 3
+│   │   └── quad4/                   # Training/test split for quad 4
+|   ├── annotations/                 # Reference annotations
+│   │   └── ***
+|   └── evaluations/                 # Precroped imgs for evaluation
+│       └── ***
+│   
 ├── scripts/                          # Main scripts
 │   ├── inference.py                 # Run inference on new images
 │   ├── training.py                  # Train models
