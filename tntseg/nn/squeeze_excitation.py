@@ -1,5 +1,7 @@
 """
 This module implements the popular Squeeze and Excitation operator for 3D volumes.
+
+The code is a modification of the implementation of the squeeze-and-excitation module by PyTorch team.
 """
 
 import torch
