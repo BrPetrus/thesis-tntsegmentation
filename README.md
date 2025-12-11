@@ -27,13 +27,14 @@ The fastest way to use a pre-trained model (included in the archive):
 # Setup environment (first time only)
 uv sync --extra torch-cpu  # or torch-gpu for CUDA support
 
-# Run inference with included model (using CSAM 3D architecture, trained on quad 1)
+
+# Run inference with included model (using CSAM 3D architecure; holdout quad 1) on one of the slices
 uv run python scripts/inference.py \
-    models/anisotropic_csam_3d/quad1_model/model_final.pth \
-    path/to/your/image.tif \
+    models/anisotropic_usenet_3d/2025-11-03_16-30-12/quad1_model/model_final.pth \
+    data/annotations/180322_Sqh-mCh\ Tub-GFP\ 16h_110_cleanednew_14-10-2025/01/t000.tif \
     results/ \
     --tile_overlap 10 \
-    --postprocess
+    --postprocess    
 ```
 
 **Tip:** Multiple architectures are available in both 2D and 3D versions:
@@ -179,6 +180,8 @@ Run trained models on new images without ground truth evaluation.
 
 #### Basic Usage
 
+(See the top of the README.md for prepared command)
+
 ```bash
 uv run python scripts/inference.py \
     checkpoints/model.pth \
@@ -235,9 +238,10 @@ Split your dataset into train/test quadrants for cross-validation.
 
 ```bash
 uv run python -m tntseg.utilities.dataset.split_data \
-    data/raw/ \
-    data/processed/ \
-    --train_quad 1
+    data/annotations/180322_Sqh-mCh\ Tub-GFP\ 16h_110_cleanednew_14-10-2025 \
+    results/splitquad1 \
+    --train_quad 1 --min_size 7 90 90
+
 ```
 
 #### Parameters
@@ -257,7 +261,7 @@ uv run python -m tntseg.utilities.dataset.split_data \
 #### Output Structure
 
 ```
-data/processed/
+results/splitquad1
 ├── train/
 │   ├── IMG/
 │   └── GT_MERGED_LABELS/
@@ -274,14 +278,27 @@ data/processed/
 
 Train a model with customizable architecture and hyperparameters:
 
-```bash
-python scripts/training.py \
-    data/processed/train/ \
-    checkpoints/ \
+```bash    
+uv run python scripts/training.py \
+    "data/processed/quad1" \
+    "./output/quad1" \
+    --epochs 5 \
+    --num_workers 1 \
+    --batch_size 4 \
+    --mlflow_port 8800 \
+    --lr 0.0001 \
     --model anisotropicunet_csam \
-    --epochs 1000 \
-    --batch-size 32 \
-    --lr 0.0001
+    --seed 42 \
+    --model_depth 3 \
+    --weight_decay 0.0001 \
+    --horizontal_kernel 3,3,3 \
+    --horizontal_padding 1,1,1 \
+    --downscale_kernel 1,2,2 \
+    --downscale_stride 1,2,2 \
+    --upscale_kernel 1,2,2 \
+    --upscale_stride 1,2,2 \
+    --shuffle
+    
 ```
 
 **Important:** MLflow must be running before training. See [Using MLflow for Experiment Tracking](#using-mlflow-for-experiment-tracking) for setup instructions. Training will fail if MLflow is not started.
@@ -293,7 +310,7 @@ python scripts/training.py \
 Model architecture:
 - `--model` - Model type: `anisotropicunet`, `anisotropicunet_se`, `anisotropicunet_csam`, `anisotropicunet_usenet`, `unet3d`
 - `--model-depth` - Number of encoder/decoder levels (default: 3)
-- `--base-channels` - Starting number of channels (default: 32)
+- `--base-channels` - Starting number of channels (default: 64)
 
 Training:
 - `--epochs` - Number of training epochs
@@ -326,21 +343,26 @@ Evaluate trained models on test data with ground truth.
 #### Basic Evaluation
 
 ```bash
-python scripts/evaluate_models.py \
-    --model-dir checkpoints/2025-12-01_10-00-00/quad1_model/ \
-    --data data/processed/test/ \
-    --output results/ \
-    --tile-overlap 10
+uv run python scripts/evaluate_models.py \
+    --batch_size 4 \
+    --device cpu \
+    --tile_overlap 10 \
+    models/anisotropic_basic_3d/2025-10-31_14-08-10/quad1_model/model_final.pth \
+    data/evaluationdataset/quad1/ \
+    output/evalstest
 ```
 
 #### With Post-Processing Analysis
 
 ```bash
 uv run python scripts/evaluate_models.py \
-    --model-dir checkpoints/2025-12-01_10-00-00/quad1_model/ \
-    --data data/processed/test/ \
-    --output results/ \
-    --tile-overlap 10 \
+    --batch_size 4 \
+    --device cpu \
+    --tile_overlap 10 \
+    --run_postprocessing \
+    models/anisotropic_basic_3d/2025-10-31_14-08-10/quad1_model/model_final.pth \
+    data/evaluationdataset/quad1/ \
+    output/evalstest \
     --run-postprocessing \
     --prediction-threshold 0.5 \
     --recall-threshold 0.5 \
