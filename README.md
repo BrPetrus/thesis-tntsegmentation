@@ -42,7 +42,7 @@ uv run python scripts/inference.py \
 - `anisotropic_basic_2d` / `anisotropic_basic_3d` - Basic anisotropic
 - `unet3d` - Standard 3D U-Net baseline
 
-Each architecture has models trained on all 4 quadrants.
+Each architecture has models trained on all 4 quadrants, meaning if the model is named quadX, it hasn't seen any tunnels in the Xth quadrant.
 
 **Note:** The model's `config.json` file must be in the same directory as the `.pth` file. This file contains essential information about the model architecture and training parameters.
 
@@ -59,27 +59,13 @@ See [Inference Guide](#inference-quick-start) for details.
 
 ### Environment Setup with `uv`
 
-This project officially uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python environment management.
+This project officially uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python environment management. I am also including a requirements.txt file with the generated environment in case you don't want to use `uv`.
 
 #### 1. Install `uv`
 
-```bash
-# Linux/macOS
-curl -LsSf https://astral.sh/uv/install.sh | sh
+`uv` can be installed multiple ways, e.g. using pipx or conda. For details see official instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
 
-# Or via pip
-pip install uv
-```
-
-#### 2. Extract and Navigate to the Archive
-
-```bash
-# Extract the archive (if compressed)
-tar -xzf thesis-tntsegmentation.tar.gz  # or unzip thesis-tntsegmentation.zip
-
-# Navigate to the project directory
-cd thesis-tntsegmentation
-```
+#### 2. Navigate to the Archive
 
 The archive includes:
 - `models/` - Pre-trained model checkpoints for all architectures (CSAM 2D/3D, USE-Net 2D/3D, Basic 2D/3D, 3D U-Net) trained on all quadrants
@@ -96,9 +82,6 @@ uv sync --extra torch-cpu
 
 # For GPU (CUDA 12.4)
 uv sync --extra torch-gpu
-
-# For development with Jupyter
-uv sync --extra torch-cpu --extra jupyter
 ```
 
 This will:
@@ -106,15 +89,85 @@ This will:
 - Install all dependencies from `pyproject.toml`
 - Install the `tntseg` package in editable mode
 
+**Tested configurations:**
+- ✅ CPU-only mode on personal machines
+- ✅ GPU mode (CUDA 12.4) on Faculty server
+
 #### 4. Activate the Environment
 
 ```bash
 # Linux/macOS
 source .venv/bin/activate
+```
 
-# Or use uv run to run commands without activation
+### Troubleshooting Installation Issues
+
+Distribution of `PyTorch` package can get quite complicated. The setup was tested on few machines, but since the package is not packaged for every Python version and CUDA version, this makes it quite hard to provide a setup which works on every machine due to differences with Python version x Torch version x CUDA version. However, the cpu-only mode should be easy to use.
+
+If `uv sync` fails with dependency resolver errors, follow these steps:
+
+#### Step 1: Identify Your Setup
+Run these commands to check your environment:
+
+```bash
+# Check Python version
+python --version
+
+# Check CUDA version (if GPU intended)
+nvitop  # or nvidia-smi
+```
+
+**Expected:** Python 3.12+ and your CUDA version (e.g.12.4)
+
+#### Step 2: Try the Fallback Approach
+If `uv sync` fails, try relaxing version constraints:
+
+1. **Edit `pyproject.toml`** - Change exact versions to flexible ones:
+   ```toml
+   torch-cpu = [
+       "torch>=2.0",          # Changed from ==2.6.0
+       "torchvision>=0.15"    # Changed from ==0.21.0
+   ]
+   ```
+
+2. **Retry installation:**
+   ```bash
+   uv sync --extra torch-cpu  # or torch-gpu
+   ```
+
+#### Step 3: Update PyTorch Index (GPU Only)
+If you have a different CUDA version:
+
+1. **Check your CUDA version:**
+   ```bash
+   nvidia-smi  # Look for "CUDA Version"
+   ```
+
+2. **Visit [PyTorch official site](https://pytorch.org/get-started/locally/)** and find your correct index URL
+
+3. **Update `pyproject.toml`:**
+   ```toml
+   [tool.uv]
+   extra-index-url = ["https://download.pytorch.org/whl/cu118"]  # Example for CUDA 11.8
+   ```
+
+4. **Update torch versions in optional-dependencies** if needed
+
+#### Step 4: Use CPU as Fallback
+If GPU setup fails, use CPU mode for inference:
+
+```bash
+# Install CPU version
+uv sync --extra torch-cpu
+
+# Use inference normally (will be slower but works)
 uv run python scripts/inference.py ...
 ```
+
+#### Still Having Issues?
+- Make sure you're in the project root directory when running `uv sync`
+- Try deleting `.venv/` and `uv.lock` and starting fresh
+- Contact: brunoxpetrus@gmail.com or 514305@mail.muni.cz
 
 ---
 
@@ -222,15 +275,18 @@ data/processed/
 Train a model with customizable architecture and hyperparameters:
 
 ```bash
-uv run python scripts/training.py \
-    --data data/processed/train/ \
-    --output-dir checkpoints/ \
+python scripts/training.py \
+    data/processed/train/ \
+    checkpoints/ \
     --model anisotropicunet_csam \
     --epochs 1000 \
     --batch-size 32 \
-    --lr 0.0001 \
-    --device cuda
+    --lr 0.0001
 ```
+
+**Important:** MLflow must be running before training. See [Using MLflow for Experiment Tracking](#using-mlflow-for-experiment-tracking) for setup instructions. Training will fail if MLflow is not started.
+
+**Tip:** See `scripts/run.sh` for a complete example of training on all quadrants with consistent settings. This script can serve as a reference for your own training workflows.
 
 #### Key Parameters
 
@@ -253,9 +309,6 @@ Start MLflow server:
 ```bash
 # Start MLflow UI (runs in background)
 uv run mlflow ui --port 8800 &
-
-# Open in browser
-xdg-open http://localhost:8800
 ```
 
 Training automatically logs to MLflow:
@@ -273,7 +326,7 @@ Evaluate trained models on test data with ground truth.
 #### Basic Evaluation
 
 ```bash
-uv run python scripts/evaluate_models.py \
+python scripts/evaluate_models.py \
     --model-dir checkpoints/2025-12-01_10-00-00/quad1_model/ \
     --data data/processed/test/ \
     --output results/ \
@@ -406,16 +459,20 @@ thesis-tntsegmentation/
 │   ├── anisotropic_basic_3d/        # Basic Anisotropic U-Net (3D version)
 │   │   └── ***
 │   └── unet3d/                      # Standard 3D U-Net (baseline)
-│   │   └── ***
+│       └── ***
 │
 ├── data/                             # Dataset and evaluation data
 │   ├── raw/                         # Original raw data
-│   └── processed/                   # Processed quadrant splits
-│       ├── quad1/                   # Training/test split for quad 1
-│       ├── quad2/                   # Training/test split for quad 2
-│       ├── quad3/                   # Training/test split for quad 3
-│       └── quad4/                   # Training/test split for quad 4
-│
+│   ├── processed/                   # Processed quadrant splits
+│   │   ├── quad1/                   # Training/test split for quad 1
+│   │   ├── quad2/                   # Training/test split for quad 2
+│   │   ├── quad3/                   # Training/test split for quad 3
+│   │   └── quad4/                   # Training/test split for quad 4
+|   ├── annotations/                 # Reference annotations
+│   │   └── ***
+|   └── evaluations/                 # Precroped imgs for evaluation
+│       └── ***
+│   
 ├── scripts/                          # Main scripts
 │   ├── inference.py                 # Run inference on new images
 │   ├── training.py                  # Train models
@@ -465,3 +522,8 @@ thesis-tntsegmentation/
 ## License
 
 See [LICENSE](LICENSE) file for details.
+
+
+## Contact
+
+If you have any questions or need to contact the maintainer, please email me at 514305@mail.muni.cz or brunoxpetrus@gmail.com 
