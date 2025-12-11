@@ -42,7 +42,7 @@ uv run python scripts/inference.py \
 - `anisotropic_basic_2d` / `anisotropic_basic_3d` - Basic anisotropic
 - `unet3d` - Standard 3D U-Net baseline
 
-Each architecture has models trained on all 4 quadrants.
+Each architecture has models trained on all 4 quadrants, meaning if the model is named quadX, it hasn't seen any tunnels in the Xth quadrant.
 
 **Note:** The model's `config.json` file must be in the same directory as the `.pth` file. This file contains essential information about the model architecture and training parameters.
 
@@ -59,27 +59,13 @@ See [Inference Guide](#inference-quick-start) for details.
 
 ### Environment Setup with `uv`
 
-This project officially uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python environment management.
+This project officially uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python environment management. I am also including a requirements.txt file with the generated environment in case you don't want to use `uv`.
 
 #### 1. Install `uv`
 
-```bash
-# Linux/macOS
-curl -LsSf https://astral.sh/uv/install.sh | sh
+`uv` can be installed multiple ways, e.g. using pipx or conda. For details see official instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
 
-# Or via pip
-pip install uv
-```
-
-#### 2. Extract and Navigate to the Archive
-
-```bash
-# Extract the archive (if compressed)
-tar -xzf thesis-tntsegmentation.tar.gz  # or unzip thesis-tntsegmentation.zip
-
-# Navigate to the project directory
-cd thesis-tntsegmentation
-```
+#### 2. Navigate to the Archive
 
 The archive includes:
 - `models/` - Pre-trained model checkpoints for all architectures (CSAM 2D/3D, USE-Net 2D/3D, Basic 2D/3D, 3D U-Net) trained on all quadrants
@@ -96,9 +82,6 @@ uv sync --extra torch-cpu
 
 # For GPU (CUDA 12.4)
 uv sync --extra torch-gpu
-
-# For development with Jupyter
-uv sync --extra torch-cpu --extra jupyter
 ```
 
 This will:
@@ -106,14 +89,13 @@ This will:
 - Install all dependencies from `pyproject.toml`
 - Install the `tntseg` package in editable mode
 
+The `uv` utility should be able to solve this environment. I have tested this in CPU-only mode on my personal PC and with the torch-gpu version on the Faculty server. However, solving environments can be nontrivial when PyTorch is involved. If this does not work, use `nvitop` or a related tool to check your CUDA version. Then, consult the [official site](https://pytorch.org/get-started/locally/) to find the correct PyPI index for your CUDA version. Update the `extra-index-url` in `pyproject.toml` and adjust the `torch` and `torchvision` versions under `project.optional-dependencies` as needed. Note that PyTorch does not release every version for every Python version, so you may need to upgrade `torch` and `torchvision` to newer versions, or downgrade Python in `requires-python`.
+
 #### 4. Activate the Environment
 
 ```bash
 # Linux/macOS
 source .venv/bin/activate
-
-# Or use uv run to run commands without activation
-uv run python scripts/inference.py ...
 ```
 
 ---
@@ -222,7 +204,7 @@ data/processed/
 Train a model with customizable architecture and hyperparameters:
 
 ```bash
-uv run python scripts/training.py \
+python scripts/training.py \
     --data data/processed/train/ \
     --output-dir checkpoints/ \
     --model anisotropicunet_csam \
@@ -231,6 +213,8 @@ uv run python scripts/training.py \
     --lr 0.0001 \
     --device cuda
 ```
+
+**Important:** MLflow must be running before training. See [Using MLflow for Experiment Tracking](#using-mlflow-for-experiment-tracking) for setup instructions. Training will fail if MLflow is not started.
 
 #### Key Parameters
 
@@ -253,9 +237,6 @@ Start MLflow server:
 ```bash
 # Start MLflow UI (runs in background)
 uv run mlflow ui --port 8800 &
-
-# Open in browser
-xdg-open http://localhost:8800
 ```
 
 Training automatically logs to MLflow:
@@ -273,7 +254,7 @@ Evaluate trained models on test data with ground truth.
 #### Basic Evaluation
 
 ```bash
-uv run python scripts/evaluate_models.py \
+python scripts/evaluate_models.py \
     --model-dir checkpoints/2025-12-01_10-00-00/quad1_model/ \
     --data data/processed/test/ \
     --output results/ \
@@ -465,3 +446,8 @@ thesis-tntsegmentation/
 ## License
 
 See [LICENSE](LICENSE) file for details.
+
+
+## Contact
+
+If you have any questions or need to contact the maintainer, please email me at 514305@mail.muni.cz or brunoxpetrus@gmail.com 
