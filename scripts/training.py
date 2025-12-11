@@ -987,7 +987,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--reduction_factor",
         type=int,
-        default=16,  # TODO: investigate
+        default=16,
         help="Reduction factor for SE blocks (only used with anisotropicunet_se). Default: 16",
     )
     parser.add_argument(
