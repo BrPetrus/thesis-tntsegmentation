@@ -89,7 +89,9 @@ This will:
 - Install all dependencies from `pyproject.toml`
 - Install the `tntseg` package in editable mode
 
-The `uv` utility should be able to solve this environment. I have tested this in CPU-only mode on my personal PC and with the torch-gpu version on the Faculty server. However, solving environments can be nontrivial when PyTorch is involved. If this does not work, use `nvitop` or a related tool to check your CUDA version. Then, consult the [official site](https://pytorch.org/get-started/locally/) to find the correct PyPI index for your CUDA version. Update the `extra-index-url` in `pyproject.toml` and adjust the `torch` and `torchvision` versions under `project.optional-dependencies` as needed. Note that PyTorch does not release every version for every Python version, so you may need to upgrade `torch` and `torchvision` to newer versions, or downgrade Python in `requires-python`.
+**Tested configurations:**
+- ✅ CPU-only mode on personal machines
+- ✅ GPU mode (CUDA 12.4) on Faculty server
 
 #### 4. Activate the Environment
 
@@ -97,6 +99,75 @@ The `uv` utility should be able to solve this environment. I have tested this in
 # Linux/macOS
 source .venv/bin/activate
 ```
+
+### Troubleshooting Installation Issues
+
+Distribution of `PyTorch` package can get quite complicated. The setup was tested on few machines, but since the package is not packaged for every Python version and CUDA version, this makes it quite hard to provide a setup which works on every machine due to differences with Python version x Torch version x CUDA version. However, the cpu-only mode should be easy to use.
+
+If `uv sync` fails with dependency resolver errors, follow these steps:
+
+#### Step 1: Identify Your Setup
+Run these commands to check your environment:
+
+```bash
+# Check Python version
+python --version
+
+# Check CUDA version (if GPU intended)
+nvitop  # or nvidia-smi
+```
+
+**Expected:** Python 3.12+ and your CUDA version (e.g.12.4)
+
+#### Step 2: Try the Fallback Approach
+If `uv sync` fails, try relaxing version constraints:
+
+1. **Edit `pyproject.toml`** - Change exact versions to flexible ones:
+   ```toml
+   torch-cpu = [
+       "torch>=2.0",          # Changed from ==2.6.0
+       "torchvision>=0.15"    # Changed from ==0.21.0
+   ]
+   ```
+
+2. **Retry installation:**
+   ```bash
+   uv sync --extra torch-cpu  # or torch-gpu
+   ```
+
+#### Step 3: Update PyTorch Index (GPU Only)
+If you have a different CUDA version:
+
+1. **Check your CUDA version:**
+   ```bash
+   nvidia-smi  # Look for "CUDA Version"
+   ```
+
+2. **Visit [PyTorch official site](https://pytorch.org/get-started/locally/)** and find your correct index URL
+
+3. **Update `pyproject.toml`:**
+   ```toml
+   [tool.uv]
+   extra-index-url = ["https://download.pytorch.org/whl/cu118"]  # Example for CUDA 11.8
+   ```
+
+4. **Update torch versions in optional-dependencies** if needed
+
+#### Step 4: Use CPU as Fallback
+If GPU setup fails, use CPU mode for inference:
+
+```bash
+# Install CPU version
+uv sync --extra torch-cpu
+
+# Use inference normally (will be slower but works)
+uv run python scripts/inference.py ...
+```
+
+#### Still Having Issues?
+- Make sure you're in the project root directory when running `uv sync`
+- Try deleting `.venv/` and `uv.lock` and starting fresh
+- Contact: brunoxpetrus@gmail.com or 514305@mail.muni.cz
 
 ---
 
@@ -205,16 +276,17 @@ Train a model with customizable architecture and hyperparameters:
 
 ```bash
 python scripts/training.py \
-    --data data/processed/train/ \
-    --output-dir checkpoints/ \
+    data/processed/train/ \
+    checkpoints/ \
     --model anisotropicunet_csam \
     --epochs 1000 \
     --batch-size 32 \
-    --lr 0.0001 \
-    --device cuda
+    --lr 0.0001
 ```
 
 **Important:** MLflow must be running before training. See [Using MLflow for Experiment Tracking](#using-mlflow-for-experiment-tracking) for setup instructions. Training will fail if MLflow is not started.
+
+**Tip:** See `scripts/run.sh` for a complete example of training on all quadrants with consistent settings. This script can serve as a reference for your own training workflows.
 
 #### Key Parameters
 
