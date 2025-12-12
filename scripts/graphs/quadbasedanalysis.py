@@ -50,6 +50,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
 
         # For diff arch use different
         "UNet3d-BasicUNet": "BasicUNet3D",
+        "Basicunet": "BasicUNet",
         "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)" : "AnisoUNet(2D)",
         "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)" : "AnisoUNet(3D)",
         "AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)": "AnisoUNet(3D)",
@@ -116,7 +117,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
             continue
 
         # The user guarantees exactly 4 quadrants with filled values -> use a 2x2 layout
-        fig, axes = plt.subplots(2, 2, figsize=(6, 6))
+        fig, axes = plt.subplots(2, 2, figsize=(6.5, 7))
         axes = axes.flatten()
         # fig.suptitle(
         #     f"{metric_name} by Architecture and Quadrant",
@@ -181,7 +182,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
                     ax.text(
                         bar.get_x() + bar.get_width() / 2.0,
                         label_y,
-                        f"{val:.3f}",
+                        f"{val:.3f}\n±\n{err:.3f}",
                         ha="center",
                         va="bottom",
                         fontsize=8
@@ -192,7 +193,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
             # ax.set_xlabel("Architecture")
             # ax.set_ylabel("Score")
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(architectures, rotation=45, ha="right", fontsize=9)
+            ax.set_xticklabels(architectures, rotation=50, ha="right", fontsize=8)
             ax.grid(True, alpha=0.3)
 
             ax.set_ylim(0.0, 1.0)
@@ -200,7 +201,7 @@ def create_performance_plots(csv_path, output_dir="./plots"):
         plt.tight_layout()
         filename = metric_col.replace(" ", "_").lower()
         plot_path = output_dir / f"{filename}_by_quad_arch.png"
-        plt.savefig(plot_path, bbox_inches="tight")
+        plt.savefig(plot_path, bbox_inches="tight", dpi=600)
         plt.close(fig)
         print(f"Saved plot: {plot_path}")
 
@@ -457,5 +458,5 @@ def main():
 
 if __name__ == "__main__":
     # Set global font size
-    # plt.rcParams["font.size"] = 14
+    plt.rcParams["font.size"] = 6
     main()
