@@ -45,6 +45,7 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
 
         # For diff arch use different
         "UNet3d-BasicUNet": "BasicUNet3D",
+        "Basicunet": "BasicUNet",
         "Anisotropicunet3D-D3-Hk(1-3-3)-Dk(1-2-2)" : "AnisoUNet(2D)",
         "Anisotropicunet3D-D3-Hk(3-3-3)-Dk(1-2-2)" : "AnisoUNet(3D)",
         "AnisotropicUNet3D-d3-hk(3-3-3)-dk(1-2-2)": "AnisoUNet(3D)",
@@ -153,10 +154,10 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2.0,
                     bar.get_height() + std + 0.005,
-                    f"{mean:.3f}±{std:.3f}",
+                    f"{mean:.3f}\n±\n{std:.3f}",
                     ha="center",
                     va="bottom",
-                    fontsize=6,
+                    fontsize=9,
                     fontweight="bold",
                 )
 
@@ -178,7 +179,7 @@ def create_architecture_comparison_plots(csv_path, output_dir="./plots"):
         # Save plot
         plot_filename = f"{metric_col.lower()}_architecture_comparison.png"
         plot_path = output_dir / plot_filename
-        plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+        plt.savefig(plot_path, dpi=600, bbox_inches="tight")
         plt.close()
 
         print(f"Saved: {plot_path}")
