@@ -240,7 +240,7 @@ Split your dataset into train/test quadrants for cross-validation.
 uv run python -m tntseg.utilities.dataset.split_data \
     data/annotations/180322_Sqh-mCh\ Tub-GFP\ 16h_110_cleanednew_14-10-2025 \
     results/splitquad1 \
-    --train_quad 1 --min_size 7 90 90
+    --train_quad 1 --min_size 7 90 90 --overlap_threshold_px 100 --overlap_threshold 0.5
 
 ```
 
@@ -282,7 +282,7 @@ Train a model with customizable architecture and hyperparameters:
 uv run python scripts/training.py \
     "data/processed/quad1" \
     "./output/quad1" \
-    --epochs 5 \
+    --epochs 1000 \
     --num_workers 1 \
     --batch_size 4 \
     --mlflow_port 8800 \
