@@ -316,7 +316,7 @@ Training:
 - `--epochs` - Number of training epochs
 - `--batch-size` - Batch size per device
 - `--lr` - Learning rate (default: 0.0001)
-- `--weight-decay` - L2 regularization (default: 0.0001)
+- `--weight-decay` - regularization (default: 0.0001)
 - `--seed` - Random seed for reproducibility
 
 #### Using MLflow for Experiment Tracking
@@ -359,14 +359,13 @@ uv run python scripts/evaluate_models.py \
     --batch_size 4 \
     --device cpu \
     --tile_overlap 10 \
-    --run_postprocessing \
     models/anisotropic_basic_3d/2025-10-31_14-08-10/quad1_model/model_final.pth \
     data/evaluationdataset/quad1/ \
     output/evalstest \
-    --run-postprocessing \
-    --prediction-threshold 0.5 \
-    --recall-threshold 0.5 \
-    --minimum-size 100
+    --run_postprocessing \
+    --prediction_threshold 0.5 \
+    --recall_threshold 0.5 \
+    --minimum_size 100
 ```
 
 #### Output Files
