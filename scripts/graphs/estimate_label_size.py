@@ -57,10 +57,12 @@ def plot_histogram(sizes):
         }
     )
 
-    plt.hist(sizes, bins=50, alpha=0.7, color="skyblue", edgecolor="black")
+    bin_edges = np.arange(0, max(sizes)+50, 50)
+    plt.hist(sizes, bins=bin_edges, alpha=0.7, color="skyblue", edgecolor="black")
     plt.xlabel("Label Size (pixels)")
     plt.ylabel("Frequency")
     plt.title("Distribution of Label Sizes")
+    plt.xticks(ticks=bin_edges, rotation=60)
     plt.grid(True, alpha=0.3)
 
     # Add statistics
@@ -88,18 +90,26 @@ def plot_histogram(sizes):
     plt.show()
 
 
-def main(path: Path):
-    imgs, _ = read_all_tiffs(path)
+def main(path: Path, filter_size: int = 100):
+    imgs, filenames = read_all_tiffs(path)
 
-    sizes = []
+    labels = []
 
-    for img in imgs:
+    for img, filename in zip(imgs, filenames):
         for lab in np.unique(img):
             if lab == 0:
                 continue
-            sizes.append(np.sum(img == lab))
+            labels.append((filename, lab, np.sum(img == lab)))
 
-    print(f"Mean area: {sum(sizes) / len(sizes)}")
+    sizes = [size for _,_,size in labels]
+    mean = sum(sizes) / len(sizes)
+    print(f"Mean area: {mean}")
+    print(f"There are {len(sizes)} labels")
+
+    # Calculate how many tunnels are smaller than the filter size
+    smaller_labels = [(f, l, s) for f, l, s in labels if s < filter_size]
+    print(f"There are {len(smaller_labels)} smaller than the the filter size({filter_size}).")
+    print(f"\tand those are: {smaller_labels}")
 
     plot_histogram(sizes)
 
